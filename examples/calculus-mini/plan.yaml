@@ -1,0 +1,87 @@
+course:
+  title: Calculus from first principles
+  goal: Understand the derivative definition and use it on simple functions
+  learner:
+    prior_knowledge: [basic algebra, functions]
+sources:
+  - id: calculus-notes
+    title: AtomLearn calculus example notes
+    type: example-notes
+    location: examples/calculus-mini/plan.yaml
+    version: v1
+atoms:
+  - id: calculus.limit.approach
+    title: 趋近与取值的区别
+    module: Limits
+    objective: 能解释一个量趋近某值不等于必须取到该值
+    prerequisites: []
+    difficulty: 1
+    estimated_minutes: 15
+    sources:
+      - source_id: calculus-notes
+        locator: Atom calculus.limit.approach
+    misconceptions: [趋近于零就是等于零]
+    mastery:
+      required_dimensions: [explain, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: calculus.rate.average
+    title: 平均变化率
+    module: Derivatives
+    objective: 能用差商计算并解释区间上的平均变化率
+    prerequisites: []
+    difficulty: 1
+    estimated_minutes: 20
+    sources:
+      - source_id: calculus-notes
+        locator: Atom calculus.rate.average
+    misconceptions: [平均变化率只表示速度]
+    mastery:
+      required_dimensions: [explain, apply]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: calculus.derivative.definition
+    title: 导数的形式化定义
+    module: Derivatives
+    objective: 能解释差商极限并写出一点处的导数定义
+    prerequisites: [calculus.limit.approach, calculus.rate.average]
+    difficulty: 2
+    estimated_minutes: 25
+    sources:
+      - source_id: calculus-notes
+        locator: Atom calculus.derivative.definition
+    misconceptions: [可以直接令增量等于零]
+    mastery:
+      required_dimensions: [explain, apply, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: calculus.derivative.compute-square
+    title: 用定义求平方函数的导数
+    module: Derivatives
+    objective: 能从定义推导 f(x)=x² 的导数
+    prerequisites: [calculus.derivative.definition]
+    difficulty: 2
+    estimated_minutes: 20
+    sources:
+      - source_id: calculus-notes
+        locator: Atom calculus.derivative.compute-square
+    misconceptions: [直接引用幂法则也算从定义推导]
+    mastery:
+      required_dimensions: [apply, explain]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: calculus.derivative.geometric
+    title: 导数的几何意义
+    module: Derivatives
+    objective: 能把导数与切线斜率联系起来
+    prerequisites: [calculus.derivative.definition]
+    difficulty: 2
+    estimated_minutes: 20
+    sources:
+      - source_id: calculus-notes
+        locator: Atom calculus.derivative.geometric
+    misconceptions: [切线总是只与曲线接触一次]
+    mastery:
+      required_dimensions: [explain, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6

@@ -1,0 +1,15 @@
+schema_version: 1
+revision: 0
+id: course
+title: Untitled course
+goal: ""
+status: orientation
+learner:
+  prior_knowledge: []
+  preferences: []
+settings:
+  review_intervals_days: [1, 3, 7, 30]
+  mastery_default_threshold: 0.8
+sources: []
+created_at: ""
+updated_at: ""

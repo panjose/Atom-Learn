@@ -1,0 +1,4 @@
+interface:
+  display_name: "AtomLearn"
+  short_description: "Turn source material into a focused, trackable learning path"
+  default_prompt: "Use $atom-learn to build a knowledge map from my materials and guide me through one knowledge atom at a time."

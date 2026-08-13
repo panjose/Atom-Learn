@@ -91,8 +91,8 @@ atomlearn activate <workspace> <atom-id>
 atomlearn pause <workspace> --reason <text>
 atomlearn record-question <workspace> --input <json-file>
 atomlearn record-evidence <workspace> --input <json-file>
-atomlearn assess <workspace> <atom-id> --result <result> --evidence-id <id>
-atomlearn schedule-review <workspace> <atom-id>
+atomlearn assess <workspace> <atom-id> --evidence-id <id>
+atomlearn refresh-reviews <workspace> [--now <iso-time>]
 atomlearn restructure <workspace> --proposal <yaml-file> --confirmed
 atomlearn status <workspace> --json
 ```
@@ -453,4 +453,3 @@ Event 日志用于审计和调试，不作为每次恢复时重放全部状态�
 7. 最后加入复习、动态重构和发布打包。
 
 这样可以最早验证 AtomLearn 最关键的价值：不是内容讲得多，而是在长时间、长对话和大量分支中仍然保持学习状态正确、主线清晰、推进有据。
-

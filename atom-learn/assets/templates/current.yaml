@@ -1,0 +1,10 @@
+schema_version: 1
+revision: 0
+active_atom_id: null
+phase: orientation
+current_question: null
+learner_understands: []
+learner_confusions: []
+next_action: Complete orientation and select the first available Atom.
+backtrack_stack: []
+updated_at: ""

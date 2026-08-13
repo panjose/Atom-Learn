@@ -1,0 +1,87 @@
+course:
+  title: Operating systems process model
+  goal: Build a precise mental model of programs, processes, threads, and scheduling
+  learner:
+    prior_knowledge: [basic programming]
+sources:
+  - id: os-notes
+    title: AtomLearn operating systems example notes
+    type: example-notes
+    location: examples/operating-systems-mini/plan.yaml
+    version: v1
+atoms:
+  - id: os.program.definition
+    title: 程序是静态指令与数据
+    module: Processes
+    objective: 能区分磁盘上的程序与一次运行活动
+    prerequisites: []
+    difficulty: 1
+    estimated_minutes: 15
+    sources:
+      - source_id: os-notes
+        locator: Atom os.program.definition
+    misconceptions: [程序和进程只是两个名称]
+    mastery:
+      required_dimensions: [explain, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: os.process.definition
+    title: 进程是程序的一次运行实例
+    module: Processes
+    objective: 能解释进程包含执行状态和受管理资源
+    prerequisites: [os.program.definition]
+    difficulty: 1
+    estimated_minutes: 20
+    sources:
+      - source_id: os-notes
+        locator: Atom os.process.definition
+    misconceptions: [一个程序文件永远只对应一个进程]
+    mastery:
+      required_dimensions: [explain, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: os.process.context
+    title: 进程执行上下文
+    module: Processes
+    objective: 能列举并解释恢复进程执行所需的核心状态
+    prerequisites: [os.process.definition]
+    difficulty: 2
+    estimated_minutes: 25
+    sources:
+      - source_id: os-notes
+        locator: Atom os.process.context
+    misconceptions: [保存程序计数器就足以恢复进程]
+    mastery:
+      required_dimensions: [explain, apply]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: os.thread.definition
+    title: 线程是进程中的执行流
+    module: Threads
+    objective: 能区分线程的执行状态与进程共享资源
+    prerequisites: [os.process.definition, os.process.context]
+    difficulty: 2
+    estimated_minutes: 25
+    sources:
+      - source_id: os-notes
+        locator: Atom os.thread.definition
+    misconceptions: [线程拥有完全独立的地址空间]
+    mastery:
+      required_dimensions: [explain, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: os.scheduling.switch
+    title: 上下文切换
+    module: Scheduling
+    objective: 能解释操作系统如何暂停并恢复执行流
+    prerequisites: [os.process.context, os.thread.definition]
+    difficulty: 3
+    estimated_minutes: 30
+    sources:
+      - source_id: os-notes
+        locator: Atom os.scheduling.switch
+    misconceptions: [上下文切换必然切换地址空间]
+    mastery:
+      required_dimensions: [explain, apply, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6

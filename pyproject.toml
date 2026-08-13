@@ -1,0 +1,10 @@
+[project]
+name = "atom-learn"
+version = "0.1.0"
+description = "Persistent, source-grounded, one-knowledge-atom-at-a-time learning Skill"
+requires-python = ">=3.10"
+dependencies = ["PyYAML>=6.0"]
+
+[tool.pytest.ini_options]
+addopts = "-ra"
+testpaths = ["tests"]

@@ -1,0 +1,22 @@
+schema_version: 1
+revision: 0
+id: domain.topic.atom
+title: Knowledge Atom
+module: Foundations
+objective: ""
+prerequisites: []
+difficulty: 1
+estimated_minutes: 20
+optional: false
+status: locked
+sources: []
+misconceptions: []
+mastery:
+  required_dimensions: [explain, apply]
+  pass_threshold: 0.8
+  minimum_dimension_score: 0.6
+attempts: 0
+confidence: null
+last_reviewed_at: null
+created_at: ""
+updated_at: ""
