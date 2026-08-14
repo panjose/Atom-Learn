@@ -1,0 +1,18 @@
+mode: outline
+request_summary: Build a learning path from the supplied outline.
+goal: ""
+desired_outcome: working_knowledge
+target_depth: working
+prior_knowledge: []
+constraints: []
+source_materials: []
+outline_source_id: user-outline
+outline_items:
+  - id: outline.section-one
+    title: ""
+    parent_id: null
+    notes: ""
+topic_terms: []
+discovery_sources: []
+ambiguities: []
+assumptions: []

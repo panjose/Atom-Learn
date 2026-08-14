@@ -1375,10 +1375,22 @@ def build_parser() -> argparse.ArgumentParser:
     research_parser = sub.add_parser("research", add_help=False)
     research_parser.add_argument("-h", "--help", action="store_true", dest="research_help")
     research_parser.add_argument("research_args", nargs=argparse.REMAINDER)
+    intake_parser = sub.add_parser("intake", add_help=False)
+    intake_parser.add_argument("-h", "--help", action="store_true", dest="intake_help")
+    intake_parser.add_argument("intake_args", nargs=argparse.REMAINDER)
     return parser
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "intake":
+        from intake import AtomLearnError as IntakeAtomLearnError
+        from intake import IntakeError, run as run_intake
+
+        try:
+            run_intake(["--help"] if args.intake_help else args.intake_args)
+        except (IntakeError, IntakeAtomLearnError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "research":
         from research import AtomLearnError as ResearchAtomLearnError
         from research import ResearchError, run as run_research
@@ -1420,6 +1432,16 @@ def run(args: argparse.Namespace) -> None:
                 errors.extend(f"research: {error}" for error in research_engine.validate())
             except (ResearchError, ResearchAtomLearnError) as exc:
                 errors.append(f"research: {exc}")
+        intake_path = workspace.meta / "intake.yaml"
+        if intake_path.exists():
+            from intake import AtomLearnError as IntakeAtomLearnError
+            from intake import IntakeEngine, IntakeError
+
+            try:
+                intake_engine = IntakeEngine.load(str(workspace.root))
+                errors.extend(f"intake: {error}" for error in intake_engine.validate())
+            except (IntakeError, IntakeAtomLearnError) as exc:
+                errors.append(f"intake: {exc}")
         if errors:
             raise AtomLearnError("Workspace validation failed:\n- " + "\n- ".join(errors))
         emit({"ok": True, "revision": workspace.revision, "atoms": len(workspace.atoms)})

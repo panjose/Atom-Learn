@@ -9,6 +9,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 ## 已实现功能
 
+- 支持从完整教材或知识库、用户大纲，或仅一个主题名词开始
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
 - 严格维持唯一 Active Atom，并执行所有先修守卫
 - 分流当前 Atom 问题、阻塞性先修问题、未来问题和 Parking Lot 项目
@@ -48,6 +49,20 @@ python atom-learn/scripts/atomlearn.py status courses/calculus --json
 
 完整命令流程和教学行为见 [SKILL.md](atom-learn/SKILL.md)，结构化输入格式见 [SCHEMA.md](atom-learn/references/SCHEMA.md)。运行时课程状态存放在学习者选择的课程工作区，而不是 Skill 安装目录。
 
+## 灵活课程输入
+
+AtomLearn 支持三种主要输入模式：`sources` 用于完整教材或知识库，`outline` 用于课程大纲或用户自建结构，`topic` 用于用户只提供领域关键词、概念、技能或名词的情况。三种模式最终都会生成同一套来源可追踪的 Knowledge Atom DAG，但采用不同的资料发现和原子化策略。
+
+```powershell
+python atom-learn/scripts/atomlearn.py intake init courses/calculus --input intake.yaml
+python atom-learn/scripts/atomlearn.py intake guidance courses/calculus
+python atom-learn/scripts/atomlearn.py intake update courses/calculus --input discovery-update.yaml --expected-intake-revision 0
+python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input course-plan.yaml --expected-revision 0
+python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expected-intake-revision 1
+```
+
+完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧和权威来源发现，不要求学习者自己编写教学大纲。Intake 完成检查会确保每个非归档 Atom 都有来源 locator。起始 payload 模板位于 `atom-learn/assets/templates/intake-*.yaml`。完整方法见[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
+
 ## 科研论文阅读
 
 AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会建立覆盖综述、奠基工作、理论与方法、基准与数据集、批评与复现以及应用工作的导向地图。每篇完成阅读的论文都会记录有证据支持的主张、局限、开放问题及其与其他工作的关系。
@@ -83,12 +98,13 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [自进化设计](docs/SELF_EVOLUTION_DESIGN.md)
 - [科研论文阅读设计](docs/RESEARCH_READING_DESIGN.md)
+- [灵活输入设计](docs/INTAKE_DESIGN.md)
 
 ## 开发验证
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py
 ```
 
 仓库提供微积分、操作系统和一个合成科研阅读计划作为测试夹具。自动测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

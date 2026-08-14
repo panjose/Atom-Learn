@@ -4,6 +4,7 @@
 
 - Workspace layout
 - Core records
+- Course intake
 - Import plan
 - Mutation payloads
 - Revisions and timestamps
@@ -35,6 +36,12 @@ Atom statuses are `locked`, `available`, `active`, `mastered`, `review_due`, and
 Use these question classifications: `in_atom`, `blocking_prerequisite`, `non_blocking`, `future_atom`, and `out_of_scope`.
 
 Use Evidence scores from `0.0` through `1.0`. The CLI derives the result from required dimensions, `pass_threshold`, and `minimum_dimension_score`.
+
+## Course intake
+
+Course intake accepts three primary modes: complete `sources`, a user-provided `outline`, or topic-only `topic` terms. It uses an independent revision in `.atomlearn/intake.yaml` and generates `INTAKE.md`.
+
+Read [INTAKE_SCHEMA.md](INTAKE_SCHEMA.md) for payloads and [COURSE_INTAKE.md](COURSE_INTAKE.md) for mode-specific workflows. Complete intake only after the imported plan represents the intake source IDs and every non-archived Atom has a source locator.
 
 ## Import plan
 

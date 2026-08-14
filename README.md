@@ -9,6 +9,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 
 ## Implemented Capabilities
 
+- Start from complete textbooks or knowledge bases, a user outline, or only a topic name
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Enforce exactly one Active Atom and guard all prerequisites
 - Route in-Atom questions, blocking prerequisites, future questions, and Parking Lot items
@@ -48,6 +49,20 @@ python atom-learn/scripts/atomlearn.py status courses/calculus --json
 
 See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teaching behavior, and [SCHEMA.md](atom-learn/references/SCHEMA.md) for structured input formats. Runtime course state is stored in the learner's selected course workspace, not in the Skill installation directory.
 
+## Flexible Course Intake
+
+AtomLearn supports three primary input modes: `sources` for complete textbooks or knowledge bases, `outline` for a syllabus or user-created structure, and `topic` when the user supplies only a field keyword, concept, skill, or name. All three produce the same source-traceable Knowledge Atom DAG, but use different discovery and atomization strategies.
+
+```powershell
+python atom-learn/scripts/atomlearn.py intake init courses/calculus --input intake.yaml
+python atom-learn/scripts/atomlearn.py intake guidance courses/calculus
+python atom-learn/scripts/atomlearn.py intake update courses/calculus --input discovery-update.yaml --expected-intake-revision 0
+python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input course-plan.yaml --expected-revision 0
+python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expected-intake-revision 1
+```
+
+Complete-source mode inventories and reconciles materials; outline mode treats outline items as coverage anchors rather than final Atom boundaries; topic mode performs term disambiguation and authoritative source discovery without asking the learner to invent a syllabus. Intake completion verifies that every non-archived Atom has a source locator. Starter payloads are available under `atom-learn/assets/templates/intake-*.yaml`. See [Course Intake Workflows](atom-learn/references/COURSE_INTAKE.md).
+
 ## Research Reading
 
 AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It builds a guided map across surveys, seminal work, theory and methods, benchmarks and datasets, critiques and replications, and applications. Each completed paper records evidence-linked claims, limitations, open questions, and relations to other work.
@@ -83,12 +98,13 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
 - [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
+- [Flexible Intake Design](docs/INTAKE_DESIGN.md)
 
 ## Development Validation
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py
 ```
 
 The repository includes small calculus, operating-systems, and synthetic research-reading plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

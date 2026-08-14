@@ -1,6 +1,6 @@
 ---
 name: atom-learn
-description: Build, run, and safely evolve persistent source-grounded learning courses and research-reading programs. Turn textbooks, PDFs, notes, documentation, or multiple resources into a prerequisite DAG of Knowledge Atoms; map a research field into a guided paper graph; and track claims, evidence, limitations, contradictions, replications, and research gaps. Use for one-concept-at-a-time study, durable progress, mastery checks, spaced review, adaptive teaching, deciding which papers to read, critical paper reading, literature synthesis, field orientation, or recovery of an AtomLearn workspace.
+description: Build, run, and safely evolve persistent source-grounded learning courses and research-reading programs. Accept complete textbooks or knowledge bases, a user-provided outline or syllabus, or only a field keyword, concept, skill, or topic name; turn the input into a prerequisite DAG of Knowledge Atoms; map research fields into guided paper graphs; and track learning evidence. Use for course creation from sparse or rich inputs, one-concept-at-a-time study, durable progress, mastery checks, spaced review, adaptive teaching, critical paper reading, literature synthesis, field orientation, or recovery of an AtomLearn workspace.
 ---
 
 # AtomLearn
@@ -23,15 +23,34 @@ Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, includin
 
 ## Choose a workflow
 
+### Start from any input
+
+1. Create the base workspace with `init`.
+2. Read [references/COURSE_INTAKE.md](references/COURSE_INTAKE.md) and [references/INTAKE_SCHEMA.md](references/INTAKE_SCHEMA.md).
+3. Classify the primary input as `sources`, `outline`, or `topic`. Use the most information-rich mode and retain secondary inputs.
+4. Create an intake payload from the matching template and run `intake init` followed by `intake guidance`.
+5. For full sources, inspect and inventory the content. For an outline, preserve coverage IDs but redesign Atom boundaries and dependencies. For a topic name, disambiguate it, make explicit assumptions, and discover authoritative sources without requiring the learner to create a syllabus.
+6. Ask only questions that materially change the path. Continue with recorded assumptions when uncertainty is non-blocking.
+7. Build and import a source-grounded plan, then run `intake complete`, `validate`, and `render`.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py init <workspace> --course-id <id> --title <title> --goal <goal>
+python <SKILL_DIR>/scripts/atomlearn.py intake init <workspace> --input <intake.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py intake guidance <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py import-plan <workspace> --input <plan.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py intake complete <workspace>
+```
+
+Never ask a topic-only user to supply a complete outline. Never treat a source table of contents or user outline as the final prerequisite graph. Keep every non-archived Atom traceable to a source locator.
+
 ### Create a course
 
 1. Choose the user's requested workspace. If none is given, create a clearly named `<course-id>-atomlearn` subdirectory and tell the user.
 2. Read [references/PROTOCOL.md](references/PROTOCOL.md), [references/SCHEMA.md](references/SCHEMA.md), and [references/ATOMIZATION.md](references/ATOMIZATION.md).
-3. Inspect supplied sources with the appropriate file or web tools. Keep private source material out of the Skill directory and repository.
-4. Run `init` before building the map.
-5. Create an import plan that follows the schema. Prefer 10-30 Atoms in the first batch; extend large courses incrementally.
-6. Run `import-plan`, then `validate` and `render`.
-7. Summarize the map, ambiguities, conflicts, and first available Atom. Do not start a long lecture during orientation.
+3. Complete the applicable intake workflow. Keep private source material out of the Skill directory and repository.
+4. Create an import plan that follows the schema. Prefer 10-30 Atoms in the first batch; extend large courses incrementally.
+5. Run `import-plan`, `intake complete` when intake state exists, then `validate` and `render`.
+6. Summarize the map, assumptions, ambiguities, conflicts, source gaps, and first available Atom. Do not start a long lecture during orientation.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py init <workspace> --course-id <id> --title <title> --goal <goal>
@@ -139,7 +158,9 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/EVALUATION.md](references/EVALUATION.md) when defining success criteria or monitoring a proposal.
 - Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) when mapping a field, choosing a reading order, reading papers, or identifying evidence-linked gaps.
 - Read [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md) when creating paper import plans or critical notes, or troubleshooting research state.
+- Read [references/COURSE_INTAKE.md](references/COURSE_INTAKE.md) when the user supplies full sources, an outline, mixed materials, or only a topic name.
+- Read [references/INTAKE_SCHEMA.md](references/INTAKE_SCHEMA.md) when creating or updating an intake payload, or troubleshooting intake state.
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
+Consider an interaction complete only after canonical state is saved, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. When intake state exists, complete it only after source traceability passes. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.

@@ -1,0 +1,18 @@
+mode: sources
+request_summary: Learn from the supplied textbook or knowledge base.
+goal: ""
+desired_outcome: working_knowledge
+target_depth: working
+prior_knowledge: []
+constraints: []
+source_materials:
+  - id: source.primary
+    title: ""
+    type: pdf
+    location: ""
+    version: ""
+outline_items: []
+topic_terms: []
+discovery_sources: []
+ambiguities: []
+assumptions: []
