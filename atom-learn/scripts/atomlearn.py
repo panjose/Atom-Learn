@@ -1385,10 +1385,22 @@ def build_parser() -> argparse.ArgumentParser:
     adapt_parser = sub.add_parser("adapt", add_help=False)
     adapt_parser.add_argument("-h", "--help", action="store_true", dest="adaptation_help")
     adapt_parser.add_argument("adaptation_args", nargs=argparse.REMAINDER)
+    exam_parser = sub.add_parser("exam", add_help=False)
+    exam_parser.add_argument("-h", "--help", action="store_true", dest="exam_help")
+    exam_parser.add_argument("exam_args", nargs=argparse.REMAINDER)
     return parser
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "exam":
+        from exam import AtomLearnError as ExamAtomLearnError
+        from exam import ExamError, run as run_exam
+
+        try:
+            run_exam(["--help"] if args.exam_help else args.exam_args)
+        except (ExamError, ExamAtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "adapt":
         from adaptation import AdaptationError, run as run_adaptation
         from adaptation import AtomLearnError as AdaptationAtomLearnError
@@ -1487,6 +1499,16 @@ def run(args: argparse.Namespace) -> None:
                 errors.extend(f"adaptation: {error}" for error in adaptation_engine.validate())
             except (AdaptationError, AdaptationAtomLearnError) as exc:
                 errors.append(f"adaptation: {exc}")
+        exam_root = workspace.meta / "exam"
+        if exam_root.is_dir():
+            from exam import AtomLearnError as ExamAtomLearnError
+            from exam import ExamEngine, ExamError
+
+            try:
+                exam_engine = ExamEngine.load(str(workspace.root))
+                errors.extend(f"exam: {error}" for error in exam_engine.validate())
+            except (ExamError, ExamAtomLearnError) as exc:
+                errors.append(f"exam: {exc}")
         if errors:
             raise AtomLearnError("Workspace validation failed:\n- " + "\n- ".join(errors))
         emit({"ok": True, "revision": workspace.revision, "atoms": len(workspace.atoms)})
@@ -1510,6 +1532,14 @@ def run(args: argparse.Namespace) -> None:
             if adaptation_errors:
                 raise AtomLearnError("Adaptation validation failed:\n- " + "\n- ".join(adaptation_errors))
             summary["adaptation"] = adaptation_engine.guidance(context)
+        if (workspace.meta / "exam").is_dir():
+            from exam import ExamEngine
+
+            exam_engine = ExamEngine.load(str(workspace.root))
+            exam_errors = exam_engine.validate()
+            if exam_errors:
+                raise AtomLearnError("Exam validation failed:\n- " + "\n- ".join(exam_errors))
+            summary["exam"] = exam_engine.status()
         emit(summary, as_json=args.json)
         return
     if args.command == "suggest-next":

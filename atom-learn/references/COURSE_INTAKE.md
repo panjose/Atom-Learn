@@ -79,6 +79,8 @@ Use the strongest input as the primary mode and preserve the others:
 - textbook plus outline: use `sources`; use outline items as coverage checks;
 - outline plus keywords: use `outline`; use keywords to clarify emphasis;
 - several sources plus a target project: use `sources`; set `desired_outcome: project` and record constraints;
+- textbooks plus past exams: use `sources`, set `desired_outcome: exam`, build the prerequisite graph from explanatory material, and use the separate exam workflow for question statistics and targeted preparation;
+- past exams as the only material: use `sources` with source type `exam`, discover the explanatory prerequisites needed for a sound course, then map questions through [EXAM_PREPARATION.md](EXAM_PREPARATION.md);
 - research field plus papers: use research mode for the paper graph and topic intake for prerequisite Knowledge Atoms.
 
 ## Readiness and completion

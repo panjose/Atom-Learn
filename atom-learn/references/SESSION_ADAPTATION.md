@@ -31,7 +31,7 @@ python <SKILL_DIR>/scripts/atomlearn.py status <workspace> --json
 python <SKILL_DIR>/scripts/atomlearn.py adapt guidance <workspace> --context teaching
 ```
 
-Use `orientation`, `teaching`, `review`, `research`, or `general` context. Root `status --json` automatically includes orientation, teaching, or review guidance after adaptation has been initialized.
+Use `orientation`, `teaching`, `review`, `research`, `exam`, or `general` context. Root `status --json` automatically includes orientation, teaching, or review guidance after adaptation has been initialized; exam preparation should request `exam` guidance explicitly.
 
 Apply precedence in this order:
 
@@ -74,7 +74,7 @@ Do not ask for confirmation after every inferred signal. Ask only when a contest
 
 ## Apply guidance
 
-Guidance converts active profile values into concrete instructions. Apply only dimensions valid for the current context. For example, `research.orientation` applies to research mapping, while `feedback.style` applies to teaching and review.
+Guidance converts active profile values into concrete instructions. Apply only dimensions valid for the current context. For example, `research.orientation` applies to research mapping, while challenge and feedback preferences can apply to exam preparation without changing difficulty statistics or mastery thresholds.
 
 Active session preferences may change:
 

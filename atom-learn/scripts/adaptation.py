@@ -29,7 +29,7 @@ from atomlearn import (
 )
 
 
-ADAPTATION_CONTEXTS = {"general", "orientation", "teaching", "review", "research"}
+ADAPTATION_CONTEXTS = {"general", "orientation", "teaching", "review", "research", "exam"}
 DIRECTIONS = {"prefer", "avoid"}
 EVIDENCE_TYPES = {"explicit", "behavioral", "outcome"}
 REASON_CODES = {
@@ -61,15 +61,15 @@ DIMENSION_CONTEXTS: dict[str, set[str]] = {
     "response.detail": ADAPTATION_CONTEXTS,
     "answer.structure": ADAPTATION_CONTEXTS,
     "language.mode": ADAPTATION_CONTEXTS,
-    "explanation.order": {"orientation", "teaching", "review"},
-    "example.mode": {"orientation", "teaching", "review"},
-    "interaction.pacing": {"orientation", "teaching", "review"},
-    "teaching.mode": {"teaching", "review"},
-    "feedback.style": {"teaching", "review"},
-    "notation.level": {"orientation", "teaching", "review", "research"},
-    "challenge.level": {"teaching", "review"},
+    "explanation.order": {"orientation", "teaching", "review", "exam"},
+    "example.mode": {"orientation", "teaching", "review", "exam"},
+    "interaction.pacing": {"orientation", "teaching", "review", "exam"},
+    "teaching.mode": {"teaching", "review", "exam"},
+    "feedback.style": {"teaching", "review", "exam"},
+    "notation.level": {"orientation", "teaching", "review", "research", "exam"},
+    "challenge.level": {"teaching", "review", "exam"},
     "research.orientation": {"research"},
-    "source.priority": {"orientation", "teaching", "review", "research"},
+    "source.priority": {"orientation", "teaching", "review", "research", "exam"},
 }
 
 GUIDANCE: dict[tuple[str, str], str] = {

@@ -27,6 +27,8 @@ Keep `mode: proposal_only` until real usage demonstrates that a specific low-ris
 
 Session presentation preferences are governed separately by the adaptation policy. They may activate without an evolution proposal only when the dimension and value are allowlisted, context-scoped, reversible, and unable to change course invariants. Explicit current-turn instructions always take precedence.
 
+Exam-corpus emphasis may select learning and review priorities without an evolution proposal, but it cannot lower mastery, bypass prerequisites, or authorize structural changes. Treat frequency as a corpus descriptor; require normal learner Evidence before proposing an outcome-level change.
+
 Risk is derived from proposal type and cannot be supplied or lowered by the proposer.
 
 ## Bounds

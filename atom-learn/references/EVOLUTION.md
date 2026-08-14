@@ -31,6 +31,8 @@ Keep session adaptation separate from bounded course evolution:
 
 Read [SESSION_ADAPTATION.md](SESSION_ADAPTATION.md) before extracting chat preference signals. Session adaptation has its own revision so frequent low-risk preference updates do not stale pending evolution proposals. It may automatically apply explicit preferences and corroborated cross-session inferences, but it cannot mutate course or evolution state.
 
+Exam analysis is also revision-isolated. Its corpus emphasis may reorder a generated preparation queue, but it cannot directly change mastery rubrics, prerequisite edges, review policy, or Atom structure. Record learner attempts as ordinary Evidence; only subsequent outcome evidence may support a bounded evolution proposal.
+
 ## When to evolve
 
 Run analysis after meaningful evidence accumulates, such as repeated mastery failure, delayed review failure, repeated blocking backtracks, or an explicit learner request. Do not analyze after every conversational turn.

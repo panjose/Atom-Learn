@@ -1,0 +1,36 @@
+papers:
+  - id: exam-2025
+    title: 2025 sample examination
+    year: 2025
+    session: annual
+    kind: official_past_exam
+    total_points: 100
+    source_id: exam-source-2025
+    locator: pages 1-8
+questions:
+  - id: exam-2025.q1
+    paper_id: exam-2025
+    number: "1"
+    type: calculation
+    points: 10
+    stem_summary: Apply the target concept in a standard calculation.
+    source_locator: page 1, question 1
+    family_id: standard-calculation
+    cognitive_levels: [apply]
+    tags: [representative]
+    difficulty:
+      basis: rubric
+      conceptual_load: 2
+      reasoning_depth: 2
+      knowledge_integration: 1
+      execution_load: 2
+      time_pressure: 2
+      confidence: 0.8
+      official_level: null
+    knowledge_points:
+      - id: target.concept
+        label: Target concept
+        atom_id: target.concept
+        weight: 1.0
+        confidence: 0.9
+        basis: direct

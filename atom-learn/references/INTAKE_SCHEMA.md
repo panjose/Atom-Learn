@@ -49,7 +49,7 @@ source_materials:
     version: 9th edition
 ```
 
-Source types are `pdf`, `book`, `notes`, `documentation`, `website`, `database`, `outline`, and `other`. Store metadata and stable locations, not copied full text.
+Source types are `pdf`, `book`, `notes`, `documentation`, `website`, `database`, `outline`, `exam`, and `other`. Store metadata and stable locations, not copied full text.
 
 ## Outline mode
 

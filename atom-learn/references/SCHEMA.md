@@ -29,6 +29,8 @@ Treat the five core Markdown files at workspace root as generated projections. O
 
 Session adaptation uses `.atomlearn/adaptation/{state.yaml,profile.yaml,signals.ndjson,ledger.ndjson}` and generates `PERSONALIZATION.md`. It has an independent adaptation revision; see [ADAPTATION_SCHEMA.md](ADAPTATION_SCHEMA.md).
 
+Exam preparation uses `.atomlearn/exam/{state.yaml,bank.yaml,events.ndjson}` and generates `EXAM_BLUEPRINT.md` plus `EXAM_STUDY_PLAN.md`. It has an independent exam revision; see [EXAM_SCHEMA.md](EXAM_SCHEMA.md).
+
 ## Core records
 
 Use lowercase dot-separated IDs matching `[a-z0-9][a-z0-9.-]*`. Never place `/` or `\\` in an ID.

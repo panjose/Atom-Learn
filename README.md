@@ -22,6 +22,8 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Split or merge Atoms with user confirmation while preserving stable ID aliases
 - Map a research field into a role-aware paper dependency and citation graph
 - Guide one Active Paper through critical notes, claim-evidence extraction, and cross-paper synthesis
+- Analyze past papers and question banks for source-traceable coverage, difficulty, and corpus emphasis
+- Generate targeted learning or review queues from exam emphasis, learner Evidence, and prerequisites
 - Adapt response style, pacing, examples, feedback, and research orientation from privacy-safe session signals
 - Analyze learning evidence and propose bounded, approval-gated course evolution
 - Generate learning, research, personalization, and evolution views from canonical YAML state
@@ -97,6 +99,19 @@ python atom-learn/scripts/atomlearn.py research status courses/agent-research
 
 Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. It does not store complete paper text or claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
 
+## Exam Analysis and Targeted Preparation
+
+AtomLearn can turn supplied past papers, sample exams, mock exams, or question banks into a source-traceable assessment corpus. Each question is mapped to stable knowledge points and optional Knowledge Atoms, classified by type and cognitive demand, and rated with a transparent five-factor difficulty rubric. Analysis reports cross-paper coverage, score share, sample-contained emphasis, confidence, and unmapped course gaps.
+
+```powershell
+python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
+python atom-learn/scripts/atomlearn.py exam import courses/calculus --input exam-import.yaml --expected-exam-revision 0
+python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
+python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
+```
+
+The targeted queue combines corpus emphasis, current learner Evidence, question difficulty, and prerequisite order to recommend `learn`, `remediate`, `review`, or `repair_prerequisites`. Full questions and marking schemes remain in the private source/RAG layer; canonical exam state keeps concise summaries and locators. Frequency describes only the supplied corpus and is never presented as a prediction of future questions. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md).
+
 ## Session-Based Self-Adaptation
 
 AtomLearn can learn durable interaction preferences from chat sessions while keeping the current request in control. The harness distills only allowlisted enum signals—such as detail level, explanation order, example mode, pacing, feedback style, and research orientation—into a workspace-local profile. An explicit preference applies immediately; behavioral or outcome-based inference requires corroboration across at least two distinct sessions.
@@ -131,6 +146,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
 - [Session Adaptation Design](docs/SESSION_ADAPTATION_DESIGN.md)
+- [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md)
 - [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
 - [Flexible Intake Design](docs/INTAKE_DESIGN.md)
 - [RAG Design](docs/RAG_DESIGN.md)
@@ -139,7 +155,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py
 ```
 
 The repository includes small calculus, operating-systems, and synthetic research-reading plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

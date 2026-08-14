@@ -22,6 +22,8 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 经用户确认后拆分或合并 Atom，并保留稳定 ID alias
 - 将科研领域组织为带角色、阅读依赖和引用关系的论文图
 - 围绕单一 Active Paper 完成批判性笔记、主张—证据抽取和跨论文综合
+- 分析往年题和题库，得到来源可追踪的覆盖、难度与样本内重点
+- 根据考试重点、学习者 Evidence 和先修关系生成针对性学习或复习队列
 - 从隐私安全的 session 信号中适配回答风格、节奏、示例、反馈和科研取向
 - 分析学习证据，并生成有边界、需审批的课程进化提案
 - 从规范化 YAML 状态生成学习、科研、个性化和进化视图
@@ -97,6 +99,19 @@ python atom-learn/scripts/atomlearn.py research status courses/agent-research
 
 研究模式最多保留一个 Active Paper，会阻止未完成论文先修的激活、提示缺失的 Knowledge Atom，并生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。它不会保存完整论文正文，也不会在缺少最新文献检索时宣称创新性。完整方法见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)。
 
+## 试题分析与针对性备考
+
+AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理为来源可追踪的考试语料。每道题会映射到稳定知识点和可选 Knowledge Atom，标注题型与认知要求，并通过透明的五因素量表确定难度。分析会报告跨试卷覆盖、分值占比、样本内重点、置信度以及尚未进入课程图的知识缺口。
+
+```powershell
+python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
+python atom-learn/scripts/atomlearn.py exam import courses/calculus --input exam-import.yaml --expected-exam-revision 0
+python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
+python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
+```
+
+针对性队列会综合语料重点、学习者当前 Evidence、题目难度和先修顺序，给出 `learn`、`remediate`、`review` 或 `repair_prerequisites` 建议。完整题目与评分细则保留在私有资料/RAG 层；考试规范状态只保存简短摘要和 locator。频率只描述用户提供的样本，绝不会被表述为未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)。
+
 ## 基于 Session 的自适应
 
 AtomLearn 可以从聊天 session 中学习长期有效的交互偏好，同时始终以当前请求为最高优先级。Harness 只会把细节程度、解释顺序、示例模式、节奏、反馈风格和科研取向等白名单枚举信号提炼到工作区本地画像中。用户明确表达的偏好会立即生效；行为或结果推断必须获得至少两个不同 session 的交叉印证。
@@ -131,6 +146,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [自进化设计](docs/SELF_EVOLUTION_DESIGN.md)
 - [会话自适应设计](docs/SESSION_ADAPTATION_DESIGN.md)
+- [试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)
 - [科研论文阅读设计](docs/RESEARCH_READING_DESIGN.md)
 - [灵活输入设计](docs/INTAKE_DESIGN.md)
 - [RAG 设计](docs/RAG_DESIGN.md)
@@ -139,7 +155,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py
 ```
 
 仓库提供微积分、操作系统和一个合成科研阅读计划作为测试夹具。自动测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

@@ -13,7 +13,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -e . pytest
-      - run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py
+      - run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py
       - run: python -m pytest
       - run: python atom-learn/scripts/atomlearn.py --help
       - run: python atom-learn/scripts/atomlearn.py evolve --help
@@ -21,3 +21,4 @@ jobs:
       - run: python atom-learn/scripts/atomlearn.py intake --help
       - run: python atom-learn/scripts/atomlearn.py rag --help
       - run: python atom-learn/scripts/atomlearn.py adapt --help
+      - run: python atom-learn/scripts/atomlearn.py exam --help

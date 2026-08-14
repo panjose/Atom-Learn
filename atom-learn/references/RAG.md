@@ -57,6 +57,8 @@ python <SKILL_DIR>/scripts/atomlearn.py rag ingest <workspace> --input <sources.
 
 Supported local formats are TXT, Markdown, RST, HTML, JSON, YAML, CSV, text-based PDF, and DOCX. Run OCR before ingesting image-only PDFs. Do not copy private materials into the Skill installation or repository; the runtime index belongs under the learner workspace's ignored `.atomlearn/rag/` directory.
 
+For past papers and question banks, use one stable source ID per paper or collection and retain page/question locators. Keep full stems and marking schemes in this private source layer; pass only concise summaries and locators into the exam subsystem described in [EXAM_PREPARATION.md](EXAM_PREPARATION.md).
+
 The index creates contextual chunks from document title, section, locator, and content. Re-ingesting the same source ID creates a new immutable source revision and deactivates older chunks without losing their audit record. Pass `--expected-rag-revision <revision>` on ingestion, embedding, and coverage mutations when another process may share the workspace.
 
 ## Retrieve and rerank
@@ -88,6 +90,8 @@ Inspect the full candidate text and component ranks. Rerank with these questions
 - Is the locator precise enough for the learner to verify?
 
 Do not infer relevance from the RRF number alone; it is a rank-fusion score, not a calibrated probability. If results are empty or indirect, issue a focused corrective search.
+
+For exam mapping, retrieve separately for the tested concept, required solution steps, hidden prerequisites, and marking-scheme expectations. A lexical match between a question and an Atom title is not sufficient evidence for a mapping.
 
 ## Correct gaps with harness Web Search
 

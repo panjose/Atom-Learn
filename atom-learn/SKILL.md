@@ -1,6 +1,6 @@
 ---
 name: atom-learn
-description: Build, retrieve for, run, personalize, and safely evolve persistent source-grounded learning courses and research-reading programs. Accept complete textbooks or knowledge bases, a user-provided outline or syllabus, or only a field keyword, concept, skill, or topic name; index local sources; correct evidence gaps with harness Web Search; adapt explanation style and research orientation from privacy-preserving cross-session chat signals; turn coverage into a prerequisite DAG of Knowledge Atoms; and track learning evidence. Use for RAG-grounded course creation, one-concept-at-a-time study, durable progress, session-aware personalization, mastery checks, spaced review, adaptive teaching, critical paper reading, literature synthesis, field orientation, or workspace recovery.
+description: Build, retrieve for, run, personalize, and safely evolve persistent source-grounded learning courses, exam-preparation paths, and research-reading programs. Accept complete textbooks or knowledge bases, a user-provided outline or syllabus, past exams or question banks, or only a field keyword, concept, skill, or topic name; index local sources; correct evidence gaps with harness Web Search; analyze question coverage, common knowledge points, difficulty, and cognitive demand; adapt explanation style and research orientation from privacy-preserving cross-session chat signals; turn coverage into a prerequisite DAG of Knowledge Atoms; and track learning evidence. Use for RAG-grounded course creation, exam analysis, targeted learning or review, one-concept-at-a-time study, durable progress, session-aware personalization, mastery checks, spaced review, adaptive teaching, critical paper reading, literature synthesis, field orientation, or workspace recovery.
 ---
 
 # AtomLearn
@@ -77,6 +77,29 @@ python <SKILL_DIR>/scripts/atomlearn.py import-plan <workspace> --input <plan.ya
 python <SKILL_DIR>/scripts/atomlearn.py validate <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 ```
+
+### Analyze exam questions and prepare
+
+1. Read [references/EXAM_PREPARATION.md](references/EXAM_PREPARATION.md) and [references/EXAM_SCHEMA.md](references/EXAM_SCHEMA.md).
+2. Treat past papers, sample exams, mock exams, and question banks as source material. Ingest PDFs, DOCX, text, or extracted OCR into the workspace RAG index and preserve stable source IDs and per-question locators.
+3. If questions are the only input, complete source intake and build a prerequisite-aware course before final Atom mapping. Do not build a course around memorized answer patterns.
+4. Retrieve the relevant question, marking scheme, syllabus, and course evidence. Use harness Web Search only to correct missing official context and ingest bounded evidence with provenance.
+5. Create a structured exam payload. Store a concise stem summary, never the full question or solution in exam canonical state. Map each question to stable knowledge-point IDs and existing Atoms; keep uncertain or absent Atom mappings explicit.
+6. Run `exam import`, `exam analyze`, and `exam validate`. Present commonness as a property of the supplied corpus, not a forecast of future questions.
+7. Run `adapt guidance --context exam`, then `exam plan --mode learning|review|mixed`. Use the queue's prerequisites, Evidence gaps, difficulty, and representative questions.
+8. Teach or review the top eligible Atom. Withhold the solution during a diagnostic attempt, record normal Evidence, assess it, and rerun the plan.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py rag ingest <workspace> --input <exam-sources.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py exam init <workspace> --title <title> --target-date <YYYY-MM-DD>
+python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-import.yaml> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam analyze <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py exam plan <workspace> --mode mixed --limit 10
+python <SKILL_DIR>/scripts/atomlearn.py exam validate <workspace>
+```
+
+Never call a frequently sampled point "certain to appear." Never infer learner ability from question difficulty. Never prioritize a high-emphasis target ahead of an unmet prerequisite or weaken mastery requirements for exam speed.
 
 ### Resume a course
 
@@ -210,7 +233,9 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/RAG_SCHEMA.md](references/RAG_SCHEMA.md) when creating source, web-evidence, query, embedding, or coverage payloads, or troubleshooting retrieval state.
 - Read [references/SESSION_ADAPTATION.md](references/SESSION_ADAPTATION.md) when learning or applying presentation preferences from chat sessions, handling conflicts, corrections, or retirement, or deciding whether a signal is safe to persist.
 - Read [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md) when creating session signal payloads or troubleshooting adaptation state.
+- Read [references/EXAM_PREPARATION.md](references/EXAM_PREPARATION.md) when the learner supplies past papers, mock exams, sample questions, or a question bank, or asks for common-point, difficulty, or targeted preparation analysis.
+- Read [references/EXAM_SCHEMA.md](references/EXAM_SCHEMA.md) when creating exam import payloads, mapping questions to Atoms, or troubleshooting exam state.
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.

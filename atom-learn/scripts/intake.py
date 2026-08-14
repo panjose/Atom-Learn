@@ -30,7 +30,7 @@ INTAKE_MODES = {"sources", "outline", "topic"}
 INTAKE_STATUSES = {"captured", "discovering", "ready_to_plan", "planned"}
 DESIRED_OUTCOMES = {"orientation", "working_knowledge", "exam", "project", "research"}
 TARGET_DEPTHS = {"overview", "working", "advanced", "expert"}
-SOURCE_TYPES = {"pdf", "book", "notes", "documentation", "website", "database", "outline", "other"}
+SOURCE_TYPES = {"pdf", "book", "notes", "documentation", "website", "database", "outline", "exam", "other"}
 
 
 class IntakeError(RuntimeError):

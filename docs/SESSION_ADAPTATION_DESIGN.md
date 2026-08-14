@@ -64,7 +64,7 @@ Otherwise it remains provisional or contested and is not applied. This prevents 
 
 ## 6. Context and precedence
 
-Each dimension has allowed contexts. Research orientation cannot affect normal teaching; feedback style cannot alter field mapping. Global response dimensions may apply across contexts.
+Each dimension has allowed contexts. Research orientation cannot affect normal teaching or exam analysis; feedback style cannot alter field mapping or corpus statistics. Global response dimensions may apply across contexts, and exam guidance may adapt challenge presentation without changing computed difficulty or mastery thresholds.
 
 Precedence is:
 

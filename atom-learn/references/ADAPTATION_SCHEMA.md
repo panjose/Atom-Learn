@@ -43,7 +43,7 @@ Constraints:
 
 - session and turn references are opaque IDs using letters, numbers, dot, colon, underscore, or hyphen;
 - one session ID may be observed only once;
-- context is `general`, `orientation`, `teaching`, `review`, or `research`;
+- context is `general`, `orientation`, `teaching`, `review`, `research`, or `exam`;
 - one observation contains 1-20 signals;
 - confidence is 0.5-1.0;
 - one signal has at most ten turn references;

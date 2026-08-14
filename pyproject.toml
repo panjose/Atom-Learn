@@ -1,7 +1,7 @@
 [project]
 name = "atom-learn"
-version = "0.3.0"
-description = "Persistent, source-grounded learning and research Skill with safe session adaptation"
+version = "0.4.0"
+description = "Persistent source-grounded learning, research, and exam-preparation Skill"
 requires-python = ">=3.10"
 dependencies = [
   "PyYAML>=6.0",
