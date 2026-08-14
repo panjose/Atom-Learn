@@ -10,6 +10,9 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 ## Implemented Capabilities
 
 - Start from complete textbooks or knowledge bases, a user outline, or only a topic name
+- Index local sources and correct coverage gaps with harness Web Search
+- Fuse BM25, multilingual subword, and optional provider-embedding retrieval with RRF
+- Require explicit evidence verdicts and stable source locators before sparse-input planning
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Enforce exactly one Active Atom and guard all prerequisites
 - Route in-Atom questions, blocking prerequisites, future questions, and Parking Lot items
@@ -24,10 +27,10 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 
 ## Installation
 
-AtomLearn requires Python 3.10+ and PyYAML:
+AtomLearn requires Python 3.10+, PyYAML, pypdf, and python-docx:
 
 ```powershell
-python -m pip install PyYAML
+python -m pip install -e .
 ```
 
 Copy or link the repository's `atom-learn` directory into your personal Codex Skills directory, for example:
@@ -62,6 +65,22 @@ python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expect
 ```
 
 Complete-source mode inventories and reconciles materials; outline mode treats outline items as coverage anchors rather than final Atom boundaries; topic mode performs term disambiguation and authoritative source discovery without asking the learner to invent a syllabus. Intake completion verifies that every non-archived Atom has a source locator. Starter payloads are available under `atom-learn/assets/templates/intake-*.yaml`. See [Course Intake Workflows](atom-learn/references/COURSE_INTAKE.md).
+
+## RAG and Corrective Web Search
+
+AtomLearn persists a provider-neutral RAG index inside each learner workspace. It extracts structure-aware chunks from TXT, Markdown, RST, HTML, JSON, YAML, CSV, searchable PDF, and DOCX sources. Retrieval combines SQLite FTS5 BM25, multilingual subword similarity, and optional provider embeddings through reciprocal rank fusion. The harness then reranks the candidate evidence instead of treating the fusion score as confidence.
+
+```powershell
+python atom-learn/scripts/atomlearn.py rag init courses/calculus
+python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sources.yaml
+python atom-learn/scripts/atomlearn.py rag search courses/calculus --input query.yaml
+python atom-learn/scripts/atomlearn.py rag requirements courses/calculus
+python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input coverage.yaml
+```
+
+Weak, missing, or unverified outline/topic requirements fail closed and produce focused Web Search queries. The harness opens authoritative results and ingests only bounded evidence with URL, retrieval time, search query, authority, and stable locator using `rag ingest-web`. Outline and topic intake cannot become planning-ready until every mandatory anchor has an explicit supported verdict for the current intake revision. See [Retrieval and Corrective Web Search](atom-learn/references/RAG.md) and [RAG Design](docs/RAG_DESIGN.md).
+
+Research-field discovery uses the same gate with revision-bound anchors for the research question, surveys, method families, evaluations/datasets, and critique/replication evidence. Use `rag requirements --context research` when building a paper-oriented field map.
 
 ## Research Reading
 
@@ -99,12 +118,13 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
 - [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
 - [Flexible Intake Design](docs/INTAKE_DESIGN.md)
+- [RAG Design](docs/RAG_DESIGN.md)
 
 ## Development Validation
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py
 ```
 
 The repository includes small calculus, operating-systems, and synthetic research-reading plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

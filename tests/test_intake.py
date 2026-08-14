@@ -132,8 +132,52 @@ def test_outline_intake_preserves_coverage_anchor_without_copying_structure() ->
     )
     assert state["mode"] == "outline"
     guidance = output(invoke("intake", "guidance", path))
-    assert guidance["ready_to_plan"] is True
+    assert guidance["ready_to_plan"] is False
+    assert any("RAG coverage" in item for item in guidance["blockers"])
     assert any("Atom boundaries" in item for item in guidance["actions"])
+    output(invoke("rag", "init", path))
+    source_file = payload(
+        path,
+        "outline-source.yaml",
+        {
+            "sources": [
+                {
+                    "id": "calculus-notes",
+                    "title": "Calculus outline support",
+                    "authority": "textbook",
+                    "text": "# Limits\nA limit describes approach behavior.\n\n# Derivatives\nA derivative is a limit of difference quotients.",
+                }
+            ]
+        },
+    )
+    output(invoke("rag", "ingest", path, "--input", source_file))
+    coverage_file = payload(
+        path,
+        "outline-coverage.yaml",
+        {
+            "intake_revision": 0,
+            "requirements": [
+                {"id": "outline.limits", "query": "Limits"},
+                {"id": "outline.derivatives", "query": "Derivatives Includes the formal definition."},
+            ],
+            "verdicts": [
+                {
+                    "requirement_id": "outline.limits",
+                    "status": "supported",
+                    "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
+                    "rationale": "The textbook passage directly defines the limit concept.",
+                },
+                {
+                    "requirement_id": "outline.derivatives",
+                    "status": "supported",
+                    "evidence_chunk_ids": ["calculus-notes.r1.c00002"],
+                    "rationale": "The textbook passage grounds derivatives in limits.",
+                },
+            ],
+        },
+    )
+    assert output(invoke("rag", "coverage", path, "--input", coverage_file))["gate"] == "pass"
+    assert output(invoke("intake", "guidance", path))["ready_to_plan"] is True
     import_course(path)
     assert complete(path, 0)["result"]["mode"] == "outline"
 
@@ -192,7 +236,7 @@ def test_topic_only_intake_requires_discovery_then_becomes_plannable() -> None:
         )
     )
     assert updated["intake_revision"] == 1
-    assert updated["result"]["ready_to_plan"] is True
+    assert updated["result"]["ready_to_plan"] is False
     stale = invoke(
         "intake",
         "update",
@@ -205,6 +249,71 @@ def test_topic_only_intake_requires_discovery_then_becomes_plannable() -> None:
     )
     assert stale.returncode == 2
     assert "Stale intake revision" in stale.stderr
+    output(invoke("rag", "init", path))
+    web_file = payload(
+        path,
+        "topic-web.yaml",
+        {
+            "sources": [
+                {
+                    "id": "calculus-notes",
+                    "title": "Authoritative calculus source",
+                    "url": "https://example.edu/calculus",
+                    "retrieved_at": "2025-01-01T00:00:00+00:00",
+                    "query": "derivative foundations",
+                    "authority": "official",
+                    "passages": [{"locator": "derivatives", "text": "The derivative is the limit of a difference quotient."}],
+                },
+                {
+                    "id": "calculus-second",
+                    "title": "Calculus technical reference",
+                    "url": "https://example.org/calculus-reference",
+                    "retrieved_at": "2025-01-01T00:00:00+00:00",
+                    "query": "derivative applications",
+                    "authority": "peer_reviewed",
+                    "passages": [{"locator": "rates", "text": "Derivatives model instantaneous rates of change."}],
+                },
+            ]
+        },
+    )
+    output(invoke("rag", "ingest-web", path, "--input", web_file))
+    coverage_file = payload(
+        path,
+        "topic-coverage.yaml",
+        {
+            "intake_revision": 1,
+            "requirements": [
+                {
+                    "id": "topic.1",
+                    "query": "derivative: Understand what derivatives mean and how to use them.",
+                    "minimum_sources": 1,
+                    "authoritative": True,
+                },
+                {
+                    "id": "scope.goal",
+                    "query": "Understand what derivatives mean and how to use them.",
+                    "minimum_sources": 2,
+                    "authoritative": True,
+                },
+            ],
+            "verdicts": [
+                {
+                    "requirement_id": "topic.1",
+                    "status": "supported",
+                    "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
+                    "rationale": "The official source provides the core definition.",
+                },
+                {
+                    "requirement_id": "scope.goal",
+                    "status": "supported",
+                    "evidence_chunk_ids": ["calculus-notes.r1.c00001", "calculus-second.r1.c00001"],
+                    "rationale": "Two authoritative sources cover meaning and use.",
+                },
+            ],
+        },
+    )
+    assert output(invoke("rag", "coverage", path, "--input", coverage_file))["gate"] == "pass"
+    assert output(invoke("intake", "guidance", path))["ready_to_plan"] is True
     import_course(path)
     completed = complete(path, 1)
     assert completed["result"]["mode"] == "topic"

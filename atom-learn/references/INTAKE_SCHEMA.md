@@ -71,7 +71,7 @@ outline_items:
     notes: Definition and computation
 ```
 
-Outline parent IDs must exist and the hierarchy must remain acyclic. Register `outline_source_id` in the course import plan and use outline item IDs as Atom locators.
+Outline parent IDs must exist and the hierarchy must remain acyclic. Register `outline_source_id` in the course import plan and use outline item IDs as Atom locators. Outline intake remains `discovering` until a RAG coverage report for the current intake revision explicitly supports every outline ID.
 
 ## Topic mode
 
@@ -100,7 +100,7 @@ discovery_sources:
     version: current-edition
 ```
 
-Topic intake is not ready for plan completion while `discovery_sources` is empty.
+Topic intake is not ready for plan completion while `discovery_sources` is empty or while its current RAG coverage gate is not `pass`. Run `rag requirements` only after the final discovery-source intake update so the report binds to the current intake revision.
 
 ## Commands
 

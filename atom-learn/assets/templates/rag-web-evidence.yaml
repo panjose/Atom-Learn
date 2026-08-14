@@ -1,0 +1,12 @@
+sources:
+  - id: authoritative-web-source
+    title: Page or paper title
+    url: https://example.org/page
+    retrieved_at: 2026-08-14T10:00:00+08:00
+    query: focused query used by harness Web Search
+    authority: official
+    version: ""
+    passages:
+      - locator: section 1
+        section: Relevant section
+        text: Bounded, directly relevant evidence passage.

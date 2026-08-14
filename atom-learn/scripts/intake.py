@@ -277,7 +277,35 @@ class IntakeEngine:
         mode = self.state.get("mode")
         if mode == "topic" and not self.state.get("discovery_sources"):
             return "discovering"
+        if mode in {"outline", "topic"} and not self._coverage_ready():
+            return "discovering"
         return "ready_to_plan"
+
+    def _coverage_report(self) -> dict[str, Any] | None:
+        path = self.workspace.meta / "rag" / "latest-coverage.yaml"
+        if not path.is_file():
+            return None
+        try:
+            report = read_data(path)
+        except (OSError, AtomLearnError):
+            return None
+        return report if isinstance(report, dict) else None
+
+    def _coverage_ready(self) -> bool:
+        report = self._coverage_report()
+        rag_state_path = self.workspace.meta / "rag" / "state.yaml"
+        try:
+            rag_revision = read_data(rag_state_path).get("revision") if rag_state_path.is_file() else None
+        except (OSError, AtomLearnError):
+            rag_revision = None
+        return bool(
+            report
+            and report.get("gate") == "pass"
+            and report.get("intake_revision") == self.revision
+            and report.get("rag_revision") == rag_revision
+            and report.get("requirements")
+            and all(item.get("status") == "supported" for item in report["requirements"] if isinstance(item, dict))
+        )
 
     def guidance(self) -> dict[str, Any]:
         mode = self.state.get("mode")
@@ -298,11 +326,12 @@ class IntakeEngine:
                 "Preserve stable outline item IDs as coverage anchors, not as mandatory Atom boundaries.",
                 "Split broad headings, merge duplicates, and infer prerequisite edges across sections.",
                 "Register the outline as a source and use outline item IDs as locators.",
-                "Mark content assumptions and missing explanatory sources explicitly.",
+                "Run RAG coverage for every outline anchor and use corrective Web Search for weak or missing evidence.",
             ],
             "topic": [
                 "Disambiguate the term and choose a practical boundary without demanding a full syllabus from the user.",
                 "Discover at least one authoritative overview and one primary or technical source when appropriate.",
+                "Ingest bounded Web Search evidence into RAG, rerank it, and pass the explicit coverage gate.",
                 "Create a provisional 10-30 Atom map and label uncertain boundaries or dependencies.",
                 "Show the learner the orientation map and refine it from their feedback and diagnostic evidence.",
             ],
@@ -310,6 +339,16 @@ class IntakeEngine:
         blockers: list[str] = []
         if mode == "topic" and not self.state.get("discovery_sources"):
             blockers.append("Authoritative discovery sources have not been recorded yet.")
+        if mode in {"outline", "topic"} and not self._coverage_ready():
+            report = self._coverage_report()
+            if report is None:
+                blockers.append("RAG coverage has not been evaluated for this intake revision.")
+            elif report.get("intake_revision") != self.revision:
+                blockers.append("RAG coverage is stale for the current intake revision.")
+            elif not self._coverage_ready() and report.get("gate") == "pass":
+                blockers.append("RAG coverage is stale for the current retrieval corpus revision.")
+            else:
+                blockers.append("RAG coverage still has unverified, weak, or missing requirements.")
         return {
             "mode": mode,
             "status": self.derived_status(),
@@ -410,7 +449,7 @@ class IntakeEngine:
             "intake_revision": self.revision,
             "course_revision": self.workspace.revision,
             "mode": self.state.get("mode"),
-            "status": self.state.get("status"),
+            "status": self.derived_status(),
             "goal": self.state.get("goal"),
             "guidance": self.guidance(),
         }
@@ -425,7 +464,7 @@ class IntakeEngine:
             "## Request",
             "",
             f"- Mode: `{self.state.get('mode')}`",
-            f"- Status: `{self.state.get('status')}`",
+            f"- Status: `{self.derived_status()}`",
             f"- Goal: {self.state.get('goal')}",
             f"- Target depth: {self.state.get('target_depth')}",
             f"- Desired outcome: {self.state.get('desired_outcome')}",

@@ -10,6 +10,9 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 ## 已实现功能
 
 - 支持从完整教材或知识库、用户大纲，或仅一个主题名词开始
+- 为本地资料建立索引，并用 harness Web Search 补齐覆盖缺口
+- 通过 RRF 融合 BM25、多语言子词检索和可选的供应商 embedding 检索
+- 在稀疏输入进入课程规划前，要求显式证据判定和稳定来源定位
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
 - 严格维持唯一 Active Atom，并执行所有先修守卫
 - 分流当前 Atom 问题、阻塞性先修问题、未来问题和 Parking Lot 项目
@@ -24,10 +27,10 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 ## 安装
 
-AtomLearn 需要 Python 3.10+ 和 PyYAML：
+AtomLearn 需要 Python 3.10+、PyYAML、pypdf 和 python-docx：
 
 ```powershell
-python -m pip install PyYAML
+python -m pip install -e .
 ```
 
 将仓库中的 `atom-learn` 目录复制或链接到个人 Codex Skills 目录，例如：
@@ -62,6 +65,22 @@ python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expect
 ```
 
 完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧和权威来源发现，不要求学习者自己编写教学大纲。Intake 完成检查会确保每个非归档 Atom 都有来源 locator。起始 payload 模板位于 `atom-learn/assets/templates/intake-*.yaml`。完整方法见[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
+
+## RAG 与纠错式 Web Search
+
+AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。它可从 TXT、Markdown、RST、HTML、JSON、YAML、CSV、可搜索 PDF 和 DOCX 中提取保留结构的分块。检索通过倒数排名融合（RRF）组合 SQLite FTS5 BM25、多语言子词相似度和可选的供应商 embedding；随后由 harness 对候选证据重排，而不会把融合分数误当成可信度。
+
+```powershell
+python atom-learn/scripts/atomlearn.py rag init courses/calculus
+python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sources.yaml
+python atom-learn/scripts/atomlearn.py rag search courses/calculus --input query.yaml
+python atom-learn/scripts/atomlearn.py rag requirements courses/calculus
+python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input coverage.yaml
+```
+
+薄弱、缺失或未经验证的大纲/主题要求会以失败关闭，并生成聚焦的 Web Search 查询。harness 打开权威结果后，通过 `rag ingest-web` 仅写入带 URL、检索时间、搜索词、权威等级和稳定 locator 的有限证据段落。只有当前 intake revision 的所有强制锚点都获得显式 `supported` 判定，大纲和主题 intake 才能进入可规划状态。详见[检索与纠错式 Web Search](atom-learn/references/RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
+
+科研领域发现使用同一质量门禁，并为研究问题、综述、方法谱系、评测/数据集以及批评/复现证据生成绑定 research revision 的锚点。构建论文导向的领域地图时使用 `rag requirements --context research`。
 
 ## 科研论文阅读
 
@@ -99,12 +118,13 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [自进化设计](docs/SELF_EVOLUTION_DESIGN.md)
 - [科研论文阅读设计](docs/RESEARCH_READING_DESIGN.md)
 - [灵活输入设计](docs/INTAKE_DESIGN.md)
+- [RAG 设计](docs/RAG_DESIGN.md)
 
 ## 开发验证
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py
 ```
 
 仓库提供微积分、操作系统和一个合成科研阅读计划作为测试夹具。自动测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

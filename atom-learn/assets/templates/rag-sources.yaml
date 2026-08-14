@@ -1,0 +1,6 @@
+sources:
+  - id: source-id
+    title: Source title
+    authority: user
+    version: ""
+    path: C:/materials/source.pdf

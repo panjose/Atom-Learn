@@ -1,6 +1,7 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+*.egg-info/
 .test-workspaces/
 
 # AtomLearn runtime workspaces may contain private source metadata and learner evidence.
@@ -17,5 +18,6 @@ __pycache__/
 **/LITERATURE_MATRIX.md
 **/RESEARCH_GAPS.md
 **/INTAKE.md
+**/RETRIEVAL.md
 courses/
 materials/

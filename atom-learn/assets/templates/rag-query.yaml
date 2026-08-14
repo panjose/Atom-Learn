@@ -1,0 +1,5 @@
+query: Main retrieval question
+alternate_queries: []
+top_k: 8
+candidate_k: 50
+source_ids: []

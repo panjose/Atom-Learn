@@ -1,0 +1,4 @@
+model: approved-provider/model@version
+embeddings:
+  - chunk_id: source-id.r1.c00001
+    vector: [0.1, -0.2]

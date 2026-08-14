@@ -12,10 +12,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: python -m pip install PyYAML pytest
-      - run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py
+      - run: python -m pip install -e . pytest
+      - run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py
       - run: python -m pytest
       - run: python atom-learn/scripts/atomlearn.py --help
       - run: python atom-learn/scripts/atomlearn.py evolve --help
       - run: python atom-learn/scripts/atomlearn.py research --help
       - run: python atom-learn/scripts/atomlearn.py intake --help
+      - run: python atom-learn/scripts/atomlearn.py rag --help

@@ -26,6 +26,8 @@ python <SKILL_DIR>/scripts/atomlearn.py intake init <workspace> --input <intake.
 python <SKILL_DIR>/scripts/atomlearn.py intake guidance <workspace>
 ```
 
+Then initialize retrieval. Read [RAG.md](RAG.md) before indexing material or using Web Search.
+
 Record concise assumptions and ambiguities instead of silently resolving them. Ask only questions whose answers materially change the path; proceed with explicit assumptions for non-blocking uncertainty.
 
 ## Full sources or knowledge bases
@@ -52,7 +54,7 @@ Treat the outline as a coverage contract, not a finished learning graph.
 6. Add missing bridge Atoms and label them as inferred.
 7. Use outline item IDs as source locators so coverage remains auditable.
 
-If explanatory sources are absent, identify that limitation. Discover supporting sources when the user wants source-grounded teaching beyond the outline itself.
+If explanatory sources are absent, the outline is not ready to plan. Index the outline, generate one retrieval requirement per outline ID, use corrective harness Web Search for missing explanations, and pass the explicit RAG coverage gate.
 
 ## Topic names or keywords
 
@@ -62,10 +64,11 @@ Do not require the user to invent a syllabus.
 2. Infer a practical initial goal from the request and record the assumption.
 3. Ask at most one or two high-value questions about outcome or boundary when needed.
 4. Discover at least one authoritative overview and one primary or technical source when appropriate.
-5. Record discovered source metadata with `intake update`.
-6. Build a provisional 10-30 Atom map covering vocabulary, foundations, mechanisms, representative applications, and common misconceptions.
-7. Label uncertain scope, prerequisites, and source gaps.
-8. Show the orientation map and refine it from learner feedback and diagnostic Evidence.
+5. Open the results, ingest bounded evidence with full provenance, and record discovered source metadata with `intake update`.
+6. Generate and evaluate topic and goal-level RAG requirements. Require two distinct sources for the overall goal.
+7. Build a provisional 10-30 Atom map covering vocabulary, foundations, mechanisms, representative applications, and common misconceptions.
+8. Label uncertain scope, prerequisites, and source gaps.
+9. Show the orientation map and refine it from learner feedback and diagnostic Evidence.
 
 If current recommendations, versions, standards, or research coverage matter, verify them with current primary sources. Never present a topic-only map as exhaustive.
 
@@ -80,7 +83,7 @@ Use the strongest input as the primary mode and preserve the others:
 
 ## Readiness and completion
 
-`sources` and `outline` become `ready_to_plan` after valid intake capture. `topic` remains `discovering` until authoritative discovery sources are recorded.
+`sources` becomes `ready_to_plan` after valid intake capture. `outline` remains `discovering` until every outline anchor passes RAG coverage. `topic` remains `discovering` until authoritative discovery sources are recorded and topic/goal coverage passes. Coverage must match the current intake revision; an intake update makes the previous report stale.
 
 After creating and importing the course plan, run:
 
@@ -93,6 +96,7 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 Completion requires:
 
 - at least one imported Knowledge Atom;
+- a passed current RAG coverage report for outline and topic intake;
 - the intake source IDs represented in course sources;
 - source locators on every non-archived Atom;
 - a valid course and intake state.

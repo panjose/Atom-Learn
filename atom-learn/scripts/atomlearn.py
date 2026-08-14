@@ -8,6 +8,7 @@ import copy
 import json
 import os
 import re
+import sqlite3
 import sys
 import uuid
 from collections import defaultdict, deque
@@ -1378,10 +1379,22 @@ def build_parser() -> argparse.ArgumentParser:
     intake_parser = sub.add_parser("intake", add_help=False)
     intake_parser.add_argument("-h", "--help", action="store_true", dest="intake_help")
     intake_parser.add_argument("intake_args", nargs=argparse.REMAINDER)
+    rag_parser = sub.add_parser("rag", add_help=False)
+    rag_parser.add_argument("-h", "--help", action="store_true", dest="rag_help")
+    rag_parser.add_argument("rag_args", nargs=argparse.REMAINDER)
     return parser
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "rag":
+        from rag import AtomLearnError as RagAtomLearnError
+        from rag import RagError, run as run_rag
+
+        try:
+            run_rag(["--help"] if args.rag_help else args.rag_args)
+        except (RagError, RagAtomLearnError, OSError, sqlite3.Error, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "intake":
         from intake import AtomLearnError as IntakeAtomLearnError
         from intake import IntakeError, run as run_intake
@@ -1442,6 +1455,16 @@ def run(args: argparse.Namespace) -> None:
                 errors.extend(f"intake: {error}" for error in intake_engine.validate())
             except (IntakeError, IntakeAtomLearnError) as exc:
                 errors.append(f"intake: {exc}")
+        rag_root = workspace.meta / "rag"
+        if rag_root.is_dir():
+            from rag import AtomLearnError as RagAtomLearnError
+            from rag import RagEngine, RagError
+
+            try:
+                rag_engine = RagEngine.load(str(workspace.root))
+                errors.extend(f"rag: {error}" for error in rag_engine.validate())
+            except (RagError, RagAtomLearnError) as exc:
+                errors.append(f"rag: {exc}")
         if errors:
             raise AtomLearnError("Workspace validation failed:\n- " + "\n- ".join(errors))
         emit({"ok": True, "revision": workspace.revision, "atoms": len(workspace.atoms)})

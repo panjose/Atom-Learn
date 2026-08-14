@@ -1,0 +1,9 @@
+context: intake
+intake_revision: 0
+requirements:
+  - id: scope.goal
+    query: Learning goal coverage
+    alternate_queries: []
+    minimum_sources: 1
+    authoritative: false
+verdicts: []
