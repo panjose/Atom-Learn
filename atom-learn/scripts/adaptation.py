@@ -853,17 +853,23 @@ def add_revision(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Adapt AtomLearn to distilled cross-session preference signals")
     sub = parser.add_subparsers(dest="action", required=True)
+    simple_help = {
+        "status": "Show adaptation validity, revision, and preference counts",
+        "validate": "Validate the canonical adaptation profile and audit log",
+        "profile": "Print the complete canonical preference profile",
+        "render": "Regenerate the learner-facing personalization view",
+    }
     for action in ["status", "validate", "profile", "render"]:
-        command = sub.add_parser(action)
+        command = sub.add_parser(action, help=simple_help[action])
         command.add_argument("workspace")
-    guidance = sub.add_parser("guidance")
+    guidance = sub.add_parser("guidance", help="Generate applicable guidance for one interaction context")
     guidance.add_argument("workspace")
     guidance.add_argument("--context", choices=sorted(ADAPTATION_CONTEXTS), default="general")
-    observe = sub.add_parser("observe-session")
+    observe = sub.add_parser("observe-session", help="Distill allowlisted preference signals from one session")
     observe.add_argument("workspace")
     observe.add_argument("--input", required=True)
     add_revision(observe)
-    retire = sub.add_parser("retire")
+    retire = sub.add_parser("retire", help="Stop one preference dimension from influencing guidance")
     retire.add_argument("workspace")
     retire.add_argument("dimension", choices=sorted(PREFERENCE_VALUES))
     retire.add_argument("--reason-code", choices=sorted(RETIRE_REASONS), required=True)

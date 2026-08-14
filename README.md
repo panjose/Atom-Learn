@@ -36,8 +36,11 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 AtomLearn requires Python 3.10+, PyYAML, pypdf, and python-docx:
 
 ```powershell
-python -m pip install -e .
+python -m pip install -e ".[dev]"
+atomlearn --help
 ```
+
+The editable install exposes the short `atomlearn` console command. Direct `python atom-learn/scripts/atomlearn.py ...` invocation remains supported inside a copied Skill directory.
 
 Copy or link the repository's `atom-learn` directory into your personal Codex Skills directory, for example:
 
@@ -50,13 +53,13 @@ During development, you can also ask Codex to use the repository's `atom-learn/S
 ## Quick Verification
 
 ```powershell
-python atom-learn/scripts/atomlearn.py init courses/calculus --course-id calculus --title "Calculus" --goal "Understand derivatives"
-python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input examples/calculus-mini/plan.yaml --expected-revision 0
-python atom-learn/scripts/atomlearn.py validate courses/calculus
-python atom-learn/scripts/atomlearn.py status courses/calculus --json
+atomlearn init courses/calculus --course-id calculus --title "Calculus" --goal "Understand derivatives"
+atomlearn import-plan courses/calculus --input examples/calculus-mini/plan.yaml --expected-revision 0
+atomlearn validate courses/calculus
+atomlearn status courses/calculus --json
 ```
 
-See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teaching behavior, and [SCHEMA.md](atom-learn/references/SCHEMA.md) for structured input formats. Runtime course state is stored in the learner's selected course workspace, not in the Skill installation directory.
+Every course render writes the five English views plus aligned `*.zh-CN.md` generated views, including `LEARNING_MAP.zh-CN.md`, `CURRENT.zh-CN.md`, and `PROGRESS.zh-CN.md`. Atom titles and learner content stay unchanged; navigation labels, statuses, and operational text are localized. See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teaching behavior, and [SCHEMA.md](atom-learn/references/SCHEMA.md) for structured input formats. Runtime course state is stored in the learner's selected course workspace, not in the Skill installation directory.
 
 ## Flexible Course Intake
 
@@ -228,8 +231,10 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 ## Development Validation
 
 ```powershell
+python -m pytest -m fast
+python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py
 ```
 
-The repository includes small calculus, operating-systems, and synthetic research-reading plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.
+The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

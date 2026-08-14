@@ -1264,46 +1264,61 @@ def add_revision_argument(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Guide field-oriented research paper reading")
     sub = parser.add_subparsers(dest="action", required=True)
-    initialize = sub.add_parser("init")
+    initialize = sub.add_parser("init", help="Initialize a question-oriented research-reading workspace")
     initialize.add_argument("workspace")
     initialize.add_argument("--field", required=True)
     initialize.add_argument("--question", required=True)
     initialize.add_argument("--scope", default="")
     initialize.add_argument("--include", action="append", default=[])
     initialize.add_argument("--exclude", action="append", default=[])
+    simple_help = {
+        "status": "Show research revision, validity, active paper, and next candidates",
+        "validate": "Validate paper identities, graph, notes, metadata, and synthesis state",
+        "list": "List papers with optional role and status filters",
+        "next": "Rank readable papers whose paper prerequisites are complete",
+        "render": "Regenerate research map, active paper, matrix, and gap views",
+    }
     for action in ["status", "validate", "list", "next", "render"]:
-        parser_for_action = sub.add_parser(action)
+        parser_for_action = sub.add_parser(action, help=simple_help[action])
         parser_for_action.add_argument("workspace")
         if action == "list":
             parser_for_action.add_argument("--status")
             parser_for_action.add_argument("--role")
-    import_parser = sub.add_parser("import")
+    import_parser = sub.add_parser("import", help="Import, deduplicate, and normalize a paper map")
     import_parser.add_argument("workspace")
     import_parser.add_argument("--input", required=True)
     add_revision_argument(import_parser)
-    reconcile = sub.add_parser("reconcile-metadata")
+    reconcile = sub.add_parser("reconcile-metadata", help="Verify provider metadata and resolve outgoing citations")
     reconcile.add_argument("workspace")
     reconcile.add_argument("--input", required=True)
     add_revision_argument(reconcile)
-    fetch = sub.add_parser("fetch-metadata")
+    fetch = sub.add_parser("fetch-metadata", help="Fetch DOI metadata and references from Crossref or OpenAlex")
     fetch.add_argument("workspace")
     fetch.add_argument("--provider", choices=["crossref", "openalex"], default="crossref")
     fetch.add_argument("--timeout", type=float, default=15.0)
     fetch.add_argument("--mailto", default="")
     add_revision_argument(fetch)
+    mutation_help = {
+        "activate": "Activate one eligible paper for critical reading",
+        "complete": "Mark the Active Paper read after its critical-note guard passes",
+        "synthesize": "Build provenance-preserving cross-paper evidence themes",
+    }
     for action in ["activate", "complete", "synthesize"]:
-        parser_for_action = sub.add_parser(action)
+        parser_for_action = sub.add_parser(action, help=mutation_help[action])
         parser_for_action.add_argument("workspace")
         if action != "synthesize":
             parser_for_action.add_argument("paper_id")
         add_revision_argument(parser_for_action)
-    note = sub.add_parser("note")
+    note = sub.add_parser("note", help="Record a structured critical note for the Active Paper")
     note.add_argument("workspace")
     note.add_argument("paper_id")
     note.add_argument("--input", required=True)
     add_revision_argument(note)
     for action in ["park", "exclude"]:
-        parser_for_action = sub.add_parser(action)
+        parser_for_action = sub.add_parser(
+            action,
+            help="Defer a paper without losing it" if action == "park" else "Exclude an out-of-scope paper with a reason",
+        )
         parser_for_action.add_argument("workspace")
         parser_for_action.add_argument("paper_id")
         parser_for_action.add_argument("--reason", required=True)

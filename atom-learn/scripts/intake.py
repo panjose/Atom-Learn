@@ -501,17 +501,23 @@ def add_revision(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Capture and guide AtomLearn course intake")
     sub = parser.add_subparsers(dest="action", required=True)
-    initialize = sub.add_parser("init")
+    initialize = sub.add_parser("init", help="Initialize intake from sources, an outline, or a topic")
     initialize.add_argument("workspace")
     initialize.add_argument("--input", required=True)
+    simple_help = {
+        "status": "Show intake mode, readiness, revisions, and blockers",
+        "validate": "Validate canonical intake state",
+        "guidance": "Generate mode-specific discovery and planning guidance",
+        "render": "Regenerate the course intake view",
+    }
     for action in ["status", "validate", "guidance", "render"]:
-        command = sub.add_parser(action)
+        command = sub.add_parser(action, help=simple_help[action])
         command.add_argument("workspace")
-    update = sub.add_parser("update")
+    update = sub.add_parser("update", help="Update discovery results, assumptions, or intake scope")
     update.add_argument("workspace")
     update.add_argument("--input", required=True)
     add_revision(update)
-    complete = sub.add_parser("complete")
+    complete = sub.add_parser("complete", help="Close intake after coverage and plan traceability pass")
     complete.add_argument("workspace")
     add_revision(complete)
     return parser

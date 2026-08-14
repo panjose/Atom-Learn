@@ -6,24 +6,29 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    env:
+      PYTHONUTF8: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
-      - run: python -m pip install -e . pytest
-      - run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py
-      - run: python -m pytest
-      - run: python atom-learn/scripts/atomlearn.py --help
-      - run: python atom-learn/scripts/atomlearn.py evolve --help
-      - run: python atom-learn/scripts/atomlearn.py research --help
-      - run: python atom-learn/scripts/atomlearn.py intake --help
-      - run: python atom-learn/scripts/atomlearn.py rag --help
-      - run: python atom-learn/scripts/atomlearn.py adapt --help
-      - run: python atom-learn/scripts/atomlearn.py exam --help
-      - run: python atom-learn/scripts/atomlearn.py lineage --help
-      - run: python atom-learn/scripts/atomlearn.py skip --help
-      - run: python atom-learn/scripts/atomlearn.py unskip --help
-      - run: python atom-learn/scripts/atomlearn.py expand --help
-      - run: python atom-learn/scripts/atomlearn.py route-concept --help
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install package and test dependencies
+        run: python -m pip install -e ".[dev]"
+      - name: Compile every CLI module
+        run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py
+      - name: Run fast contract tests
+        run: python -m pytest -m fast
+      - name: Verify installed short entry point
+        run: atomlearn --help && atomlearn start --help && atomlearn intake --help && atomlearn research --help && atomlearn exam --help
+      - name: Run full integration tests
+        run: python -m pytest -m integration

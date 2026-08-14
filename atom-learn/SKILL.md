@@ -19,7 +19,9 @@ Set `SKILL_DIR` to this Skill directory and invoke:
 python <SKILL_DIR>/scripts/atomlearn.py <command> ...
 ```
 
-Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, including learning, evolution, and research views, as generated. Do not edit generated views to mutate state.
+When the repository is installed, the equivalent short entry point is `atomlearn <command> ...`. Every subcommand exposes descriptive `--help`.
+
+Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, including learning, evolution, and research views, as generated. Core course rendering maintains both English files and aligned `*.zh-CN.md` Chinese views; use the learner's language without translating their Atom titles or content. Do not edit generated views to mutate state.
 
 ## Choose a workflow
 

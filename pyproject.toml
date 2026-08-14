@@ -1,6 +1,6 @@
 [project]
 name = "atom-learn"
-version = "0.11.0"
+version = "0.12.0"
 description = "Atomic source-grounded learning with closed-loop hybrid RAG, concept routing, research, exams, and knowledge maps"
 requires-python = ">=3.10"
 dependencies = [
@@ -11,9 +11,31 @@ dependencies = [
   "jsonschema>=4.23",
 ]
 
+[project.scripts]
+atomlearn = "atomlearn:main"
+
 [project.optional-dependencies]
 ocr = ["PyMuPDF>=1.24", "pytesseract>=0.3.13", "Pillow>=10.0"]
+dev = ["pytest>=8.0"]
+
+[tool.setuptools]
+package-dir = {"" = "atom-learn/scripts"}
+py-modules = [
+  "atomlearn",
+  "wizard",
+  "intake",
+  "rag",
+  "adaptation",
+  "evolution",
+  "research",
+  "exam",
+  "lineage",
+]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra --strict-markers"
 testpaths = ["tests"]
+markers = [
+  "fast: read-only unit, schema, documentation, and CLI-contract checks",
+  "integration: filesystem and subprocess end-to-end workflow checks",
+]

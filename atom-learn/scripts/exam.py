@@ -1340,29 +1340,35 @@ def add_revision(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Analyze exam questions and generate targeted AtomLearn preparation")
     sub = parser.add_subparsers(dest="action", required=True)
-    initialize = sub.add_parser("init")
+    initialize = sub.add_parser("init", help="Initialize a source-traceable exam corpus")
     initialize.add_argument("workspace")
     initialize.add_argument("--title", required=True)
     initialize.add_argument("--target-date")
-    import_parser = sub.add_parser("import")
+    import_parser = sub.add_parser("import", help="Import an already structured paper/question bundle")
     import_parser.add_argument("workspace")
     import_parser.add_argument("--input", required=True)
     add_revision(import_parser)
-    process = sub.add_parser("process")
+    process = sub.add_parser("process", help="Split question documents and derive associations, mappings, and difficulty")
     process.add_argument("workspace")
     process.add_argument("--input", required=True)
     add_revision(process)
-    review = sub.add_parser("review-mappings")
+    review = sub.add_parser("review-mappings", help="Confirm, correct, or unmap automatic Atom proposals")
     review.add_argument("workspace")
     review.add_argument("--input", required=True)
     add_revision(review)
-    calibrate = sub.add_parser("calibrate")
+    calibrate = sub.add_parser("calibrate", help="Calibrate rubric difficulty against official-level anchors")
     calibrate.add_argument("workspace")
     add_revision(calibrate)
+    simple_help = {
+        "status": "Show corpus, mapping-review, calibration, and validity status",
+        "validate": "Validate exam state, corpus schema, mappings, and audit events",
+        "analyze": "Analyze supplied-corpus coverage, difficulty, and emphasis",
+        "render": "Regenerate exam blueprint and targeted study-plan views",
+    }
     for action in ["status", "validate", "analyze", "render"]:
-        command = sub.add_parser(action)
+        command = sub.add_parser(action, help=simple_help[action])
         command.add_argument("workspace")
-    plan = sub.add_parser("plan")
+    plan = sub.add_parser("plan", help="Generate a prerequisite-aware learning or review priority queue")
     plan.add_argument("workspace")
     plan.add_argument("--mode", choices=sorted(PREPARATION_MODES), default="mixed")
     plan.add_argument("--limit", type=int, default=10)

@@ -1539,13 +1539,28 @@ def build_parser() -> argparse.ArgumentParser:
     initialize.add_argument("workspace")
     initialize.add_argument("--chunk-chars", type=int, default=2800)
     initialize.add_argument("--overlap-chars", type=int, default=300)
+    simple_help = {
+        "status": "Show source, chunk, embedding, reranker, and coverage status",
+        "validate": "Validate retrieval state, source registry, index, and coverage",
+        "render": "Regenerate the retrieval status view",
+        "requirements": "Generate revision-bound coverage anchors for intake or research",
+    }
     for action in ["status", "validate", "render", "requirements"]:
-        command = sub.add_parser(action)
+        command = sub.add_parser(action, help=simple_help[action])
         command.add_argument("workspace")
         if action == "requirements":
             command.add_argument("--context", choices=["auto", "intake", "research"], default="auto")
+    payload_help = {
+        "ingest": "Index local files, inline text, or structured passages",
+        "ingest-web": "Index bounded provenance-complete Web evidence",
+        "attach-embeddings": "Attach optional provider embeddings to active chunks",
+        "search": "Run hybrid retrieval and deterministic reranking",
+        "coverage": "Evaluate explicit evidence verdicts for required anchors",
+        "correct": "Orchestrate coverage and structured harness Web Search correction",
+        "evaluate": "Measure retrieval ranking, citations, and unsupported claims",
+    }
     for action in ["ingest", "ingest-web", "attach-embeddings", "search", "coverage", "correct", "evaluate"]:
-        command = sub.add_parser(action)
+        command = sub.add_parser(action, help=payload_help[action])
         command.add_argument("workspace")
         command.add_argument("--input", required=True)
         if action not in {"search", "evaluate"}:

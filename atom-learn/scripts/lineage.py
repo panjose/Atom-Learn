@@ -1068,23 +1068,28 @@ def add_revision(parser: argparse.ArgumentParser) -> None:
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build and query multi-lens Knowledge Atom lineage maps")
     sub = parser.add_subparsers(dest="action", required=True)
-    initialize = sub.add_parser("init")
+    initialize = sub.add_parser("init", help="Initialize canonical knowledge-lineage state")
     initialize.add_argument("workspace")
-    import_parser = sub.add_parser("import")
+    import_parser = sub.add_parser("import", help="Import semantic Atom annotations, relations, and threads")
     import_parser.add_argument("workspace")
     import_parser.add_argument("--input", required=True)
     add_revision(import_parser)
+    simple_help = {
+        "status": "Show lineage revision, validity, and map counts",
+        "validate": "Validate annotations, semantic edges, threads, and evidence",
+        "render": "Regenerate the knowledge-lineage view",
+    }
     for action in ["status", "validate", "render"]:
-        command = sub.add_parser(action)
+        command = sub.add_parser(action, help=simple_help[action])
         command.add_argument("workspace")
-    overview = sub.add_parser("overview")
+    overview = sub.add_parser("overview", help="Generate a goal-relevant lineage overview through one lens")
     overview.add_argument("workspace")
     overview.add_argument("--lens", choices=sorted(LENSES), default="all")
-    trace = sub.add_parser("trace")
+    trace = sub.add_parser("trace", help="Trace one Atom's prerequisites, containment, and semantic neighborhood")
     trace.add_argument("workspace")
     trace.add_argument("atom_id")
     trace.add_argument("--depth", type=int, default=3)
-    route = sub.add_parser("route")
+    route = sub.add_parser("route", help="Find and explain a semantic path between two Atoms")
     route.add_argument("workspace")
     route.add_argument("from_atom_id")
     route.add_argument("to_atom_id")
