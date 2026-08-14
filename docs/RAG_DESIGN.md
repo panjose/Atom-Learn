@@ -28,7 +28,7 @@ flowchart LR
     B --> C["Persistent SQLite corpus"]
     Q["Question or coverage anchor"] --> D["Query variants"]
     C --> E["BM25"]
-    C --> F["Multilingual subword similarity"]
+    C --> F["Default multilingual hash embedding"]
     C --> G["Optional provider embeddings"]
     D --> E
     D --> F
@@ -36,9 +36,10 @@ flowchart LR
     E --> H["RRF candidate fusion"]
     F --> H
     G --> H
-    H --> I["Harness reranking and evidence verdict"]
-    I -->|"supported"| J["Cited evidence bundle"]
-    I -->|"weak or missing"| K["Harness Web Search"]
+    H --> I["Deterministic reranker"]
+    I --> V["Harness evidence verdict"]
+    V -->|"supported"| J["Cited evidence bundle"]
+    V -->|"weak or missing"| K["Structured Web Search task"]
     K --> L["Provenance-checked bounded passages"]
     L --> C
     J --> M["Coverage gate"]
@@ -50,33 +51,33 @@ SQLite FTS5 provides a zero-service BM25 index that works inside a Skill workspa
 
 ### 3.2 Contextual, structure-aware chunks
 
-Extractors preserve page, line, paragraph, JSON-path, row, heading, and web-section locators. Each indexed chunk is prefixed with document title, section, and locator. Default chunks target roughly 700 tokens by using a 2,800-character bound and 300-character overlap. Image-only PDFs are rejected until OCR provides extractable text.
+Extractors preserve page, line, paragraph, JSON-path, row, heading, table, formula, OCR-page, and web-section locators. HTML headings, lists, and tables and DOCX paragraphs and tables retain their structure. PDF extraction records text, detected formulas, and `pdfplumber` tables. For image-only pages it first uses an auditable OCR sidecar, then optionally invokes PyMuPDF, Pillow, and Tesseract. `ocr: required` prevents silent loss of any empty page. Each indexed chunk is prefixed with document title, section, and locator. Default chunks target roughly 700 tokens by using a 2,800-character bound and 300-character overlap.
 
 ### 3.3 Hybrid retrieval and fusion
 
 The default candidate pool contains:
 
 - FTS5 BM25 results for the main and alternate queries;
-- a deterministic multilingual word/subword similarity ranker, including Chinese character n-grams;
+- a deterministic local multilingual hash embedding, including Chinese character n-grams;
 - optional cosine ranking when provider embeddings exist.
 
-RRF with `k=60` fuses rank positions without trying to compare incompatible raw BM25, subword, and cosine score scales. The output keeps every component rank and raw component score for inspection.
+RRF with `k=60` fuses rank positions without trying to compare incompatible raw BM25 and cosine score scales. The output keeps every component rank and raw component score for inspection.
 
-The built-in subword ranker is deliberately not advertised as a learned semantic embedding. Conceptual synonym recall comes from harness-generated query variants unless an approved embedding provider is attached.
+Every chunk receives `atomlearn/multilingual-hash-v1` by default. This embedding is local, versioned, deterministic, and requires no service or model download. It captures multilingual word/subword overlap but is deliberately not advertised as learned semantic understanding. Conceptual synonym recall still benefits from harness-generated query variants or an approved provider embedding.
 
 An attached embedding batch establishes one explicit model-and-dimension profile per workspace. Query embeddings must name and match that profile, preventing silent fusion of incompatible vector spaces.
 
-### 3.4 Harness reranking
+### 3.4 Deterministic reranking and harness judgment
 
-The Skill already runs inside a reasoning harness, so a fixed embedded reranker would duplicate that capability and introduce another provider dependency. Search returns a candidate pack and a mandatory reranking contract. The harness judges directness, authority, recency, agreement, and locator quality. RRF scores are never treated as calibrated confidence.
+`atomlearn/deterministic-reranker-v1` reranks the fused candidate pool using query coverage, title/section coverage, exact-phrase signal, authority prior, locator quality, and normalized RRF rank. The component scores make ordering reproducible and directly testable. It does not decide truth: the harness still judges direct support, authority, recency, agreement, and locator quality. RRF and reranker scores are never treated as calibrated confidence.
 
 ### 3.5 Corrective Web Search
 
-The RAG engine does not secretly crawl the web. The harness uses its native search, opens authoritative results, and submits bounded evidence containing URL, retrieval time, query, authority, version, section, locator, and text. This preserves the browser/search tool's security and citation behavior while making retrieved evidence durable and auditable.
+The RAG engine does not secretly crawl the web. `rag correct` converts each failed coverage requirement into a structured search task. The harness uses its native search, opens authoritative results, and submits bounded evidence containing URL, retrieval time, query, authority, version, section, locator, and text. The same command ingests that evidence, reruns retrieval, reevaluates coverage, and either closes the gate or emits the next correction round. This preserves the browser/search tool's security and citation behavior while making retrieved evidence durable and auditable.
 
 ### 3.6 Coverage gate
 
-For outline intake, every stable outline ID becomes a required retrieval anchor. For topic intake, every topic term requires authoritative support and the overall goal requires two distinct sources. Research-field discovery requires evidence for the research question, surveys, method families, evaluations/datasets, and critique/replication work. A coverage run without harness verdicts intentionally fails. `supported` requires active evidence and all source/authority constraints; `weak`, `missing`, or unverified evidence triggers Web Search.
+For outline intake, every stable outline ID becomes a required retrieval anchor. For topic intake, every topic term requires authoritative support and the overall goal requires two distinct sources. Research-field discovery requires evidence for the research question, surveys, method families, evaluations/datasets, and critique/replication work. A coverage run without harness verdicts intentionally fails. `supported` requires active evidence, all source/authority constraints, and evidence drawn from the freshly retrieved candidates for that exact requirement; `weak`, `missing`, or unverified evidence triggers Web Search.
 
 Coverage is tied to the selected intake or research revision. Any canonical scope update makes the old report stale. The intake engine will not become `ready_to_plan` until the current intake report passes.
 
@@ -94,22 +95,22 @@ Every search response instructs the harness to treat retrieved content as untrus
 
 ## 6. Quality evaluation
 
-The operational gate verifies evidence sufficiency per coverage anchor. A production corpus should additionally maintain a small labeled retrieval set and track:
+The operational gate verifies evidence sufficiency per coverage anchor. `rag evaluate` runs a versioned, deterministic benchmark over labeled retrieval and answer-grounding cases and reports:
 
 - recall@k for required evidence;
-- mean reciprocal rank or nDCG for ordering;
-- answer citation coverage and source-locator correctness;
-- unsupported-claim and abstention rates;
+- mean reciprocal rank and nDCG@k for ordering;
+- citation correctness against labeled supporting chunks;
+- unsupported-claim rate with explicit abstention handling;
 - source diversity for claims that require corroboration;
 - freshness failures for versioned or current topics;
 - Web Search correction rate and gaps that remain unresolved.
 
-Evaluate retrieval separately from generation so a fluent answer cannot hide missing evidence. Add failure queries whenever learners expose a synonym, language, document-structure, or global-context retrieval miss.
+Configurable thresholds produce a quality gate and every metric includes per-case diagnostics. Evaluate retrieval separately from generation so a fluent answer cannot hide missing evidence. Add failure queries whenever learners expose a synonym, language, document-structure, OCR, table, formula, or global-context retrieval miss.
 
 ## 7. Alternatives and extension points
 
 - Hosted vector database: attach embeddings now; replace the dense ranker later behind the same chunk/source IDs if scale requires it.
-- Learned reranker: add a provider adapter that consumes the current candidate contract, but preserve harness verdicts and provenance.
+- Learned cross-encoder reranker: add a provider adapter behind the current deterministic candidate contract, but preserve harness verdicts, offline tests, and provenance.
 - Hierarchical RAG: ingest section and document summaries as separate, clearly labeled sources for long textbooks.
 - GraphRAG: use for corpus-wide research synthesis when entities, communities, and global questions justify its indexing cost; do not make it a prerequisite for ordinary courses.
 - Connectors: ingest permission-checked passages from Drive, SharePoint, Zotero, or other harness connectors through the same local/web manifest contract.
@@ -120,9 +121,11 @@ RAG integration is complete when:
 
 - all supplied sources are inventoried and indexed or explicitly rejected with a reason;
 - retrieval returns stable locators and source revisions;
-- the harness reranks candidates and records evidence verdicts;
-- weak/missing outline or topic anchors cause corrective Web Search;
+- a deterministic reranker produces inspectable component scores and the harness records evidence verdicts;
+- weak/missing outline or topic anchors produce structured corrective Web Search tasks;
 - authoritative web evidence is opened, provenance-checked, and ingested;
+- evidence belongs to the current requirement's retrieved candidate set;
+- the labeled benchmark passes recall@k, MRR, nDCG, citation-correctness, and unsupported-claim thresholds;
 - the current intake coverage gate passes;
 - the course plan cites registered source IDs and Atom locators;
 - `rag validate` and workspace `validate` both pass.

@@ -1,0 +1,11 @@
+coverage:
+  context: custom
+  requirements:
+    - id: topic.requirement
+      query: focused evidence requirement
+      alternate_queries: []
+      minimum_sources: 1
+      authoritative: true
+  verdicts: []
+# On the next pass, add `web_evidence.sources` from opened harness Web Search results
+# and explicit verdicts whose evidence IDs appear in the refreshed requirement candidates.

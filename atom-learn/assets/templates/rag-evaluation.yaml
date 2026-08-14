@@ -1,0 +1,17 @@
+k: 10
+queries:
+  - id: benchmark.query-one
+    query: focused benchmark query
+    alternate_queries: []
+    relevant_chunk_ids: [source.r1.c00001]
+claims:
+  - id: benchmark.claim-one
+    cited_chunk_ids: [source.r1.c00001]
+    supported_chunk_ids: [source.r1.c00001]
+    abstained: false
+thresholds:
+  recall_at_k: 0.8
+  mrr: 0.7
+  ndcg_at_k: 0.7
+  citation_correctness: 0.95
+  unsupported_claim_rate: 0.05

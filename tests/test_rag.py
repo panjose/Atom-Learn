@@ -84,6 +84,30 @@ def write_minimal_pdf(path: Path) -> None:
     path.write_bytes(content)
 
 
+def write_blank_pdf(path: Path) -> None:
+    stream = b""
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>",
+        b"<< /Length 0 >>\nstream\n\nendstream",
+    ]
+    content = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(len(content))
+        content.extend(f"{index} 0 obj\n".encode() + obj + b"\nendobj\n")
+    xref = len(content)
+    content.extend(f"xref\n0 {len(objects) + 1}\n".encode())
+    content.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        content.extend(f"{offset:010d} 00000 n \n".encode())
+    content.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF\n".encode()
+    )
+    path.write_bytes(content)
+
+
 def test_local_contextual_hybrid_search_and_source_revision() -> None:
     path = workspace("hybrid")
     first = payload(
@@ -116,7 +140,10 @@ def test_local_contextual_hybrid_search_and_source_revision() -> None:
     found = output(invoke("rag", "search", path, "--input", query))
     assert found["results"][0]["section"] == "Scheduling"
     assert found["retrieval"]["candidate_lists"] >= 2
-    assert found["needs_reranking"] is True
+    assert found["needs_reranking"] is False
+    assert found["retrieval"]["default_embedding_used"] is True
+    assert found["retrieval"]["reranker"] == "atomlearn/deterministic-reranker-v1"
+    assert "rerank_components" in found["results"][0]
     assert found["results"][0]["locator"].startswith("lines")
 
     second = payload(
@@ -140,6 +167,8 @@ def test_local_contextual_hybrid_search_and_source_revision() -> None:
     output(invoke("rag", "ingest", path, "--input", second))
     status = output(invoke("rag", "status", path))
     assert status["active_chunks"] == 1
+    assert status["default_embedded_chunks"] == 1
+    assert status["default_embedding_profile"]["model"] == "atomlearn/multilingual-hash-v1"
     replacement_query = payload(path, "replacement-query.yaml", {"query": "lottery tickets", "top_k": 2})
     replaced = output(invoke("rag", "search", path, "--input", replacement_query))
     assert replaced["results"][0]["chunk_id"].startswith("os-text.r2.")
@@ -202,7 +231,18 @@ def test_pdf_and_docx_textbook_extractors_preserve_locators() -> None:
     document = Document()
     document.add_heading("Limits", level=1)
     document.add_paragraph("A limit records the value approached by a function.")
+    table = document.add_table(rows=2, cols=2)
+    table.cell(0, 0).text = "Criterion"
+    table.cell(0, 1).text = "Meaning"
+    table.cell(1, 0).text = "epsilon delta"
+    table.cell(1, 1).text = "formal limit definition"
     document.save(docx_path)
+    html_path = path / "structured.html"
+    html_path.write_text(
+        "<article><h1>Optimization</h1><p>Gradient descent follows a negative gradient.</p>"
+        "<table><tr><th>Term</th><th>Role</th></tr><tr><td>step size</td><td>controls updates</td></tr></table></article>",
+        encoding="utf-8",
+    )
     manifest = payload(
         path,
         "documents.yaml",
@@ -210,6 +250,7 @@ def test_pdf_and_docx_textbook_extractors_preserve_locators() -> None:
             "sources": [
                 {"id": "calculus-pdf", "title": "Calculus PDF", "authority": "textbook", "path": str(pdf_path)},
                 {"id": "calculus-docx", "title": "Calculus notes", "authority": "user", "path": str(docx_path)},
+                {"id": "optimization-html", "title": "Optimization", "authority": "textbook", "path": str(html_path)},
             ]
         },
     )
@@ -222,6 +263,13 @@ def test_pdf_and_docx_textbook_extractors_preserve_locators() -> None:
     docx_result = output(invoke("rag", "search", path, "--input", docx_query))
     assert docx_result["results"][0]["source_id"] == "calculus-docx"
     assert docx_result["results"][0]["locator"].startswith("paragraphs")
+    table_query = payload(path, "table-query.yaml", {"query": "epsilon delta formal limit definition", "top_k": 2})
+    table_result = output(invoke("rag", "search", path, "--input", table_query))
+    assert table_result["results"][0]["locator"] == "table 1"
+    html_query = payload(path, "html-query.yaml", {"query": "step size controls updates", "top_k": 2})
+    html_result = output(invoke("rag", "search", path, "--input", html_query))
+    assert html_result["results"][0]["source_id"] == "optimization-html"
+    assert html_result["results"][0]["section"] == "Optimization"
 
 
 def test_corrective_web_ingestion_requires_provenance_and_explicit_coverage_verdicts() -> None:
@@ -243,6 +291,31 @@ def test_corrective_web_ingestion_requires_provenance_and_explicit_coverage_verd
     assert first["requirements"][0]["candidates"][0]["text"]
     persisted = yaml.safe_load((path / ".atomlearn" / "rag" / "latest-coverage.yaml").read_text(encoding="utf-8"))
     assert "candidates" not in persisted["requirements"][0]
+
+    unrelated = payload(
+        path,
+        "unrelated.yaml",
+        {"sources": [{"id": "orchard", "title": "Orchard", "text": "Bananas and pears grow in an orchard."}]},
+    )
+    output(invoke("rag", "ingest", path, "--input", unrelated))
+    off_candidate = payload(
+        path,
+        "off-candidate.yaml",
+        {
+            "requirements": [{"id": "causal.basics", "query": "causal inference assumptions"}],
+            "verdicts": [
+                {
+                    "requirement_id": "causal.basics",
+                    "status": "weak",
+                    "evidence_chunk_ids": ["orchard.r1.c00001"],
+                    "rationale": "This unrelated chunk must be rejected even though it is active.",
+                }
+            ],
+        },
+    )
+    rejected = invoke("rag", "coverage", path, "--input", off_candidate, check=False)
+    assert rejected.returncode == 2
+    assert "current requirement candidate results" in rejected.stderr
 
     web = payload(
         path,
@@ -362,3 +435,177 @@ def test_research_field_generates_revision_bound_paper_discovery_requirements() 
     blocked = invoke("rag", "coverage", path, "--input", incomplete, check=False)
     assert blocked.returncode == 2
     assert "omitted required" in blocked.stderr
+
+
+def test_ocr_sidecar_recovers_image_only_pdf_with_page_locator() -> None:
+    path = workspace("ocr")
+    pdf_path = path / "scan.pdf"
+    write_blank_pdf(pdf_path)
+    (path / "scan.pdf.ocr.txt").write_text(
+        "The scanned theorem states that every finite tree has one fewer edge than vertices.",
+        encoding="utf-8",
+    )
+    manifest = payload(
+        path,
+        "scan.yaml",
+        {
+            "sources": [
+                {
+                    "id": "scan",
+                    "title": "Scanned notes",
+                    "path": str(pdf_path),
+                    "ocr": "required",
+                }
+            ]
+        },
+    )
+    output(invoke("rag", "ingest", path, "--input", manifest))
+    query = payload(path, "scan-query.yaml", {"query": "finite tree edges vertices"})
+    result = output(invoke("rag", "search", path, "--input", query))
+    assert result["results"][0]["locator"] == "page 1 [OCR]"
+
+
+def test_correct_command_emits_web_tasks_then_closes_the_loop() -> None:
+    path = workspace("orchestrator")
+    local = payload(
+        path,
+        "local.yaml",
+        {"sources": [{"id": "notes", "title": "Notes", "text": "A sparse mention of calibration."}]},
+    )
+    output(invoke("rag", "ingest", path, "--input", local))
+    first_payload = payload(
+        path,
+        "correct-first.yaml",
+        {
+            "coverage": {
+                "requirements": [
+                    {
+                        "id": "calibration.evaluation",
+                        "query": "probability calibration expected calibration error",
+                        "authoritative": True,
+                    }
+                ],
+                "verdicts": [],
+            }
+        },
+    )
+    first = output(invoke("rag", "correct", path, "--input", first_payload))
+    assert first["status"] == "web_search_required"
+    assert first["web_search_tasks"][0]["requirement_id"] == "calibration.evaluation"
+    assert "native Web Search" in first["web_search_tasks"][0]["harness_steps"][0]
+
+    second_payload = payload(
+        path,
+        "correct-second.yaml",
+        {
+            "web_evidence": {
+                "sources": [
+                    {
+                        "id": "calibration-paper",
+                        "title": "Calibration evaluation",
+                        "url": "https://example.org/calibration",
+                        "retrieved_at": datetime.now(timezone.utc).isoformat(),
+                        "query": "probability calibration expected calibration error",
+                        "authority": "peer_reviewed",
+                        "passages": [
+                            {
+                                "locator": "definition 1",
+                                "section": "Expected calibration error",
+                                "text": "Expected calibration error compares confidence bins with observed accuracy.",
+                            }
+                        ],
+                    }
+                ]
+            },
+            "coverage": {
+                "requirements": [
+                    {
+                        "id": "calibration.evaluation",
+                        "query": "probability calibration expected calibration error",
+                        "authoritative": True,
+                    }
+                ],
+                "verdicts": [
+                    {
+                        "requirement_id": "calibration.evaluation",
+                        "status": "supported",
+                        "evidence_chunk_ids": ["calibration-paper.r1.c00001"],
+                        "rationale": "The peer-reviewed passage directly defines the requested metric.",
+                    }
+                ],
+            },
+        },
+    )
+    second = output(invoke("rag", "correct", path, "--input", second_payload))
+    assert second["status"] == "complete"
+    assert second["coverage"]["gate"] == "pass"
+    assert second["web_search_tasks"] == []
+
+
+def test_rag_evaluation_reports_retrieval_and_grounding_metrics() -> None:
+    path = workspace("evaluation")
+    manifest = payload(
+        path,
+        "evaluation-sources.yaml",
+        {
+            "sources": [
+                {
+                    "id": "scheduler",
+                    "title": "Scheduler",
+                    "authority": "textbook",
+                    "text": "Round-robin scheduling assigns each runnable process a fixed time quantum.",
+                },
+                {
+                    "id": "memory",
+                    "title": "Memory",
+                    "authority": "textbook",
+                    "text": "A page table maps virtual pages to physical frames.",
+                },
+            ]
+        },
+    )
+    output(invoke("rag", "ingest", path, "--input", manifest))
+    benchmark = payload(
+        path,
+        "benchmark.yaml",
+        {
+            "k": 2,
+            "queries": [
+                {
+                    "id": "scheduler.quantum",
+                    "query": "round robin fixed time quantum",
+                    "relevant_chunk_ids": ["scheduler.r1.c00001"],
+                }
+            ],
+            "claims": [
+                {
+                    "id": "claim.correct",
+                    "cited_chunk_ids": ["scheduler.r1.c00001"],
+                    "supported_chunk_ids": ["scheduler.r1.c00001"],
+                },
+                {
+                    "id": "claim.unsupported",
+                    "cited_chunk_ids": ["memory.r1.c00001"],
+                    "supported_chunk_ids": ["scheduler.r1.c00001"],
+                },
+            ],
+            "thresholds": {
+                "recall_at_k": 1.0,
+                "mrr": 1.0,
+                "ndcg_at_k": 1.0,
+                "citation_correctness": 0.5,
+                "unsupported_claim_rate": 0.5,
+            },
+        },
+    )
+    result = output(invoke("rag", "evaluate", path, "--input", benchmark))
+    assert result["quality_gate"] == "pass"
+    assert result["metrics"] == {
+        "k": 2,
+        "queries": 1,
+        "recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 1.0,
+        "citation_correctness": 0.5,
+        "unsupported_claim_rate": 0.5,
+    }

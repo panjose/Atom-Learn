@@ -11,7 +11,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 - 支持从完整教材或知识库、用户大纲，或仅一个主题名词开始
 - 为本地资料建立索引，并用 harness Web Search 补齐覆盖缺口
-- 通过 RRF 融合 BM25、多语言子词检索和可选的供应商 embedding 检索
+- 融合 BM25、默认本地 embedding 和可选供应商 embedding，再进行确定性重排
 - 在稀疏输入进入课程规划前，要求显式证据判定和稳定来源定位
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
 - 梳理知识根节点、学习主干、分支、枢纽、推导、历史演进、对比、应用及单点来龙去脉
@@ -74,7 +74,7 @@ python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expect
 
 ## RAG 与纠错式 Web Search
 
-AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。它可从 TXT、Markdown、RST、HTML、JSON、YAML、CSV、可搜索 PDF 和 DOCX 中提取保留结构的分块。检索通过倒数排名融合（RRF）组合 SQLite FTS5 BM25、多语言子词相似度和可选的供应商 embedding；随后由 harness 对候选证据重排，而不会把融合分数误当成可信度。
+AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，它还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 OCR 输出。检索会融合 SQLite FTS5 BM25、默认本地多语言哈希 embedding 和可选供应商 embedding，再应用可测试的确定性重排器。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus
@@ -82,9 +82,11 @@ python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sourc
 python atom-learn/scripts/atomlearn.py rag search courses/calculus --input query.yaml
 python atom-learn/scripts/atomlearn.py rag requirements courses/calculus
 python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input coverage.yaml
+python atom-learn/scripts/atomlearn.py rag correct courses/calculus --input rag-correction.yaml
+python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag-evaluation.yaml
 ```
 
-薄弱、缺失或未经验证的大纲/主题要求会以失败关闭，并生成聚焦的 Web Search 查询。harness 打开权威结果后，通过 `rag ingest-web` 仅写入带 URL、检索时间、搜索词、权威等级和稳定 locator 的有限证据段落。只有当前 intake revision 的所有强制锚点都获得显式 `supported` 判定，大纲和主题 intake 才能进入可规划状态。详见[检索与纠错式 Web Search](atom-learn/references/RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
+`rag correct` 会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率。只有当前 intake revision 的所有强制锚点都得到显式支持，大纲和主题 intake 才能进入可规划状态。详见[检索与纠错式 Web Search](atom-learn/references/RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
 
 科研领域发现使用同一质量门禁，并为研究问题、综述、方法谱系、评测/数据集以及批评/复现证据生成绑定 research revision 的锚点。构建论文导向的领域地图时使用 `rag requirements --context research`。
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "AtomLearn"
-  short_description: "Build atomic learning paths with friendly concept routing"
-  default_prompt: "Use $atom-learn to build a source-grounded learning path that routes unfamiliar related concepts without losing my place."
+  short_description: "Build grounded learning paths with closed-loop RAG"
+  default_prompt: "Use $atom-learn to build a source-grounded learning path with closed-loop retrieval and learner-friendly concept routing."

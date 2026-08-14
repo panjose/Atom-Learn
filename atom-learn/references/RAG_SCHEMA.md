@@ -6,8 +6,10 @@
 - Local ingestion
 - Web evidence ingestion
 - Search
+- Corrective Web Search orchestration
 - Provider embeddings
 - Coverage
+- Evaluation
 - Commands
 
 ## Runtime files
@@ -34,6 +36,8 @@ sources:
     authority: textbook
     version: optional edition or version
     path: C:/absolute/or/relative/source.pdf
+    ocr: auto # auto, required, or off; PDF paths only
+    ocr_language: eng # Tesseract language code
 ```
 
 A local source must provide exactly one usable content mechanism:
@@ -52,6 +56,8 @@ passages:
 ```
 
 `authority` is one of `primary`, `official`, `peer_reviewed`, `textbook`, `user`, `secondary`, or `unknown`.
+
+HTML headings, lists, and tables, DOCX headings and tables, and PDF pages, formulas, and detected tables receive distinct locators. PDF OCR first reads a form-feed-separated `.pdf.ocr.txt` or `.ocr.txt` sidecar, then tries the optional PyMuPDF/Tesseract integration. `ocr: required` fails when any image-only page remains unrecovered.
 
 ## Web evidence ingestion
 
@@ -93,9 +99,23 @@ Constraints:
 - source filter: at most 100 IDs;
 - embedding: 1-8192 finite, nonzero numeric values.
 
-The result includes `search_id`, query variants, retrieval metadata, candidate text, provenance, RRF score, component ranks, and a reranking contract. The RRF score is not a confidence probability.
+The result includes `search_id`, query variants, retrieval metadata, candidate text, provenance, RRF score, component ranks, deterministic reranker score and components, and the harness evidence contract. Every chunk has a default `atomlearn/multilingual-hash-v1` local embedding, so BM25, default-dense, and deterministic reranking work without an API key. Neither the RRF nor reranker score is a confidence probability.
 
-## Provider embeddings
+## Corrective Web Search orchestration
+
+```yaml
+coverage:
+  context: intake
+  intake_revision: 2
+  requirements: []
+  verdicts: []
+web_evidence: # optional on a correction round
+  sources: []
+```
+
+`rag correct` runs the coverage gate and returns `web_search_tasks` for weak, missing, or unverified requirements. The harness executes those tasks with native Web Search, opens authoritative pages, and reruns the command with bounded `web_evidence` and verdicts. Evidence is ingested before candidates are refreshed. A task disappears only after the matching requirement passes.
+
+## Optional provider embeddings
 
 ```yaml
 model: approved-provider/model@version
@@ -126,7 +146,32 @@ verdicts:
 
 Verdict status is `supported`, `weak`, or `missing`. `supported` requires at least one active evidence chunk, the requested number of distinct sources, and an authoritative evidence source when `authoritative: true`.
 
+Every `evidence_chunk_id` must also belong to the freshly retrieved candidate set for that exact requirement. Being active elsewhere in the corpus is insufficient.
+
 `context` is `intake`, `research`, or `custom`. Canonical state uses `intake_revision` or `research_revision`, which must match the current selected context. Coverage must contain every generated anchor and cannot weaken its minimum-source or authority rule. `custom` is accepted only when neither intake nor research state exists. The gate passes only when every requirement is explicitly `supported`.
+
+## Evaluation
+
+```yaml
+k: 10
+queries:
+  - id: calculus-chain-rule
+    query: chain rule for composite functions
+    relevant_chunk_ids: [calculus.r1.c00007]
+claims:
+  - id: answer-claim-1
+    cited_chunk_ids: [calculus.r1.c00007]
+    supporting_chunk_ids: [calculus.r1.c00007]
+    abstained: false
+thresholds:
+  recall_at_k: 0.9
+  mrr: 0.8
+  ndcg_at_k: 0.8
+  citation_correctness: 0.95
+  unsupported_claim_rate: 0.05
+```
+
+`rag evaluate` reports mean recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate. Retrieval labels and support labels are active chunk IDs. Thresholds are optional values from 0 through 1 and produce a deterministic `pass`/`fail` quality gate with per-case diagnostics.
 
 ## Commands
 
@@ -138,6 +183,8 @@ python <SKILL_DIR>/scripts/atomlearn.py rag attach-embeddings <workspace> --inpu
 python <SKILL_DIR>/scripts/atomlearn.py rag search <workspace> --input <query.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace> [--context intake|research]
 python <SKILL_DIR>/scripts/atomlearn.py rag coverage <workspace> --input <coverage.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py rag correct <workspace> --input <rag-correction.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py rag evaluate <workspace> --input <rag-evaluation.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag validate <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag render <workspace>

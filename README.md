@@ -11,7 +11,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 
 - Start from complete textbooks or knowledge bases, a user outline, or only a topic name
 - Index local sources and correct coverage gaps with harness Web Search
-- Fuse BM25, multilingual subword, and optional provider-embedding retrieval with RRF
+- Fuse BM25, default local embeddings, and optional provider embeddings, then deterministically rerank
 - Require explicit evidence verdicts and stable source locators before sparse-input planning
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Map roots, learning spines, branches, hubs, derivations, historical development, contrasts, applications, and each concept's lineage
@@ -74,7 +74,7 @@ Complete-source mode inventories and reconciles materials; outline mode treats o
 
 ## RAG and Corrective Web Search
 
-AtomLearn persists a provider-neutral RAG index inside each learner workspace. It extracts structure-aware chunks from TXT, Markdown, RST, HTML, JSON, YAML, CSV, searchable PDF, and DOCX sources. Retrieval combines SQLite FTS5 BM25, multilingual subword similarity, and optional provider embeddings through reciprocal rank fusion. The harness then reranks the candidate evidence instead of treating the fusion score as confidence.
+AtomLearn persists a provider-neutral RAG index inside each learner workspace. It preserves HTML and DOCX structure, PDF tables and formulas, and locatable OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval fuses SQLite FTS5 BM25, a default local multilingual hash embedding, and optional provider embeddings, then applies a testable deterministic reranker. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus
@@ -82,9 +82,11 @@ python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sourc
 python atom-learn/scripts/atomlearn.py rag search courses/calculus --input query.yaml
 python atom-learn/scripts/atomlearn.py rag requirements courses/calculus
 python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input coverage.yaml
+python atom-learn/scripts/atomlearn.py rag correct courses/calculus --input rag-correction.yaml
+python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag-evaluation.yaml
 ```
 
-Weak, missing, or unverified outline/topic requirements fail closed and produce focused Web Search queries. The harness opens authoritative results and ingests only bounded evidence with URL, retrieval time, search query, authority, and stable locator using `rag ingest-web`. Outline and topic intake cannot become planning-ready until every mandatory anchor has an explicit supported verdict for the current intake revision. See [Retrieval and Corrective Web Search](atom-learn/references/RAG.md) and [RAG Design](docs/RAG_DESIGN.md).
+`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Outline and topic intake cannot become planning-ready until every mandatory anchor has explicit support for the current intake revision. See [Retrieval and Corrective Web Search](atom-learn/references/RAG.md) and [RAG Design](docs/RAG_DESIGN.md).
 
 Research-field discovery uses the same gate with revision-bound anchors for the research question, surveys, method families, evaluations/datasets, and critique/replication evidence. Use `rag requirements --context research` when building a paper-oriented field map.
 
