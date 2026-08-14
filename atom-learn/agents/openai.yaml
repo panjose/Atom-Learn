@@ -1,4 +1,4 @@
 interface:
   display_name: "AtomLearn"
-  short_description: "Build atomic RAG paths that expand without overload"
-  default_prompt: "Use $atom-learn to build a source-grounded learning path and expand difficult concepts one Atom at a time."
+  short_description: "Build atomic learning paths with friendly concept routing"
+  default_prompt: "Use $atom-learn to build a source-grounded learning path that routes unfamiliar related concepts without losing my place."

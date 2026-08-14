@@ -27,9 +27,15 @@ Use when the learner lacks a concept required to reason about the current Atom. 
 
 Use when the question is useful but not needed for the current objective. Add it to the Parking Lot, acknowledge it briefly, and return to the saved next action.
 
+If it names a distinct concept that could become a learner-chosen side branch, use [CONCEPT_ROUTING.md](CONCEPT_ROUTING.md) instead of treating it as a generic non-blocking question.
+
 ### `future_atom`
 
 Use when a mapped successor owns the question. Link it to that Atom and explain why answering fully now would depend on the current Atom. Avoid introducing the successor's mechanism.
+
+### `optional_extension`
+
+Use when a distinct related concept supports the learner's goal but is unnecessary for the current mastery objective. Run `route-concept` so the learner sees that it is optional and can choose definition-only context, a confirmed side branch, parking, or dismissal.
 
 ### `out_of_scope`
 
@@ -41,6 +47,7 @@ Use when the question does not serve the declared course goal. Record it only if
 - A real-world application can be `in_atom` when it is the planned example, otherwise it is often `non_blocking`.
 - A future-topic question can expose a current misconception. Route by the actual bottleneck, not surface vocabulary.
 - If uncertain between blocking and non-blocking, ask one diagnostic question while keeping the current Atom.
+- When the learner first needs to know whether an unfamiliar concept belongs before, now, later, or on a side branch, preview `route-concept` and show its relationship card before explaining more.
 - A request for more words is not automatically an expansion; a request that crosses multiple Atom-sized objectives is.
 
 ## Persistence rules

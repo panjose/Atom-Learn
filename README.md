@@ -18,7 +18,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Enforce exactly one Active Atom and guard all prerequisites
 - Turn “explain this in detail” into an ordered child-Atom tree instead of a long multi-concept lecture
 - Let learners test out, defer, provisionally skip, or restore Atoms without fabricating mastery
-- Route in-Atom questions, blocking prerequisites, future questions, and Parking Lot items
+- Show whether an unfamiliar related concept belongs now, before, later, on an optional branch, or outside the goal
 - Evaluate mastery through explain/apply/discriminate/transfer/teach-back Evidence
 - Restore state across sessions with revision conflict protection and event auditing
 - Schedule reviews at 1/3/7/30-day intervals, with course-level overrides
@@ -128,6 +128,20 @@ The parent remains a real integration objective. After every child is mastered, 
 
 Use `atom-learn/assets/templates/expand-plan.yaml` as the starter payload.
 
+## Relation-Aware Concept Routing
+
+When an explanation mentions a concept the learner does not understand, AtomLearn first classifies the relationship instead of immediately opening another long explanation. The result is a compact card showing whether the concept is inside the current Atom, a required prerequisite, already scheduled later, an optional extension, or outside the current goal—plus why, its effect on progress, its destination, and the available choices.
+
+```powershell
+python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input concept-route.yaml
+python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input concept-route.yaml --action learn_prerequisite --confirmed --expected-revision 4
+python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input concept-route.yaml --action add_optional_branch --confirmed --expected-revision 4
+```
+
+Preview never changes state. A confirmed required prerequisite temporarily backtracks and then resumes the interrupted Atom. A confirmed optional branch is visible in the learning map and knowledge lineage, but does not block required course completion or outrank required new work. Scheduled concepts name the future Atom that owns them; definition-only context cannot turn into an early multi-concept lesson. See [Relation-Aware Concept Routing](atom-learn/references/CONCEPT_ROUTING.md) and [Concept Routing Design](docs/CONCEPT_ROUTING_DESIGN.md).
+
+Use `atom-learn/assets/templates/concept-route.yaml` as the starter payload.
+
 ## Research Reading
 
 AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It builds a guided map across surveys, seminal work, theory and methods, benchmarks and datasets, critiques and replications, and applications. Each completed paper records evidence-linked claims, limitations, open questions, and relations to other work.
@@ -196,6 +210,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Knowledge Lineage Design](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 - [Flexible Progression Design](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 - [Detailed Expansion Design](docs/DETAILED_EXPANSION_DESIGN.md)
+- [Concept Routing Design](docs/CONCEPT_ROUTING_DESIGN.md)
 
 ## Development Validation
 

@@ -26,3 +26,4 @@ jobs:
       - run: python atom-learn/scripts/atomlearn.py skip --help
       - run: python atom-learn/scripts/atomlearn.py unskip --help
       - run: python atom-learn/scripts/atomlearn.py expand --help
+      - run: python atom-learn/scripts/atomlearn.py route-concept --help

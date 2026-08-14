@@ -417,6 +417,15 @@ class LineageEngine:
 
     def _structure(self) -> dict[str, Any]:
         order, predecessors, successors = self._active_graph()
+        required_order = [
+            atom_id for atom_id in order
+            if not self.workspace.atoms[atom_id].get("optional", False)
+        ]
+        required_ids = set(required_order)
+        required_predecessors = {
+            atom_id: [item for item in predecessors[atom_id] if item in required_ids]
+            for atom_id in required_order
+        }
         roots = [item for item in order if not predecessors[item]]
         leaves = [item for item in order if not successors[item]]
         hubs = sorted(
@@ -475,7 +484,7 @@ class LineageEngine:
             "edge_count": sum(len(values) for values in successors.values()),
             "root_atom_ids": roots,
             "leaf_atom_ids": leaves,
-            "main_learning_spine": self._longest_path(order, predecessors),
+            "main_learning_spine": self._longest_path(required_order, required_predecessors),
             "hubs": hubs[:10],
             "branch_points": [item for item in hubs if item["outgoing"] > 1][:10],
             "convergence_points": [item for item in hubs if item["incoming"] > 1][:10],
@@ -488,6 +497,16 @@ class LineageEngine:
                 }
                 for atom_id, atom in self.workspace.atoms.items()
                 if atom.get("status") != "archived" and isinstance(atom.get("expansion"), dict)
+            ],
+            "optional_branches": [
+                {
+                    "anchor_atom_id": atom["branch"]["anchor_atom_id"],
+                    "branch_atom_id": atom_id,
+                    "kind": atom["branch"]["kind"],
+                    "status": atom.get("status"),
+                }
+                for atom_id, atom in self.workspace.atoms.items()
+                if atom.get("status") != "archived" and isinstance(atom.get("branch"), dict)
             ],
             "modules": [
                 {
@@ -972,6 +991,14 @@ class LineageEngine:
             )
         if not structure["detailed_expansions"]:
             lines.append("- None")
+        lines.extend(["", "## Optional Branches", ""])
+        lines.extend(
+            [
+                f"- `{item['anchor_atom_id']}` -> `{item['branch_atom_id']}` "
+                f"({item['kind']}; {item['status']})"
+                for item in structure["optional_branches"]
+            ] or ["- None"]
+        )
         lines.extend(["", "## Modules", "", "| Module | Atoms | Status counts |", "| --- | ---: | --- |"])
         for module in structure["modules"]:
             status = ", ".join(f"{key}: {value}" for key, value in module["status_counts"].items())

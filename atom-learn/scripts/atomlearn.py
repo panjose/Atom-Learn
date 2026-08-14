@@ -40,6 +40,26 @@ EXPANSION_KEYS = {
 EXPANSION_FRAME_KEYS = {"parent_atom_id", "child_atom_ids", "started_at", "backtrack_depth"}
 MIN_EXPANSION_CHILDREN = 2
 MAX_EXPANSION_CHILDREN = 12
+CONCEPT_RELATIONS = {
+    "inside_current",
+    "required_prerequisite",
+    "scheduled_successor",
+    "optional_extension",
+    "out_of_scope",
+}
+CONCEPT_ACTIONS = {
+    "preview",
+    "explain_now",
+    "learn_prerequisite",
+    "diagnose_prerequisite",
+    "park",
+    "brief_context",
+    "add_optional_branch",
+    "dismiss",
+}
+CONCEPT_ROUTING_KEYS = {"concept", "relation", "action", "impact", "at"}
+BRANCH_KEYS = {"kind", "anchor_atom_id", "origin_question_id", "created_at"}
+BRANCH_KINDS = {"optional_extension"}
 PHASES = {
     "orientation",
     "teaching",
@@ -56,6 +76,7 @@ QUESTION_CLASSES = {
     "blocking_prerequisite",
     "non_blocking",
     "future_atom",
+    "optional_extension",
     "out_of_scope",
 }
 QUESTION_PRIORITIES = {"low", "normal", "high"}
@@ -223,6 +244,7 @@ class Workspace:
             "modules": [],
             "edges": [],
             "expansions": [],
+            "branches": [],
             "aliases": {},
         }
         workspace.current = {
@@ -480,6 +502,7 @@ class Workspace:
                     errors.append(f"{atom_id} references missing Evidence {evidence_id!r}")
 
         self._validate_expansions(errors)
+        self._validate_branches(errors)
 
         if len(active_status_ids) > 1:
             errors.append(f"Multiple active Atoms: {', '.join(active_status_ids)}")
@@ -603,8 +626,8 @@ class Workspace:
                     parse_time(value)
                 except AtomLearnError as exc:
                     errors.append(f"{parent_id}.expansion.{field}: {exc}")
-            if child_ids and parent.get("prerequisites") != [child_ids[-1]]:
-                errors.append(f"{parent_id} must depend only on the final expanded child {child_ids[-1]}")
+            if child_ids and child_ids[-1] not in parent.get("prerequisites", []):
+                errors.append(f"{parent_id} must depend on the final expanded child {child_ids[-1]}")
             for prerequisite in base_prerequisites:
                 if prerequisite not in self.atoms:
                     errors.append(f"{parent_id}.expansion references missing base prerequisite {prerequisite!r}")
@@ -631,9 +654,9 @@ class Workspace:
                     if isinstance(child_expansion, dict)
                     else child.get("prerequisites")
                 )
-                if effective_prerequisites != expected:
+                if not set(expected).issubset(set(effective_prerequisites or [])):
                     errors.append(
-                        f"Expanded child {child_id} has invalid sequence prerequisites; expected {expected!r}"
+                        f"Expanded child {child_id} is missing sequence prerequisites {expected!r}"
                     )
             completed_at = record.get("completed_at")
             mastered_evidence = any(
@@ -696,6 +719,44 @@ class Workspace:
                 outer_children = stack[index - 1].get("child_atom_ids", []) if isinstance(stack[index - 1], dict) else []
                 if parent_id not in outer_children:
                     errors.append(f"current.expansion_stack[{index}] is not nested under the previous frame")
+
+    def _validate_branches(self, errors: list[str]) -> None:
+        for atom_id, atom in self.atoms.items():
+            branch = atom.get("branch")
+            if branch is None:
+                continue
+            if not isinstance(branch, dict) or set(branch) != BRANCH_KEYS:
+                errors.append(f"{atom_id}.branch fields are invalid")
+                continue
+            if branch.get("kind") not in BRANCH_KINDS:
+                errors.append(f"{atom_id}.branch.kind is invalid")
+            anchor_id = branch.get("anchor_atom_id")
+            anchor = self.atoms.get(anchor_id)
+            if anchor is None or anchor.get("status") == "archived":
+                errors.append(f"{atom_id}.branch references missing or archived anchor {anchor_id!r}")
+            if atom.get("optional") is not True:
+                errors.append(f"{atom_id}.branch must be optional")
+            expansion = atom.get("expansion")
+            effective_prerequisites = (
+                expansion.get("base_prerequisite_ids")
+                if isinstance(expansion, dict)
+                else atom.get("prerequisites", [])
+            )
+            if not isinstance(effective_prerequisites, list) or anchor_id not in effective_prerequisites:
+                errors.append(f"{atom_id}.branch must depend on anchor {anchor_id!r}")
+            origin_question_id = branch.get("origin_question_id")
+            question_ids = {
+                item.get("id") for item in self.questions.get("items", []) if isinstance(item, dict)
+            }
+            if not isinstance(origin_question_id, str) or origin_question_id not in question_ids:
+                errors.append(f"{atom_id}.branch.origin_question_id must reference an existing Question")
+            try:
+                created_at = branch.get("created_at")
+                if not isinstance(created_at, str) or not created_at:
+                    raise AtomLearnError("timestamp must be a non-empty string")
+                parse_time(created_at)
+            except AtomLearnError as exc:
+                errors.append(f"{atom_id}.branch.created_at: {exc}")
 
     def _validate_course_completion(self, errors: list[str]) -> None:
         course_status = self.course.get("status")
@@ -765,6 +826,18 @@ class Workspace:
         ]
         if self.graph.get("expansions", []) != expected_expansions:
             errors.append("graph.expansions does not match Atom expansion metadata; run expand or rebuild the graph")
+        expected_branches = sorted(
+            [
+                {"anchor": atom["branch"]["anchor_atom_id"], "atom": atom_id, "kind": atom["branch"]["kind"]}
+                for atom_id, atom in self.atoms.items()
+                if atom.get("status") != "archived"
+                and isinstance(atom.get("branch"), dict)
+                and set(atom["branch"]) == BRANCH_KEYS
+            ],
+            key=lambda item: (item["anchor"], item["atom"]),
+        )
+        if self.graph.get("branches", []) != expected_branches:
+            errors.append("graph.branches does not match Atom branch metadata; run route-concept or rebuild the graph")
 
     def _validate_questions(self, errors: list[str]) -> None:
         ids: set[str] = set()
@@ -786,6 +859,25 @@ class Workspace:
                 value = item.get(field)
                 if value is not None and value not in self.atoms:
                     errors.append(f"{item_id}.{field} references missing Atom {value!r}")
+            routing = item.get("routing")
+            if routing is not None:
+                if not isinstance(routing, dict) or set(routing) != CONCEPT_ROUTING_KEYS:
+                    errors.append(f"{item_id}.routing fields are invalid")
+                    continue
+                if routing.get("relation") not in CONCEPT_RELATIONS:
+                    errors.append(f"{item_id}.routing.relation is invalid")
+                if routing.get("action") not in CONCEPT_ACTIONS - {"preview"}:
+                    errors.append(f"{item_id}.routing.action is invalid")
+                for field in ["concept", "impact"]:
+                    if not isinstance(routing.get(field), str) or not routing[field].strip():
+                        errors.append(f"{item_id}.routing.{field} must be a non-empty string")
+                try:
+                    routed_at = routing.get("at")
+                    if not isinstance(routed_at, str) or not routed_at:
+                        raise AtomLearnError("timestamp must be a non-empty string")
+                    parse_time(routed_at)
+                except AtomLearnError as exc:
+                    errors.append(f"{item_id}.routing.at: {exc}")
 
     def _validate_evidence(self, errors: list[str]) -> None:
         ids: set[str] = set()
@@ -876,6 +968,14 @@ class Workspace:
             for atom_id, atom in self.atoms.items()
             if isinstance(atom.get("expansion"), dict)
         ]
+        self.graph["branches"] = sorted(
+            [
+                {"anchor": atom["branch"]["anchor_atom_id"], "atom": atom_id, "kind": atom["branch"]["kind"]}
+                for atom_id, atom in self.atoms.items()
+                if atom.get("status") != "archived" and isinstance(atom.get("branch"), dict)
+            ],
+            key=lambda item: (item["anchor"], item["atom"]),
+        )
 
     def import_plan(self, plan: dict[str, Any]) -> dict[str, int]:
         course_update = plan.get("course", {})
@@ -933,10 +1033,14 @@ class Workspace:
                     key: copy.deepcopy(existing.get(key))
                     for key in [
                         "status", "attempts", "confidence", "last_reviewed_at", "evidence_ids", "flexibility",
-                        "parent_atom_id", "expansion", "created_at",
+                        "parent_atom_id", "expansion", "branch", "created_at",
                     ]
                 }
-                if existing.get("parent_atom_id") is not None or existing.get("expansion") is not None:
+                if (
+                    existing.get("parent_atom_id") is not None
+                    or existing.get("expansion") is not None
+                    or existing.get("branch") is not None
+                ):
                     progress["prerequisites"] = copy.deepcopy(existing.get("prerequisites", []))
             else:
                 added += 1
@@ -962,6 +1066,7 @@ class Workspace:
                 "flexibility": None,
                 "parent_atom_id": None,
                 "expansion": None,
+                "branch": None,
                 "created_at": timestamp,
                 "updated_at": timestamp,
             }
@@ -1267,6 +1372,16 @@ class Workspace:
             "due_reviews": due_reviews,
             "active_flexibility_decisions": flexibility,
             "detailed_expansions": self.active_expansions(),
+            "optional_branches": [
+                {
+                    "anchor_atom_id": atom["branch"]["anchor_atom_id"],
+                    "atom_id": atom_id,
+                    "title": atom.get("title"),
+                    "status": atom.get("status"),
+                }
+                for atom_id, atom in self.atoms.items()
+                if atom.get("status") != "archived" and isinstance(atom.get("branch"), dict)
+            ],
             "expansion_focus_atom_id": self._expansion_next_atom_id(),
             "next_candidates": [] if validation_errors else self.suggest_next(),
         }
@@ -1283,6 +1398,7 @@ class Workspace:
             key=lambda atom: (
                 0 if atom["id"] == expansion_focus else 1,
                 0 if atom["id"] in due_ids else 1,
+                1 if atom.get("optional", False) else 0,
                 atom.get("difficulty", 1),
                 atom.get("created_at", ""),
                 atom["id"],
@@ -1508,6 +1624,341 @@ class Workspace:
         if self.current.get("phase") != "paused" and self.course.get("status") == "paused":
             self.course["status"] = "active" if self.atoms else "orientation"
 
+    def _depends_on(self, atom_id: str, prerequisite_id: str) -> bool:
+        """Return whether atom_id transitively depends on prerequisite_id."""
+        pending = list(self.atoms.get(atom_id, {}).get("prerequisites", []))
+        seen: set[str] = set()
+        while pending:
+            candidate = pending.pop()
+            if candidate == prerequisite_id:
+                return True
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            pending.extend(self.atoms.get(candidate, {}).get("prerequisites", []))
+        return False
+
+    def _normalize_concept_route(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise AtomLearnError("concept route must be a mapping")
+        active_id = self.current.get("active_atom_id")
+        if active_id not in self.atoms:
+            raise AtomLearnError("Concept routing requires an Active Atom")
+        relation = payload.get("relation")
+        if relation not in CONCEPT_RELATIONS:
+            raise AtomLearnError("relation must be one of: " + ", ".join(sorted(CONCEPT_RELATIONS)))
+        normalized = {
+            "text": require_string(payload.get("text"), "concept route.text"),
+            "concept": require_string(payload.get("concept"), "concept route.concept"),
+            "relation": relation,
+            "rationale": require_string(payload.get("rationale"), "concept route.rationale"),
+            "related_atom_id": payload.get("related_atom_id"),
+            "new_atom": copy.deepcopy(payload.get("new_atom")),
+            "active_atom_id": active_id,
+        }
+        related_id = normalized["related_atom_id"]
+        new_atom = normalized["new_atom"]
+        if related_id is not None:
+            related_id = require_id(related_id, "related_atom_id")
+            normalized["related_atom_id"] = related_id
+            related = self.atoms.get(related_id)
+            if related is None or related.get("status") == "archived":
+                raise AtomLearnError(f"related_atom_id must name a non-archived Atom: {related_id}")
+            if related_id == active_id:
+                raise AtomLearnError("Use inside_current when the related concept is the Active Atom")
+        if new_atom is not None:
+            if not isinstance(new_atom, dict):
+                raise AtomLearnError("new_atom must be a mapping")
+            if "prerequisites" in new_atom and new_atom.get("prerequisites") not in (None, []):
+                raise AtomLearnError("route-concept computes new_atom prerequisites; omit prerequisites")
+            new_id = require_id(new_atom.get("id"), "new_atom.id")
+            require_string(new_atom.get("title"), f"{new_id}.title")
+            require_string(new_atom.get("objective"), f"{new_id}.objective")
+            if new_id in self.atoms:
+                raise AtomLearnError(f"new_atom already exists: {new_id}")
+        has_related = related_id is not None
+        has_new = new_atom is not None
+        if relation in {"inside_current", "out_of_scope"} and (has_related or has_new):
+            raise AtomLearnError(f"{relation} must not include related_atom_id or new_atom")
+        if relation == "scheduled_successor" and (not has_related or has_new):
+            raise AtomLearnError("scheduled_successor requires related_atom_id and must not include new_atom")
+        if relation in {"required_prerequisite", "optional_extension"} and has_related == has_new:
+            raise AtomLearnError(f"{relation} requires exactly one of related_atom_id or new_atom")
+        if relation == "required_prerequisite" and has_related:
+            if self.atoms[related_id].get("optional", False):
+                raise AtomLearnError(
+                    f"Optional Atom {related_id} cannot silently become required; "
+                    "propose a new required Atom or restructure it explicitly"
+                )
+            if self._depends_on(related_id, active_id):
+                raise AtomLearnError(
+                    f"{related_id} is downstream of {active_id}; adding it as a prerequisite would create a cycle"
+                )
+        if relation == "optional_extension" and has_related:
+            if not self.atoms[related_id].get("optional", False):
+                raise AtomLearnError(f"Optional extension Atom {related_id} must already be optional")
+        if relation == "scheduled_successor" and self.atoms[related_id].get("optional", False):
+            raise AtomLearnError(f"Use optional_extension for optional scheduled Atom {related_id}")
+        return normalized
+
+    def concept_route_guidance(self, payload: dict[str, Any]) -> dict[str, Any]:
+        route = self._normalize_concept_route(payload)
+        relation = route["relation"]
+        labels = {
+            "inside_current": "Inside the current Atom",
+            "required_prerequisite": "Required prerequisite",
+            "scheduled_successor": "Scheduled later",
+            "optional_extension": "Optional extension",
+            "out_of_scope": "Outside the current goal",
+        }
+        impacts = {
+            "inside_current": "No path change; answer one focused boundary inside the Active Atom.",
+            "required_prerequisite": "Blocks current understanding; learn or diagnose it, then resume automatically.",
+            "scheduled_successor": "Does not block the current Atom; keep it parked until its planned turn.",
+            "optional_extension": "Does not block completion; add it only if the learner chooses the branch.",
+            "out_of_scope": "Does not affect the current course unless the learner later changes the goal.",
+        }
+        contracts = {
+            "inside_current": "Explain only the asked boundary; do not introduce a chain of new concepts.",
+            "required_prerequisite": "State that it blocks progress, repair one prerequisite Atom, then reconnect and resume.",
+            "scheduled_successor": "Name the planned destination and timing; do not teach its mechanism now.",
+            "optional_extension": "Give at most a definition and its relation; do not add the branch without confirmation.",
+            "out_of_scope": "State the scope boundary and offer park or dismiss without expanding the course.",
+        }
+        recommended = {
+            "inside_current": "explain_now",
+            "required_prerequisite": "learn_prerequisite",
+            "scheduled_successor": "park",
+            "optional_extension": "brief_context",
+            "out_of_scope": "park",
+        }[relation]
+        action_matrix: dict[str, list[tuple[str, str, bool]]] = {
+            "inside_current": [("explain_now", "Explain this boundary now", False)],
+            "required_prerequisite": [
+                ("learn_prerequisite", "Insert and learn the prerequisite", True),
+                ("diagnose_prerequisite", "Run a quick prerequisite diagnostic", True),
+            ],
+            "scheduled_successor": [
+                ("park", "Keep it for its planned Atom", False),
+                ("brief_context", "Give definition-only context", False),
+            ],
+            "optional_extension": [
+                ("brief_context", "Give definition-only context", False),
+                ("add_optional_branch", "Add an optional side branch", True),
+                ("park", "Save it for later", False),
+                ("dismiss", "Dismiss it", False),
+            ],
+            "out_of_scope": [
+                ("park", "Save it outside the current path", False),
+                ("dismiss", "Dismiss it", False),
+            ],
+        }
+        if (
+            relation == "optional_extension"
+            and route["related_atom_id"] is not None
+            and isinstance(self.atoms[route["related_atom_id"]].get("branch"), dict)
+        ):
+            action_matrix["optional_extension"] = [
+                item for item in action_matrix["optional_extension"]
+                if item[0] != "add_optional_branch"
+            ]
+        destination: dict[str, Any] | None = None
+        related_id = route["related_atom_id"]
+        if related_id:
+            related = self.atoms[related_id]
+            destination = {
+                "atom_id": related_id,
+                "title": related.get("title"),
+                "module": related.get("module"),
+                "status": related.get("status"),
+                "prerequisite_ids": list(related.get("prerequisites", [])),
+                "new": False,
+            }
+        elif route["new_atom"]:
+            proposed_prerequisites = (
+                list(self.atoms[route["active_atom_id"]].get("prerequisites", []))
+                if relation == "required_prerequisite"
+                else [route["active_atom_id"]]
+                if relation == "optional_extension"
+                else []
+            )
+            destination = {
+                "atom_id": route["new_atom"]["id"],
+                "title": route["new_atom"]["title"],
+                "module": route["new_atom"].get("module", self.atoms[route["active_atom_id"]].get("module")),
+                "status": "proposed",
+                "prerequisite_ids": proposed_prerequisites,
+                "new": True,
+            }
+        choices = [
+            {
+                "action": action,
+                "label": label,
+                "recommended": action == recommended,
+                "requires_confirmation": requires_confirmation,
+            }
+            for action, label, requires_confirmation in action_matrix[relation]
+        ]
+        return {
+            "mutated": False,
+            "active_atom_id": route["active_atom_id"],
+            "card": {
+                "concept": route["concept"],
+                "relation": relation,
+                "label": labels[relation],
+                "why": route["rationale"],
+                "blocking": relation == "required_prerequisite",
+                "impact": impacts[relation],
+                "destination": destination,
+                "recommended_action": recommended,
+                "choices": choices,
+                "response_contract": contracts[relation],
+            },
+        }
+
+    def _record_routed_question(
+        self,
+        route: dict[str, Any],
+        action: str,
+        impact: str,
+        related_atom_id: str | None = None,
+    ) -> str:
+        classification = {
+            "inside_current": "in_atom",
+            "required_prerequisite": "blocking_prerequisite",
+            "scheduled_successor": "future_atom",
+            "optional_extension": "optional_extension",
+            "out_of_scope": "out_of_scope",
+        }[route["relation"]]
+        question_id = self.record_question(
+            {
+                "text": route["text"],
+                "classification": classification,
+                "related_atom_id": related_atom_id,
+                "rationale": route["rationale"],
+                "priority": "high" if route["relation"] == "required_prerequisite" else "normal",
+            }
+        )
+        question = self.find_record(self.questions["items"], question_id, "Question")
+        question["routing"] = {
+            "concept": route["concept"],
+            "relation": route["relation"],
+            "action": action,
+            "impact": impact,
+            "at": iso(),
+        }
+        return question_id
+
+    def apply_concept_route(self, payload: dict[str, Any], action: str, confirmed: bool) -> dict[str, Any]:
+        if action not in CONCEPT_ACTIONS - {"preview"}:
+            raise AtomLearnError("action must be one of: " + ", ".join(sorted(CONCEPT_ACTIONS - {"preview"})))
+        guidance = self.concept_route_guidance(payload)
+        route = self._normalize_concept_route(payload)
+        allowed = {choice["action"] for choice in guidance["card"]["choices"]}
+        if action not in allowed:
+            raise AtomLearnError(f"Action {action} is not valid for relation {route['relation']}")
+        requires_confirmation = next(
+            choice["requires_confirmation"] for choice in guidance["card"]["choices"]
+            if choice["action"] == action
+        )
+        if requires_confirmation and not confirmed:
+            raise AtomLearnError(f"Action {action} changes the learning path; rerun with --confirmed")
+
+        related_id = route["related_atom_id"]
+        created_atom_id: str | None = None
+        if action in {"learn_prerequisite", "diagnose_prerequisite"}:
+            parent_id = route["active_atom_id"]
+            parent = self.atoms[parent_id]
+            if related_id is None:
+                candidate = copy.deepcopy(route["new_atom"])
+                candidate["module"] = candidate.get("module", parent.get("module", "Uncategorized"))
+                candidate["optional"] = False
+                candidate["prerequisites"] = list(parent.get("prerequisites", []))
+                self._add_restructure_atoms([candidate], inherited_sources=parent.get("sources", []))
+                related_id = candidate["id"]
+                created_atom_id = related_id
+            target = self.atoms[related_id]
+            if target.get("status") not in {"available", "mastered", "review_due", "skipped", "deferred", "locked"}:
+                raise AtomLearnError(f"Prerequisite target {related_id} cannot be opened from {target.get('status')}")
+            parent["prerequisites"] = unique(list(parent.get("prerequisites", [])) + [related_id])
+            self.rebuild_graph()
+            self.recalculate_availability()
+            if target.get("status") == "locked":
+                unmet = [
+                    item for item in target.get("prerequisites", [])
+                    if self.atoms.get(item, {}).get("status") not in SATISFIED_STATUSES
+                ]
+                raise AtomLearnError(
+                    f"Prerequisite {related_id} is locked; repair its prerequisites first: {', '.join(unmet)}"
+                )
+            question_id = self._record_routed_question(
+                route, action, guidance["card"]["impact"], related_id
+            )
+            self.backtrack(related_id, question_id)
+            if action == "diagnose_prerequisite":
+                self.current["phase"] = "checking"
+                self.current["next_action"] = (
+                    f"Run a focused diagnostic for {target['title']}; remediate only if needed, then resume {parent['title']}."
+                )
+        elif action == "add_optional_branch":
+            anchor_id = route["active_atom_id"]
+            anchor = self.atoms[anchor_id]
+            if related_id is not None and self._depends_on(anchor_id, related_id):
+                raise AtomLearnError(
+                    f"{anchor_id} already depends on {related_id}; making it a branch would create a cycle"
+                )
+            question_id = self._record_routed_question(
+                route, action, guidance["card"]["impact"], related_id
+            )
+            if related_id is None:
+                candidate = copy.deepcopy(route["new_atom"])
+                candidate["module"] = candidate.get("module", anchor.get("module", "Uncategorized"))
+                candidate["optional"] = True
+                candidate["prerequisites"] = [anchor_id]
+                self._add_restructure_atoms([candidate], inherited_sources=anchor.get("sources", []))
+                related_id = candidate["id"]
+                created_atom_id = related_id
+            branch_atom = self.atoms[related_id]
+            if branch_atom.get("parent_atom_id") is not None or branch_atom.get("expansion") is not None:
+                raise AtomLearnError("Attach an optional branch before using detailed expansion on that Atom")
+            existing_branch = branch_atom.get("branch")
+            if existing_branch is not None:
+                raise AtomLearnError(
+                    f"Atom {related_id} is already an optional branch anchored to "
+                    f"{existing_branch.get('anchor_atom_id')}"
+                )
+            branch_atom["optional"] = True
+            branch_atom["prerequisites"] = unique(list(branch_atom.get("prerequisites", [])) + [anchor_id])
+            branch_atom["branch"] = {
+                "kind": "optional_extension",
+                "anchor_atom_id": anchor_id,
+                "origin_question_id": question_id,
+                "created_at": iso(),
+            }
+            question = self.find_record(self.questions["items"], question_id, "Question")
+            question["related_atom_id"] = related_id
+            self.rebuild_graph()
+            self.recalculate_availability()
+        else:
+            question_id = self._record_routed_question(
+                route, action, guidance["card"]["impact"], related_id
+            )
+            if action == "dismiss":
+                self.resolve_question(question_id, "Learner chose not to pursue this related concept.", dismissed=True)
+
+        result = {
+            "mutated": True,
+            "action": action,
+            "question_id": question_id,
+            "active_atom_id": self.current.get("active_atom_id"),
+            "related_atom_id": related_id,
+            "created_atom_id": created_atom_id,
+            "card": guidance["card"],
+        }
+        if action == "brief_context":
+            result["response_limit"] = "definition_and_relation_only"
+        return result
+
     def record_question(self, payload: dict[str, Any]) -> str:
         text = require_string(payload.get("text"), "question.text")
         classification = payload.get("classification")
@@ -1520,7 +1971,7 @@ class Workspace:
         if related is not None and related not in self.atoms:
             raise AtomLearnError(f"Unknown related Atom: {related}")
         question_id = next_record_id("q", self.questions["items"])
-        status = "parked" if classification in {"non_blocking", "future_atom", "out_of_scope"} else "open"
+        status = "parked" if classification in {"non_blocking", "future_atom", "optional_extension", "out_of_scope"} else "open"
         item = {
             "id": question_id,
             "text": text,
@@ -1768,6 +2219,12 @@ class Workspace:
             return self._merge(proposal)
         raise AtomLearnError("Restructure action must be split or merge")
 
+    def _participates_in_optional_branch(self, atom_id: str) -> bool:
+        return isinstance(self.atoms.get(atom_id, {}).get("branch"), dict) or any(
+            isinstance(atom.get("branch"), dict) and atom["branch"].get("anchor_atom_id") == atom_id
+            for atom in self.atoms.values()
+        )
+
     def _split(self, proposal: dict[str, Any]) -> dict[str, Any]:
         source_id = proposal.get("source_atom_id")
         source = self.atoms.get(source_id)
@@ -1777,6 +2234,8 @@ class Workspace:
             raise AtomLearnError("Cannot split the Active Atom")
         if source.get("parent_atom_id") is not None or source.get("expansion") is not None:
             raise AtomLearnError("Cannot split an Atom that participates in a detailed expansion")
+        if self._participates_in_optional_branch(source_id):
+            raise AtomLearnError("Cannot split an Atom that participates in an optional branch")
         candidates = proposal.get("new_atoms")
         if not isinstance(candidates, list) or len(candidates) < 2:
             raise AtomLearnError("Split requires at least two new_atoms")
@@ -1814,6 +2273,8 @@ class Workspace:
             for atom_id in source_ids
         ):
             raise AtomLearnError("Cannot merge Atoms that participate in a detailed expansion")
+        if any(self._participates_in_optional_branch(atom_id) for atom_id in source_ids):
+            raise AtomLearnError("Cannot merge Atoms that participate in an optional branch")
         merged = proposal.get("merged_atom")
         if not isinstance(merged, dict):
             raise AtomLearnError("merged_atom must be a mapping")
@@ -1886,6 +2347,7 @@ class Workspace:
                 "flexibility": None,
                 "parent_atom_id": None,
                 "expansion": None,
+                "branch": None,
                 "created_at": timestamp,
                 "updated_at": timestamp,
             }
@@ -1917,18 +2379,23 @@ class Workspace:
             map_lines.extend([f"## {module}", ""])
             atom_ids = {atom["id"] for atom in atoms}
             children: dict[str, list[dict[str, Any]]] = defaultdict(list)
+            branch_children: dict[str, list[dict[str, Any]]] = defaultdict(list)
             for atom in atoms:
                 if atom.get("parent_atom_id") in atom_ids:
                     children[atom["parent_atom_id"]].append(atom)
+                branch = atom.get("branch")
+                if isinstance(branch, dict) and branch.get("anchor_atom_id") in atom_ids:
+                    branch_children[branch["anchor_atom_id"]].append(atom)
             rendered_ids: set[str] = set()
 
             def append_tree(atom: dict[str, Any], depth: int) -> None:
                 rendered_ids.add(atom["id"])
                 indent = "  " * depth
                 marker = " ↳" if depth else ""
+                branch_label = " [optional branch]" if isinstance(atom.get("branch"), dict) else ""
                 map_lines.append(
                     f"{indent}-{marker} {status_icon.get(atom.get('status'), '?')} "
-                    f"`{atom['id']}` — {atom['title']} ({atom.get('status')})"
+                    f"`{atom['id']}` — {atom['title']} ({atom.get('status')}){branch_label}"
                 )
                 ordered_children = (
                     atom.get("expansion", {}).get("child_atom_ids", [])
@@ -1939,9 +2406,13 @@ class Workspace:
                 for child_id in ordered_children:
                     if child_id in child_map:
                         append_tree(child_map[child_id], depth + 1)
+                for child in sorted(branch_children.get(atom["id"], []), key=lambda item: item["id"]):
+                    append_tree(child, depth + 1)
 
             for atom in atoms:
-                if atom.get("parent_atom_id") not in atom_ids:
+                branch = atom.get("branch")
+                branch_anchor = branch.get("anchor_atom_id") if isinstance(branch, dict) else None
+                if atom.get("parent_atom_id") not in atom_ids and branch_anchor not in atom_ids:
                     append_tree(atom, 0)
             for atom in atoms:
                 if atom["id"] not in rendered_ids:
@@ -1985,11 +2456,13 @@ class Workspace:
         )
 
         non_archived = [atom for atom in self.atoms.values() if atom.get("status") != "archived"]
-        mastered = [atom for atom in non_archived if atom.get("status") in MASTERY_LIKE]
-        skipped = [atom for atom in non_archived if atom.get("status") == "skipped"]
-        deferred = [atom for atom in non_archived if atom.get("status") == "deferred"]
-        mastery_percent = (100 * len(mastered) / len(non_archived)) if non_archived else 0
-        path_percent = (100 * (len(mastered) + len(skipped)) / len(non_archived)) if non_archived else 0
+        required_atoms = [atom for atom in non_archived if not atom.get("optional", False)]
+        optional_atoms = [atom for atom in non_archived if atom.get("optional", False)]
+        mastered = [atom for atom in required_atoms if atom.get("status") in MASTERY_LIKE]
+        skipped = [atom for atom in required_atoms if atom.get("status") == "skipped"]
+        deferred = [atom for atom in required_atoms if atom.get("status") == "deferred"]
+        mastery_percent = (100 * len(mastered) / len(required_atoms)) if required_atoms else 0
+        path_percent = (100 * (len(mastered) + len(skipped)) / len(required_atoms)) if required_atoms else 0
         progress_lines = [
             "# Learning Progress",
             "",
@@ -1997,10 +2470,11 @@ class Workspace:
             "",
             "## Overall",
             "",
-            f"- Mastered with Evidence: {len(mastered)} / {len(non_archived)} ({mastery_percent:.1f}%)",
+            f"- Mastered with Evidence: {len(mastered)} / {len(required_atoms)} ({mastery_percent:.1f}%)",
             f"- Provisionally skipped: {len(skipped)}",
             f"- Deferred: {len(deferred)}",
-            f"- Path satisfied: {len(mastered) + len(skipped)} / {len(non_archived)} ({path_percent:.1f}%)",
+            f"- Path satisfied: {len(mastered) + len(skipped)} / {len(required_atoms)} ({path_percent:.1f}%)",
+            f"- Optional Atoms: {len(optional_atoms)}",
             "",
             "## Current",
             "",
@@ -2016,6 +2490,16 @@ class Workspace:
                 f"- `{atom['id']}` — {atom['title']} ({atom['status']}; "
                 f"reason: {atom.get('flexibility', {}).get('reason_code', 'unknown')})"
                 for atom in skipped + deferred
+            ]
+            or ["- None"]
+        )
+        progress_lines.extend(["", "## Optional Branches", ""])
+        progress_lines.extend(
+            [
+                f"- `{atom['id']}` — {atom['title']} ({atom['status']}; "
+                f"anchor: `{atom.get('branch', {}).get('anchor_atom_id', 'unanchored')}`)"
+                for atom in optional_atoms
+                if isinstance(atom.get("branch"), dict)
             ]
             or ["- None"]
         )
@@ -2133,6 +2617,16 @@ def build_parser() -> argparse.ArgumentParser:
     question_parser.add_argument("workspace")
     question_parser.add_argument("--input", required=True)
     mutation_args(question_parser)
+
+    route_parser = sub.add_parser(
+        "route-concept",
+        help="Classify an unfamiliar related concept and preview or apply a learner-friendly route",
+    )
+    route_parser.add_argument("workspace")
+    route_parser.add_argument("--input", required=True)
+    route_parser.add_argument("--action", choices=sorted(CONCEPT_ACTIONS), default="preview")
+    route_parser.add_argument("--confirmed", action="store_true")
+    mutation_args(route_parser)
 
     resolve_parser = sub.add_parser("resolve-question")
     resolve_parser.add_argument("workspace")
@@ -2461,6 +2955,24 @@ def run(args: argparse.Namespace) -> None:
         question_id = workspace.record_question(read_data(Path(args.input)))
         workspace.commit("question.recorded", "Recorded and routed a learner question", {"question_id": question_id})
         emit({"ok": True, "revision": workspace.revision, "question_id": question_id})
+    elif args.command == "route-concept":
+        payload = read_data(Path(args.input))
+        if args.action == "preview":
+            emit({"ok": True, "applied": False, "revision": workspace.revision, **workspace.concept_route_guidance(payload)})
+            return
+        result = workspace.apply_concept_route(payload, args.action, args.confirmed)
+        workspace.commit(
+            "concept.routed",
+            "Applied a learner-visible relationship decision for an unfamiliar concept",
+            {
+                "relation": result["card"]["relation"],
+                "action": args.action,
+                "question_id": result["question_id"],
+                "related_atom_id": result["related_atom_id"],
+                "created_atom_id": result["created_atom_id"],
+            },
+        )
+        emit({"ok": True, "applied": True, "revision": workspace.revision, **result})
     elif args.command == "resolve-question":
         workspace.resolve_question(args.question_id, args.resolution, args.dismissed)
         workspace.commit("question.closed", "Closed a recorded question", {"question_id": args.question_id})

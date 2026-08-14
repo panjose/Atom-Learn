@@ -29,6 +29,8 @@ The prerequisite DAG remains the authority for learning order. Its edges require
 
 Detailed expansion adds a separate containment view: `parent_atom_id` and `graph.expansions` show which fine-grained Atoms belong inside a parent objective, while the derived prerequisite chain controls their teaching order. Lineage reports these trees separately so containment is not mistaken for a semantic or prerequisite relation.
 
+Relation-aware routing adds a third structural projection for learner-chosen `optional_extension` branches. `graph.branches` and lineage `optional_branches` connect each optional Atom to its anchor and origin question without treating it as required completion work or detailed-expansion containment.
+
 Semantic relations explain conceptual meaning without changing activation rules. Supported relation types are:
 
 - `motivates`: an earlier problem or limitation creates the need for the target;

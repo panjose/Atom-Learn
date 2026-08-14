@@ -9,6 +9,7 @@
 - Mutation payloads
 - Flexible progression state
 - Detailed expansion state
+- Concept routing and optional branches
 - Revisions and timestamps
 
 ## Workspace layout
@@ -43,7 +44,7 @@ Atom statuses are `locked`, `available`, `active`, `mastered`, `review_due`, `sk
 
 Course statuses are `orientation`, `active`, `completed`, `completed_with_skips`, and `paused`. `completed` requires mastery-like status for every required Atom; `completed_with_skips` discloses that traversal finished with at least one required provisional assumption.
 
-Use these question classifications: `in_atom`, `blocking_prerequisite`, `non_blocking`, `future_atom`, and `out_of_scope`.
+Use these question classifications: `in_atom`, `blocking_prerequisite`, `non_blocking`, `future_atom`, `optional_extension`, and `out_of_scope`.
 
 Use Evidence scores from `0.0` through `1.0`. The CLI derives the result from required dimensions, `pass_threshold`, and `minimum_dimension_score`.
 
@@ -104,7 +105,7 @@ atoms:
 
 Import plans add or update sources and Atoms. They do not silently remove missing records. The CLI recalculates `locked` and `available`, preserves `mastered`, `active`, `review_due`, `skipped`, `deferred`, and `archived`, then rebuilds graph edges and existing flexibility metadata.
 
-Importing also preserves `parent_atom_id`, `expansion`, and computed prerequisites for Atoms already participating in a detailed expansion. A generic plan update cannot silently flatten an active expansion tree.
+Importing also preserves `parent_atom_id`, `expansion`, `branch`, and computed prerequisites for Atoms already participating in a detailed expansion or optional branch. A generic plan update cannot silently flatten an active structural choice.
 
 ## Flexible progression state
 
@@ -141,6 +142,34 @@ Each direct child stores `parent_atom_id` equal to the parent. `graph.expansions
 
 Expansion reason codes are `learner_requested_detail`, `cognitive_load`, `remediation`, and `other`. Only mastered parent integration Evidence may set `completed_at`. See [DETAILED_EXPANSION.md](DETAILED_EXPANSION.md).
 
+## Concept routing and optional branches
+
+A Question created by `route-concept` adds an exact routing record:
+
+```yaml
+routing:
+  concept: Jacobian
+  relation: required_prerequisite
+  action: learn_prerequisite
+  impact: Blocks current understanding; learn or diagnose it, then resume automatically.
+  at: "2026-08-14T10:00:00+00:00"
+```
+
+Relations are `inside_current`, `required_prerequisite`, `scheduled_successor`, `optional_extension`, and `out_of_scope`. Applied actions are `explain_now`, `learn_prerequisite`, `diagnose_prerequisite`, `park`, `brief_context`, `add_optional_branch`, and `dismiss`.
+
+Normal Atoms use `branch: null`. An optional extension uses:
+
+```yaml
+optional: true
+branch:
+  kind: optional_extension
+  anchor_atom_id: calculus.derivative.definition
+  origin_question_id: q-000004
+  created_at: "2026-08-14T10:00:00+00:00"
+```
+
+Its effective prerequisites must include the anchor. `graph.branches` projects records shaped as `{anchor, atom, kind}`. Branch metadata, detailed-expansion containment, and prerequisite edges are separate concepts. See [CONCEPT_ROUTING.md](CONCEPT_ROUTING.md).
+
 ## Mutation payloads
 
 ### Update session
@@ -163,6 +192,21 @@ related_atom_id: os.thread.definition
 rationale: The current Atom is process definition; threads are a mapped successor.
 priority: normal
 ```
+
+### Route a related concept
+
+```yaml
+text: Why does this use a Jacobian?
+concept: Jacobian
+relation: required_prerequisite
+rationale: The current operation cannot be applied without interpreting the Jacobian.
+new_atom:
+  id: calculus.jacobian.interpretation
+  title: Interpreting a Jacobian
+  objective: Explain what the Jacobian measures in a change of variables.
+```
+
+Use exactly one of `related_atom_id` and `new_atom` for required prerequisites and optional extensions. Use an existing `related_atom_id` for a scheduled successor. Omit both for current-boundary and out-of-scope routes. Preview is read-only; structural actions require confirmation.
 
 ### Record Evidence
 
@@ -220,7 +264,7 @@ merged_atom:
   mastery:
     required_dimensions: [explain, apply]
     pass_threshold: 0.8
-      minimum_dimension_score: 0.6
+    minimum_dimension_score: 0.6
 ```
 
 ### Detailed expansion plan

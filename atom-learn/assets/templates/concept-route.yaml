@@ -1,0 +1,10 @@
+text: "What does this related concept mean?"
+concept: "related concept"
+relation: optional_extension
+rationale: "It enriches the current Atom but is not required to satisfy its mastery objective."
+new_atom:
+  id: domain.topic.optional-concept
+  title: Optional related concept
+  objective: Explain how the optional concept relates to the current Atom.
+  difficulty: 2
+  estimated_minutes: 15

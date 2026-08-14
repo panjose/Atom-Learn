@@ -163,6 +163,8 @@ The learner may defer an Active child. Deferral clears the current expansion foc
 
 If a child exposes an external missing prerequisite, use normal question recording and `backtrack`. The expansion frame retains its backtrack depth so completing the remedial Atom returns through `resume` instead of jumping ahead in the branch.
 
+Prefer the relation-aware `route-concept` workflow when the learner asks about that missing concept. A confirmed prerequisite route may add an extra prerequisite edge to the active child or integration parent. Validation requires the original child sequence edges to remain present, but does not reject these explicit remedial edges.
+
 Do not use provisional skip on an expanded parent before integration. Do not mark expansion complete from response length, self-report, or having merely displayed every child title.
 
 ## Subsystem behavior

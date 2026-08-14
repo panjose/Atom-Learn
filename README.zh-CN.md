@@ -18,7 +18,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 严格维持唯一 Active Atom，并执行所有先修守卫
 - 把“详细讲讲”转换成有顺序的子 Atom 树，而不是一次输出多概念长讲解
 - 允许用户通过快速诊断、延后、暂定跳过或恢复 Atom 灵活调整路径，同时不伪造掌握状态
-- 分流当前 Atom 问题、阻塞性先修问题、未来问题和 Parking Lot 项目
+- 明确陌生关联概念属于当前、前置、后续、可选支线，还是当前目标之外
 - 通过 explain/apply/discriminate/transfer/teach-back Evidence 判断掌握程度
 - 跨会话恢复状态，并提供 revision 冲突保护和事件审计
 - 按 1/3/7/30 天间隔安排复习，同时支持课程级覆盖
@@ -128,6 +128,20 @@ python atom-learn/scripts/atomlearn.py expand courses/calculus calculus.derivati
 
 可使用 `atom-learn/assets/templates/expand-plan.yaml` 作为起始 payload。
 
+## 关系感知的概念路由
+
+当讲解中出现用户不懂的关联概念时，AtomLearn 不会立刻开启另一段长讲解，而是先判断关系。系统会展示一张简洁卡片，说明它是当前 Atom 内部内容、必要前置、后续已安排内容、可选拓展，还是当前目标之外的内容，并同时给出判断原因、对进度的影响、目标位置和可选动作。
+
+```powershell
+python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input concept-route.yaml
+python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input concept-route.yaml --action learn_prerequisite --confirmed --expected-revision 4
+python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input concept-route.yaml --action add_optional_branch --confirmed --expected-revision 4
+```
+
+预览不会修改状态。确认加入必要前置后，系统会暂时回退学习，并在完成后恢复被打断的 Atom；确认加入可选支线后，它会显示在学习图和知识脉络中，但不会阻塞必修课程完成，也不会排在新的必修内容之前。对于后续已安排内容，系统会明确指出负责它的未来 Atom；一句背景说明不会演变成提前展开的多概念课程。详见[关系感知的概念路由](atom-learn/references/CONCEPT_ROUTING.md)和[概念路由设计](docs/CONCEPT_ROUTING_DESIGN.md)。
+
+可使用 `atom-learn/assets/templates/concept-route.yaml` 作为起始 payload。
+
 ## 科研论文阅读
 
 AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会建立覆盖综述、奠基工作、理论与方法、基准与数据集、批评与复现以及应用工作的导向地图。每篇完成阅读的论文都会记录有证据支持的主张、局限、开放问题及其与其他工作的关系。
@@ -196,6 +210,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [知识脉络设计](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 - [弹性进度设计](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 - [详细展开设计](docs/DETAILED_EXPANSION_DESIGN.md)
+- [概念路由设计](docs/CONCEPT_ROUTING_DESIGN.md)
 
 ## 开发验证
 

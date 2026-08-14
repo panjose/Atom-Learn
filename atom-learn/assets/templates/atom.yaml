@@ -22,5 +22,6 @@ evidence_ids: []
 flexibility: null
 parent_atom_id: null
 expansion: null
+branch: null
 created_at: ""
 updated_at: ""

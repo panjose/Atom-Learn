@@ -42,6 +42,12 @@ Interpret “详细讲讲,” “break this down,” “step by step,” and equ
 
 After each child passes its own check, let the CLI activate the next child. After the final child, require the parent integration check. A child may itself be expanded, producing a nested containment tree while preserving one Active Atom.
 
+## Related concepts
+
+When an explanation exposes an unfamiliar linked concept, read [CONCEPT_ROUTING.md](CONCEPT_ROUTING.md). Preview a relationship card before explaining more or editing the path. Distinguish a local boundary, a blocking prerequisite, an already scheduled successor, an optional extension, and an out-of-scope concept.
+
+Structural choices require confirmation. A required prerequisite uses the normal backtrack/resume loop. An optional branch remains visible but does not block completion. A future concept gets its destination named and is parked; do not teach its mechanism early.
+
 ## Session recovery
 
 At the start of a new session:
@@ -56,7 +62,7 @@ If no Atom is active, present due reviews first, then available candidates from 
 
 ## Backtracking
 
-Backtrack only when a missing prerequisite blocks the current objective. Record the question and rationale before switching. Preserve the parent Atom, phase, question, and next action on the stack.
+Backtrack only when a missing prerequisite blocks the current objective. Prefer `route-concept --action learn_prerequisite --confirmed` when the gap was discovered through a related-concept question; it records the question, updates the DAG, and invokes backtracking together. Preserve the parent Atom, phase, question, and next action on the stack.
 
 Treat the remedial prerequisite as the only Active Atom. Require a proportionate check. After mastery, resume the parent and explicitly reconnect the prerequisite to the original confusion.
 

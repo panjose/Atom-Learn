@@ -1,6 +1,6 @@
 ---
 name: atom-learn
-description: Build, retrieve for, run, personalize, map, and safely evolve persistent source-grounded learning courses, exam paths, research-reading programs, and knowledge-lineage maps. Accept textbooks, knowledge bases, outlines, exams, question banks, or only a topic; index sources; correct gaps with harness Web Search; atomize detailed-explanation requests into ordered child concepts instead of long multi-concept lectures; analyze coverage and difficulty; organize prerequisite and semantic maps; support diagnostic-first skipping, deferral, and reversible provisional bypass; adapt teaching from privacy-preserving session signals; and track learning evidence. Use for RAG-grounded course creation, “explain this knowledge point in detail” or step-by-step requests, knowledge maps, flexible pacing, skips, targeted study or review, durable progress, personalization, mastery checks, spaced review, critical paper reading, literature synthesis, field orientation, exam analysis, or workspace recovery.
+description: Build and run persistent, source-grounded learning courses, exam paths, research-reading programs, and knowledge maps. Accept textbooks, knowledge bases, outlines, question banks, or only a topic; index sources; correct gaps with harness Web Search; route unfamiliar concepts as current boundaries, required prerequisites, scheduled successors, optional branches, or out-of-scope items; turn detailed requests into ordered child Atoms; support flexible progression, session adaptation, mastery Evidence, review, and bounded self-evolution. Use for RAG-grounded course creation, related-concept questions, detailed or step-by-step explanations, knowledge maps, skips, targeted study or review, durable progress, personalization, critical paper reading, literature synthesis, field orientation, exam analysis, or workspace recovery.
 ---
 
 # AtomLearn
@@ -122,6 +122,25 @@ python <SKILL_DIR>/scripts/atomlearn.py unskip <workspace> <atom-id>
 
 Do not create fake Evidence for a provisional skip. Report `mastered`, `skipped`, and `deferred` separately. Treat `completed_with_skips` as path completion with explicit assumptions, not as proof that every required Atom is mastered.
 
+### Route an unfamiliar related concept
+
+1. Read [references/CONCEPT_ROUTING.md](references/CONCEPT_ROUTING.md) when an explanation mentions a concept the learner does not understand or asks about.
+2. Classify it as `inside_current`, `required_prerequisite`, `scheduled_successor`, `optional_extension`, or `out_of_scope`. If the distinction is uncertain, ask one diagnostic question and keep the Active Atom unchanged.
+3. Preview `route-concept` and show the learner a compact relationship card: relation, why, effect on current progress, destination, recommendation, and choices.
+4. For `inside_current`, explain only the requested boundary. For `scheduled_successor`, identify its planned Atom and park it. For `optional_extension`, give at most definition-level context unless the learner chooses a branch.
+5. Apply `learn_prerequisite` or `diagnose_prerequisite` only with confirmation. The CLI inserts or links the prerequisite, backtracks, and preserves automatic return to the original Atom.
+6. Apply `add_optional_branch` only with confirmation. Optional branches remain visible in the learning map and lineage but do not block required completion or outrank required new work.
+
+When an adjacent technical term is unavoidable and likely unfamiliar, label its first mention briefly—such as “scheduled later,” “required if unfamiliar,” or “optional extension”—without tagging ordinary vocabulary or interrupting every sentence.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py route-concept <workspace> --input <route.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py route-concept <workspace> --input <route.yaml> --action learn_prerequisite --confirmed --expected-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py route-concept <workspace> --input <route.yaml> --action add_optional_branch --confirmed --expected-revision <revision>
+```
+
+Preview is read-only. Never silently mutate the DAG because the learner merely asked what a term means. Never teach a scheduled or optional concept's full mechanism inside the current Atom.
+
 ### Expand a request for detail
 
 1. Read [references/DETAILED_EXPANSION.md](references/DETAILED_EXPANSION.md) when the learner asks to explain an Atom in detail, break it down, derive it step by step, or go deeper.
@@ -220,7 +239,7 @@ Do not call an observed open question a novel contribution without a current lit
 
 1. Read `status --json`, note its course and adaptation revisions, and apply context-valid adaptation guidance.
 2. Interpret the input as an answer, a question, a state command, a detail/expansion request, or a scope change.
-3. Route questions using [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md). Record the question before taking a routing action.
+3. Route ordinary questions using [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md). For an unfamiliar related concept, preview the relationship card in [references/CONCEPT_ROUTING.md](references/CONCEPT_ROUTING.md), then persist the chosen action with `route-concept`.
 4. Teach only the minimum needed for the Active Atom, using Why -> What -> How -> Example -> Intuition.
 5. Persist current question, understood ideas, confusions, and `next_action` with `update-session`.
 6. Run `validate` after a state-changing command. Use `--expected-revision` on mutations when supported.
@@ -281,6 +300,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/PROTOCOL.md](references/PROTOCOL.md) for orientation, teaching, recovery, and response behavior.
 - Read [references/ATOMIZATION.md](references/ATOMIZATION.md) when building or restructuring a map.
 - Read [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md) when a learner asks a side question or reveals a prerequisite gap.
+- Read [references/CONCEPT_ROUTING.md](references/CONCEPT_ROUTING.md) when an explanation exposes an unfamiliar related concept and the learner needs to know whether it belongs now, before, later, on an optional branch, or outside the goal.
 - Read [references/MASTERY.md](references/MASTERY.md) when creating checks, grading Evidence, or scheduling remediation.
 - Read [references/EVOLUTION.md](references/EVOLUTION.md) for the end-to-end evolution workflow.
 - Read [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md) before approval, application, or rollback.
@@ -302,4 +322,4 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a related-concept question, show the relationship and impact before structural mutation, name a scheduled destination when one exists, and require confirmation for a new prerequisite or optional branch. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, optional branches, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.

@@ -1,7 +1,7 @@
 [project]
 name = "atom-learn"
-version = "0.7.0"
-description = "Atomic source-grounded learning with detailed expansion, research, exams, and knowledge maps"
+version = "0.8.0"
+description = "Atomic source-grounded learning with relation-aware concept routing, research, exams, and knowledge maps"
 requires-python = ">=3.10"
 dependencies = [
   "PyYAML>=6.0",
