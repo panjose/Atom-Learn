@@ -29,6 +29,8 @@ Session presentation preferences are governed separately by the adaptation polic
 
 Exam-corpus emphasis may select learning and review priorities without an evolution proposal, but it cannot lower mastery, bypass prerequisites, or authorize structural changes. Treat frequency as a corpus descriptor; require normal learner Evidence before proposing an outcome-level change.
 
+Knowledge-lineage annotations, semantic relations, and curated threads may be imported under their own revision because they do not control activation. They cannot modify prerequisites or satisfy mastery. Any dependency-edge, split, or merge change suggested by a lineage view must use confirmed restructuring or the normal evolution proposal policy.
+
 Risk is derived from proposal type and cannot be supplied or lowered by the proposer.
 
 ## Bounds

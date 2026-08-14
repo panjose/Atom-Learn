@@ -14,6 +14,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 通过 RRF 融合 BM25、多语言子词检索和可选的供应商 embedding 检索
 - 在稀疏输入进入课程规划前，要求显式证据判定和稳定来源定位
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
+- 梳理知识根节点、学习主干、分支、枢纽、推导、历史演进、对比、应用及单点来龙去脉
 - 严格维持唯一 Active Atom，并执行所有先修守卫
 - 分流当前 Atom 问题、阻塞性先修问题、未来问题和 Parking Lot 项目
 - 通过 explain/apply/discriminate/transfer/teach-back Evidence 判断掌握程度
@@ -85,6 +86,20 @@ python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input cov
 
 科研领域发现使用同一质量门禁，并为研究问题、综述、方法谱系、评测/数据集以及批评/复现证据生成绑定 research revision 的锚点。构建论文导向的领域地图时使用 `rag requirements --context research`。
 
+## 知识脉络与概念地图
+
+AtomLearn 将权威的先修 DAG 与来源可追踪的语义层分开。结构视角会自动识别根节点、叶节点、主学习脉络、枢纽、分支与跨模块桥；可选的 Annotation 和类型化 Relation 则解释每个概念的中心问题、角色、贡献、边界、动机、推导、对比和应用，同时不会改变学习先修关系。
+
+```powershell
+python atom-learn/scripts/atomlearn.py lineage init courses/calculus
+python atom-learn/scripts/atomlearn.py lineage import courses/calculus --input lineage-import.yaml --expected-lineage-revision 0
+python atom-learn/scripts/atomlearn.py lineage overview courses/calculus --lens all
+python atom-learn/scripts/atomlearn.py lineage trace courses/calculus calculus.derivative.definition --depth 3
+python atom-learn/scripts/atomlearn.py lineage route courses/calculus calculus.rate.average calculus.derivative.geometric
+```
+
+使用 `overview` 查看领域全图，使用 `trace` 追溯单个概念的来龙去脉，使用 `route` 解释两个概念如何相连。同一张图还可以叠加当前学习状态、题库样本内考试重点，以及已映射论文所需概念。高置信语义关系必须具有已注册来源 locator，而先修 DAG 始终是激活顺序的唯一权威。详见[知识脉络工作流](atom-learn/references/KNOWLEDGE_LINEAGE.md)、[Lineage Schema](atom-learn/references/LINEAGE_SCHEMA.md)和[知识脉络设计](docs/KNOWLEDGE_LINEAGE_DESIGN.md)。
+
 ## 科研论文阅读
 
 AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会建立覆盖综述、奠基工作、理论与方法、基准与数据集、批评与复现以及应用工作的导向地图。每篇完成阅读的论文都会记录有证据支持的主张、局限、开放问题及其与其他工作的关系。
@@ -150,12 +165,13 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [科研论文阅读设计](docs/RESEARCH_READING_DESIGN.md)
 - [灵活输入设计](docs/INTAKE_DESIGN.md)
 - [RAG 设计](docs/RAG_DESIGN.md)
+- [知识脉络设计](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 
 ## 开发验证
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py
 ```
 
 仓库提供微积分、操作系统和一个合成科研阅读计划作为测试夹具。自动测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

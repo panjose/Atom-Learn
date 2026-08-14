@@ -1,0 +1,24 @@
+annotations:
+  - atom_id: domain.foundation
+    roles: [foundation, principle]
+    central_question: What problem does this idea resolve?
+    contribution: Establishes the base relationship used by later methods.
+    boundaries: [Does not yet cover the applied case.]
+relations:
+  - id: foundation-motivates-method
+    from_atom_id: domain.foundation
+    to_atom_id: domain.method
+    type: motivates
+    rationale: The limitation of the foundation creates the need for the method.
+    confidence: 0.9
+    source_refs:
+      - source_id: source.example
+        locator: chapter 2
+threads:
+  - id: core-problem-to-application
+    title: Core problem to application
+    kind: problem_to_solution
+    goal: Explain why the main method is needed and where it applies.
+    atom_ids: [domain.foundation, domain.method]
+    narrative: Start from the unresolved problem, derive the method, then test its boundary.
+    confidence: 0.9

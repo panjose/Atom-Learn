@@ -25,11 +25,13 @@ Treat files under `.atomlearn/` as canonical:
 └── events.ndjson
 ```
 
-Treat the five core Markdown files at workspace root as generated projections. Optional intake, RAG, research, evolution, and adaptation subsystems add their own canonical files under `.atomlearn/` and generated views at the workspace root.
+Treat the five core Markdown files at workspace root as generated projections. Optional intake, RAG, research, evolution, adaptation, exam, and lineage subsystems add their own canonical files under `.atomlearn/` and generated views at the workspace root.
 
 Session adaptation uses `.atomlearn/adaptation/{state.yaml,profile.yaml,signals.ndjson,ledger.ndjson}` and generates `PERSONALIZATION.md`. It has an independent adaptation revision; see [ADAPTATION_SCHEMA.md](ADAPTATION_SCHEMA.md).
 
 Exam preparation uses `.atomlearn/exam/{state.yaml,bank.yaml,events.ndjson}` and generates `EXAM_BLUEPRINT.md` plus `EXAM_STUDY_PLAN.md`. It has an independent exam revision; see [EXAM_SCHEMA.md](EXAM_SCHEMA.md).
+
+Knowledge lineage uses `.atomlearn/lineage/{state.yaml,map.yaml,events.ndjson}` and generates `KNOWLEDGE_LINEAGE.md`. It derives structural views from the course DAG and stores only semantic annotations, relations, and curated threads under an independent lineage revision; see [LINEAGE_SCHEMA.md](LINEAGE_SCHEMA.md).
 
 ## Core records
 

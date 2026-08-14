@@ -14,6 +14,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Fuse BM25, multilingual subword, and optional provider-embedding retrieval with RRF
 - Require explicit evidence verdicts and stable source locators before sparse-input planning
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
+- Map roots, learning spines, branches, hubs, derivations, historical development, contrasts, applications, and each concept's lineage
 - Enforce exactly one Active Atom and guard all prerequisites
 - Route in-Atom questions, blocking prerequisites, future questions, and Parking Lot items
 - Evaluate mastery through explain/apply/discriminate/transfer/teach-back Evidence
@@ -85,6 +86,20 @@ Weak, missing, or unverified outline/topic requirements fail closed and produce 
 
 Research-field discovery uses the same gate with revision-bound anchors for the research question, surveys, method families, evaluations/datasets, and critique/replication evidence. Use `rag requirements --context research` when building a paper-oriented field map.
 
+## Knowledge Lineage and Concept Maps
+
+AtomLearn separates the authoritative prerequisite DAG from a source-grounded semantic layer. The structural view automatically identifies roots, leaves, the main learning spine, hubs, branches, and cross-module bridges. Optional annotations and typed relations explain each concept's central question, role, contribution, boundaries, motivation, derivation, contrasts, and applications without changing learning prerequisites.
+
+```powershell
+python atom-learn/scripts/atomlearn.py lineage init courses/calculus
+python atom-learn/scripts/atomlearn.py lineage import courses/calculus --input lineage-import.yaml --expected-lineage-revision 0
+python atom-learn/scripts/atomlearn.py lineage overview courses/calculus --lens all
+python atom-learn/scripts/atomlearn.py lineage trace courses/calculus calculus.derivative.definition --depth 3
+python atom-learn/scripts/atomlearn.py lineage route courses/calculus calculus.rate.average calculus.derivative.geometric
+```
+
+Use `overview` for a field map, `trace` for one concept's origins and consequences, and `route` to explain how two concepts connect. The same map can overlay current learning status, sample-contained exam emphasis, or the concepts demanded by mapped research papers. High-confidence semantic relations require a registered source locator, while the prerequisite DAG remains the only authority for activation. See [Knowledge Lineage Workflow](atom-learn/references/KNOWLEDGE_LINEAGE.md), [Lineage Schema](atom-learn/references/LINEAGE_SCHEMA.md), and [Knowledge Lineage Design](docs/KNOWLEDGE_LINEAGE_DESIGN.md).
+
 ## Research Reading
 
 AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It builds a guided map across surveys, seminal work, theory and methods, benchmarks and datasets, critiques and replications, and applications. Each completed paper records evidence-linked claims, limitations, open questions, and relations to other work.
@@ -150,12 +165,13 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
 - [Flexible Intake Design](docs/INTAKE_DESIGN.md)
 - [RAG Design](docs/RAG_DESIGN.md)
+- [Knowledge Lineage Design](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 
 ## Development Validation
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py
 ```
 
 The repository includes small calculus, operating-systems, and synthetic research-reading plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

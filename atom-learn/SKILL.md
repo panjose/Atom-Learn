@@ -1,6 +1,6 @@
 ---
 name: atom-learn
-description: Build, retrieve for, run, personalize, and safely evolve persistent source-grounded learning courses, exam-preparation paths, and research-reading programs. Accept complete textbooks or knowledge bases, a user-provided outline or syllabus, past exams or question banks, or only a field keyword, concept, skill, or topic name; index local sources; correct evidence gaps with harness Web Search; analyze question coverage, common knowledge points, difficulty, and cognitive demand; adapt explanation style and research orientation from privacy-preserving cross-session chat signals; turn coverage into a prerequisite DAG of Knowledge Atoms; and track learning evidence. Use for RAG-grounded course creation, exam analysis, targeted learning or review, one-concept-at-a-time study, durable progress, session-aware personalization, mastery checks, spaced review, adaptive teaching, critical paper reading, literature synthesis, field orientation, or workspace recovery.
+description: Build, retrieve for, run, personalize, map, and safely evolve persistent source-grounded learning courses, exam paths, research-reading programs, and knowledge-lineage maps. Accept textbooks or knowledge bases, outlines, past exams or question banks, or only a field keyword, concept, skill, or topic; index local sources; correct gaps with harness Web Search; analyze question coverage and difficulty; organize prerequisite spines, concept roles, derivations, contrasts, applications, branches, and a concept's 来龙去脉; adapt teaching and research orientation from privacy-preserving cross-session signals; turn coverage into a prerequisite DAG of Knowledge Atoms; and track learning evidence. Use for RAG-grounded course creation, knowledge maps, targeted study or review, durable progress, personalization, mastery checks, spaced review, critical paper reading, literature synthesis, field orientation, exam analysis, or workspace recovery.
 ---
 
 # AtomLearn
@@ -87,7 +87,8 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 5. Create a structured exam payload. Store a concise stem summary, never the full question or solution in exam canonical state. Map each question to stable knowledge-point IDs and existing Atoms; keep uncertain or absent Atom mappings explicit.
 6. Run `exam import`, `exam analyze`, and `exam validate`. Present commonness as a property of the supplied corpus, not a forecast of future questions.
 7. Run `adapt guidance --context exam`, then `exam plan --mode learning|review|mixed`. Use the queue's prerequisites, Evidence gaps, difficulty, and representative questions.
-8. Teach or review the top eligible Atom. Withhold the solution during a diagnostic attempt, record normal Evidence, assess it, and rerun the plan.
+8. If lineage is initialized, run `lineage trace` on the top target. Explain its prerequisite chain and exam-relevant conceptual thread before teaching it.
+9. Teach or review the top eligible Atom. Withhold the solution during a diagnostic attempt, record normal Evidence, assess it, and rerun the plan.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
@@ -100,6 +101,26 @@ python <SKILL_DIR>/scripts/atomlearn.py exam validate <workspace>
 ```
 
 Never call a frequently sampled point "certain to appear." Never infer learner ability from question difficulty. Never prioritize a high-emphasis target ahead of an unmet prerequisite or weaken mastery requirements for exam speed.
+
+### Build and query knowledge lineage
+
+1. Read [references/KNOWLEDGE_LINEAGE.md](references/KNOWLEDGE_LINEAGE.md) and [references/LINEAGE_SCHEMA.md](references/LINEAGE_SCHEMA.md).
+2. Import and validate the course first. Run `lineage init`; the prerequisite DAG immediately provides roots, leaves, a learning spine, hubs, branches, and cross-module bridges.
+3. For a global request, run `lineage overview --lens structure|learning|conceptual|exam|research|all`. Select the smallest lens that answers the learner's goal.
+4. For a concept's 来龙去脉, run `lineage trace <atom-id>`. For how two concepts connect, run `lineage route <from> <to>`.
+5. When more explanation is useful, use RAG to ground Atom roles, central questions, boundaries, semantic relations, and curated threads. Import them with an expected lineage revision.
+6. Use `motivates`, `defines`, `derives`, `generalizes`, `specializes`, `contrasts`, `analogous_to`, `extends`, `refines`, `supersedes`, `applies_to`, `implements`, `evaluates`, or `bridges` precisely. Do not substitute a generic `related_to` edge.
+7. Render and validate. Present a narrative spine plus relevant branches rather than dumping every node.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py lineage init <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py lineage import <workspace> --input <lineage-import.yaml> --expected-lineage-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py lineage overview <workspace> --lens all
+python <SKILL_DIR>/scripts/atomlearn.py lineage trace <workspace> <atom-id> --depth 3
+python <SKILL_DIR>/scripts/atomlearn.py lineage route <workspace> <from-atom-id> <to-atom-id>
+```
+
+Keep the prerequisite DAG authoritative for activation and mastery. Semantic edges explain meaning but never unlock Atoms. Ground every high-confidence relation in a registered course or RAG source; use `synthesized` only for an explicitly labeled synthesis.
 
 ### Resume a course
 
@@ -138,7 +159,7 @@ Use session adaptation only for presentation choices. Never let it lower mastery
 5. Use the RAG corrective-search workflow to build an initial map of representative roles: survey, seminal, theory or method families, benchmarks or datasets, critiques or replications, and applications. Verify bibliographic metadata; do not equate citation count with evidence quality.
 6. Run `research init`, then `rag requirements --context research`. Pass research-question, survey, method, evaluation, and critique/replication coverage before finalizing the paper map.
 7. Create an import plan, then run `research import`, `research validate`, and `research next`.
-8. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, repair them through the learning workflow without losing the paper position.
+8. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, use `lineage trace` to explain and repair their prerequisite context without losing the paper position.
 9. Read in triage, structure, and evidence passes. Save a critical note with `research note`; mark it complete only after the critical-reading guard passes.
 10. Run `research synthesize` after a coherent group is complete. Report agreements, contradictions, replications, recurring limitations, open questions, and search limits.
 
@@ -235,7 +256,9 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md) when creating session signal payloads or troubleshooting adaptation state.
 - Read [references/EXAM_PREPARATION.md](references/EXAM_PREPARATION.md) when the learner supplies past papers, mock exams, sample questions, or a question bank, or asks for common-point, difficulty, or targeted preparation analysis.
 - Read [references/EXAM_SCHEMA.md](references/EXAM_SCHEMA.md) when creating exam import payloads, mapping questions to Atoms, or troubleshooting exam state.
+- Read [references/KNOWLEDGE_LINEAGE.md](references/KNOWLEDGE_LINEAGE.md) when the learner asks for a knowledge map, conceptual structure, main thread, branches, a concept's 来龙去脉, or connections between two concepts.
+- Read [references/LINEAGE_SCHEMA.md](references/LINEAGE_SCHEMA.md) when creating semantic annotations, relations, or curated threads, or troubleshooting lineage state.
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a knowledge-lineage request, distinguish prerequisites from semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.

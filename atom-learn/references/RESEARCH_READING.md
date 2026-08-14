@@ -39,7 +39,7 @@ Prefer an initial map of 8-20 representative papers, then expand deliberately. C
 5. critiques and replications that test accepted claims;
 6. applications and recent challengers after foundations are clear.
 
-Use `prerequisite_paper_ids` for the reading order. Use `cites` for internal citation links. Put references outside the imported set in `external_citations`. Link `concept_atom_ids` when a paper assumes knowledge that the learner may need to repair.
+Use `prerequisite_paper_ids` for the reading order. Use `cites` for internal citation links. Put references outside the imported set in `external_citations`. Link `concept_atom_ids` when a paper assumes knowledge that the learner may need to repair. When lineage is initialized, trace those Atoms to expose the smallest prerequisite and conceptual repair route while preserving the Active Paper.
 
 Do not use citation count as evidence quality. Mark why each paper is in scope and what role it plays.
 

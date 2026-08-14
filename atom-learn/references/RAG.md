@@ -59,6 +59,8 @@ Supported local formats are TXT, Markdown, RST, HTML, JSON, YAML, CSV, text-base
 
 For past papers and question banks, use one stable source ID per paper or collection and retain page/question locators. Keep full stems and marking schemes in this private source layer; pass only concise summaries and locators into the exam subsystem described in [EXAM_PREPARATION.md](EXAM_PREPARATION.md).
 
+For knowledge-lineage curation, retrieve evidence for the proposed relationship rather than only each Atom in isolation. Search for the source concept, target concept, relation type, and counterexamples or scope limits. A semantic relation above `0.7` confidence must cite a registered course or RAG source locator. Retrieval rank is candidate relevance, not relation confidence; see [KNOWLEDGE_LINEAGE.md](KNOWLEDGE_LINEAGE.md).
+
 The index creates contextual chunks from document title, section, locator, and content. Re-ingesting the same source ID creates a new immutable source revision and deactivates older chunks without losing their audit record. Pass `--expected-rag-revision <revision>` on ingestion, embedding, and coverage mutations when another process may share the workspace.
 
 ## Retrieve and rerank

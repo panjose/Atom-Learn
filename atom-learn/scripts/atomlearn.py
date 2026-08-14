@@ -1388,10 +1388,22 @@ def build_parser() -> argparse.ArgumentParser:
     exam_parser = sub.add_parser("exam", add_help=False)
     exam_parser.add_argument("-h", "--help", action="store_true", dest="exam_help")
     exam_parser.add_argument("exam_args", nargs=argparse.REMAINDER)
+    lineage_parser = sub.add_parser("lineage", add_help=False)
+    lineage_parser.add_argument("-h", "--help", action="store_true", dest="lineage_help")
+    lineage_parser.add_argument("lineage_args", nargs=argparse.REMAINDER)
     return parser
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "lineage":
+        from lineage import AtomLearnError as LineageAtomLearnError
+        from lineage import LineageError, run as run_lineage
+
+        try:
+            run_lineage(["--help"] if args.lineage_help else args.lineage_args)
+        except (LineageError, LineageAtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "exam":
         from exam import AtomLearnError as ExamAtomLearnError
         from exam import ExamError, run as run_exam
@@ -1509,6 +1521,16 @@ def run(args: argparse.Namespace) -> None:
                 errors.extend(f"exam: {error}" for error in exam_engine.validate())
             except (ExamError, ExamAtomLearnError) as exc:
                 errors.append(f"exam: {exc}")
+        lineage_root = workspace.meta / "lineage"
+        if lineage_root.is_dir():
+            from lineage import AtomLearnError as LineageAtomLearnError
+            from lineage import LineageEngine, LineageError
+
+            try:
+                lineage_engine = LineageEngine.load(str(workspace.root))
+                errors.extend(f"lineage: {error}" for error in lineage_engine.validate())
+            except (LineageError, LineageAtomLearnError, OSError, yaml.YAMLError) as exc:
+                errors.append(f"lineage: {exc}")
         if errors:
             raise AtomLearnError("Workspace validation failed:\n- " + "\n- ".join(errors))
         emit({"ok": True, "revision": workspace.revision, "atoms": len(workspace.atoms)})
@@ -1540,6 +1562,17 @@ def run(args: argparse.Namespace) -> None:
             if exam_errors:
                 raise AtomLearnError("Exam validation failed:\n- " + "\n- ".join(exam_errors))
             summary["exam"] = exam_engine.status()
+        if (workspace.meta / "lineage").is_dir():
+            from lineage import LineageEngine, LineageError
+
+            try:
+                lineage_engine = LineageEngine.load(str(workspace.root))
+                lineage_errors = lineage_engine.validate()
+            except (LineageError, AtomLearnError, OSError, yaml.YAMLError) as exc:
+                raise AtomLearnError(f"Cannot load lineage status: {exc}") from exc
+            if lineage_errors:
+                raise AtomLearnError("Lineage validation failed:\n- " + "\n- ".join(lineage_errors))
+            summary["lineage"] = lineage_engine.status()
         emit(summary, as_json=args.json)
         return
     if args.command == "suggest-next":

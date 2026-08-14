@@ -112,7 +112,7 @@ Read `adapt guidance --context exam` and apply presentation/challenge preference
 
 ## Run learning and review
 
-1. Start with the top queue entry, but repair its prerequisites first.
+1. Start with the top queue entry, but repair its prerequisites first. When lineage is initialized, run `lineage trace <workspace> <atom-id>` to expose the target's full prerequisite and conceptual context.
 2. Teach the Atom from source-grounded principles, not from one memorized answer pattern.
 3. Select a representative question at an appropriate difficulty; withhold the solution while the learner attempts it.
 4. Record the attempt as normal `diagnostic`, `mastery_check`, or `review` Evidence for the Active Atom.

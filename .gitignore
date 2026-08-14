@@ -22,5 +22,7 @@ __pycache__/
 **/PERSONALIZATION.md
 **/EXAM_BLUEPRINT.md
 **/EXAM_STUDY_PLAN.md
+**/KNOWLEDGE_LINEAGE.md
+!atom-learn/references/KNOWLEDGE_LINEAGE.md
 courses/
 materials/
