@@ -48,6 +48,8 @@ The CLI marks `mastered` only when the average meets `pass_threshold` and every 
 
 Save the prompt, response summary, scores, feedback, and rationale. Do not save a fabricated verbatim learner answer.
 
+Record Evidence only for `current.active_atom_id`, and require that Atom's canonical status to be `active`. Do not pre-write Evidence for available, locked, deferred, skipped, mastered, or archived Atoms. `validate` rejects pending Evidence whose Atom is no longer Active.
+
 ## Remediation
 
 Target the lowest-scoring dimension. Rebuild causal links for weak explanation, fade scaffolding for weak application, use counterexamples for weak discrimination, vary one context feature for weak transfer, and request a revised missing link for weak teach-back. Do not repeat the entire original lecture by default.

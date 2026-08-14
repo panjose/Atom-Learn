@@ -181,6 +181,50 @@ def test_future_question_is_parked_without_changing_focus() -> None:
     assert question["related_atom_id"] == "os.thread.definition"
 
 
+def test_evidence_can_be_recorded_only_for_the_active_atom() -> None:
+    workspace, revision = new_workspace("evidence-guard")
+    available_payload = write_payload(
+        workspace,
+        "available-evidence.yaml",
+        evidence_payload("calculus.limit.approach", 0.9),
+    )
+    without_active = invoke(
+        "record-evidence",
+        workspace,
+        "--input",
+        available_payload,
+        "--expected-revision",
+        revision,
+        check=False,
+    )
+    assert without_active.returncode == 2
+    assert "only for the Active Atom" in without_active.stderr
+
+    revision = activate(workspace, "calculus.limit.approach", revision)
+    locked_payload = write_payload(
+        workspace,
+        "locked-evidence.yaml",
+        evidence_payload("calculus.derivative.definition", 0.9),
+    )
+    for_locked = invoke(
+        "record-evidence",
+        workspace,
+        "--input",
+        locked_payload,
+        "--expected-revision",
+        revision,
+        check=False,
+    )
+    assert for_locked.returncode == 2
+    assert "requested 'calculus.derivative.definition'" in for_locked.stderr
+    assert status(workspace)["course"]["revision"] == revision
+    evidence = yaml.safe_load(
+        (workspace / ".atomlearn" / "evidence.yaml").read_text(encoding="utf-8")
+    )
+    assert evidence["items"] == []
+    assert output_json(invoke("validate", workspace))["ok"] is True
+
+
 def test_due_review_can_be_activated() -> None:
     workspace, revision = new_workspace("review")
     revision = activate(workspace, "calculus.limit.approach", revision)

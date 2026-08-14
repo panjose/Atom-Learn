@@ -895,6 +895,8 @@ class Workspace:
                 errors.append(f"{item_id}.kind is invalid")
             if item.get("result") not in {"pending", "mastered", "partial", "not_mastered"}:
                 errors.append(f"{item_id}.result is invalid")
+            if item.get("result") == "pending" and item.get("atom_id") != self.current.get("active_atom_id"):
+                errors.append(f"{item_id} is pending for an Atom that is not Active")
             scores = item.get("scores")
             if not isinstance(scores, dict) or not scores:
                 errors.append(f"{item_id}.scores must be a non-empty mapping")
@@ -2002,9 +2004,15 @@ class Workspace:
             self.current["current_question"] = None
 
     def record_evidence(self, payload: dict[str, Any]) -> str:
-        atom_id = payload.get("atom_id") or self.current.get("active_atom_id")
+        active_atom_id = self.current.get("active_atom_id")
+        atom_id = payload.get("atom_id") or active_atom_id
         if atom_id not in self.atoms:
             raise AtomLearnError(f"Unknown Evidence Atom: {atom_id!r}")
+        if atom_id != active_atom_id or self.atoms[atom_id].get("status") != "active":
+            raise AtomLearnError(
+                f"Evidence can be recorded only for the Active Atom; "
+                f"requested {atom_id!r}, Active Atom is {active_atom_id!r}"
+            )
         kind = payload.get("kind", "mastery_check")
         if kind not in EVIDENCE_KINDS:
             raise AtomLearnError(f"Invalid Evidence kind: {kind!r}")

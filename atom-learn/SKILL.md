@@ -257,7 +257,7 @@ Do not teach a future Atom to be conversationally helpful. Record it and return 
 5. If not mastered, target the weakest dimension and keep the Atom active.
 6. If mastered, render progress, use `suggest-next`, and activate a successor only when the learner asks to continue or the active learning request clearly authorizes continuation.
 
-Never mark an Atom mastered without persisted Evidence. A provisional skip is a learner-directed assumption with its own status, not Evidence.
+Never mark an Atom mastered without persisted Evidence. A provisional skip is a learner-directed assumption with its own status, not Evidence. Never record Evidence for a non-Active Atom; activate the intended Atom first and let the CLI reject mismatched or locked targets.
 
 ### Handle prerequisite backtracking
 
