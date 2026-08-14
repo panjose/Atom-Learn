@@ -62,7 +62,12 @@ python atom-learn/scripts/atomlearn.py status courses/calculus --json
 
 AtomLearn 支持三种主要输入模式：`sources` 用于完整教材或知识库，`outline` 用于课程大纲或用户自建结构，`topic` 用于用户只提供领域关键词、概念、技能或名词的情况。三种模式最终都会生成同一套来源可追踪的 Knowledge Atom DAG，但采用不同的资料发现和原子化策略。
 
+首次使用通常应走可恢复的 `start` 向导。只提供主题的用户输入一个短语即可；资料和大纲用户只需提供一个经过公开 JSON Schema 校验的 JSON/YAML 文档。向导会创建课程、intake 与 RAG 状态，为资料建立索引，在覆盖不足时返回结构化 Web Search 工作，并在之后通过同一命令接收生成的课程计划。
+
 ```powershell
+python atom-learn/scripts/atomlearn.py start courses/causal --topic "causal inference"
+python atom-learn/scripts/atomlearn.py start courses/calculus --input atom-learn/assets/templates/start-sources.yaml
+python atom-learn/scripts/atomlearn.py start courses/calculus --print-schema
 python atom-learn/scripts/atomlearn.py intake init courses/calculus --input intake.yaml
 python atom-learn/scripts/atomlearn.py intake guidance courses/calculus
 python atom-learn/scripts/atomlearn.py intake update courses/calculus --input discovery-update.yaml --expected-intake-revision 0
@@ -70,7 +75,7 @@ python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input cour
 python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expected-intake-revision 1
 ```
 
-完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧和权威来源发现，不要求学习者自己编写教学大纲。Intake 完成检查会确保每个非归档 Atom 都有来源 locator。起始 payload 模板位于 `atom-learn/assets/templates/intake-*.yaml`。完整方法见[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
+完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧和权威来源发现，不要求学习者自己编写教学大纲。Intake 完成检查会确保每个非归档 Atom 都有来源 locator。统一起始 payload 位于 `atom-learn/assets/templates/start-*.yaml`，机器可读契约是 [start.schema.json](atom-learn/assets/schemas/start.schema.json)。完整方法见[统一 Start 向导](atom-learn/references/START_WIZARD.md)和[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
 
 ## RAG 与纠错式 Web Search
 
@@ -209,6 +214,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [科研论文阅读设计](docs/RESEARCH_READING_DESIGN.md)
 - [灵活输入设计](docs/INTAKE_DESIGN.md)
 - [RAG 设计](docs/RAG_DESIGN.md)
+- [Start 向导设计](docs/START_WIZARD_DESIGN.md)
 - [知识脉络设计](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 - [弹性进度设计](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 - [详细展开设计](docs/DETAILED_EXPANSION_DESIGN.md)

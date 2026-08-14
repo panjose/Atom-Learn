@@ -1,0 +1,11 @@
+title: Learn from my textbook
+goal: Build working knowledge from the supplied material.
+sources:
+  - id: source.primary
+    title: Primary textbook
+    type: pdf
+    authority: textbook
+    path: C:/materials/textbook.pdf
+    ocr: auto
+desired_outcome: working_knowledge
+target_depth: working

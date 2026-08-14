@@ -62,7 +62,12 @@ See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teachi
 
 AtomLearn supports three primary input modes: `sources` for complete textbooks or knowledge bases, `outline` for a syllabus or user-created structure, and `topic` when the user supplies only a field keyword, concept, skill, or name. All three produce the same source-traceable Knowledge Atom DAG, but use different discovery and atomization strategies.
 
+The normal first-use path is the resumable `start` wizard. Topic-only users can provide one phrase; source and outline users provide one JSON/YAML document validated by the public JSON Schema. The wizard creates course, intake, and RAG state, indexes supplied content, returns structured Web Search work when coverage is incomplete, and later accepts the generated course plan through the same command.
+
 ```powershell
+python atom-learn/scripts/atomlearn.py start courses/causal --topic "causal inference"
+python atom-learn/scripts/atomlearn.py start courses/calculus --input atom-learn/assets/templates/start-sources.yaml
+python atom-learn/scripts/atomlearn.py start courses/calculus --print-schema
 python atom-learn/scripts/atomlearn.py intake init courses/calculus --input intake.yaml
 python atom-learn/scripts/atomlearn.py intake guidance courses/calculus
 python atom-learn/scripts/atomlearn.py intake update courses/calculus --input discovery-update.yaml --expected-intake-revision 0
@@ -70,7 +75,7 @@ python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input cour
 python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expected-intake-revision 1
 ```
 
-Complete-source mode inventories and reconciles materials; outline mode treats outline items as coverage anchors rather than final Atom boundaries; topic mode performs term disambiguation and authoritative source discovery without asking the learner to invent a syllabus. Intake completion verifies that every non-archived Atom has a source locator. Starter payloads are available under `atom-learn/assets/templates/intake-*.yaml`. See [Course Intake Workflows](atom-learn/references/COURSE_INTAKE.md).
+Complete-source mode inventories and reconciles materials; outline mode treats outline items as coverage anchors rather than final Atom boundaries; topic mode performs term disambiguation and authoritative source discovery without asking the learner to invent a syllabus. Intake completion verifies that every non-archived Atom has a source locator. Unified starter payloads are under `atom-learn/assets/templates/start-*.yaml`, and the machine-readable contract is [start.schema.json](atom-learn/assets/schemas/start.schema.json). See [Unified Start Wizard](atom-learn/references/START_WIZARD.md) and [Course Intake Workflows](atom-learn/references/COURSE_INTAKE.md).
 
 ## RAG and Corrective Web Search
 
@@ -209,6 +214,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
 - [Flexible Intake Design](docs/INTAKE_DESIGN.md)
 - [RAG Design](docs/RAG_DESIGN.md)
+- [Start Wizard Design](docs/START_WIZARD_DESIGN.md)
 - [Knowledge Lineage Design](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 - [Flexible Progression Design](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 - [Detailed Expansion Design](docs/DETAILED_EXPANSION_DESIGN.md)

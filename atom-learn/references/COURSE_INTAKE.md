@@ -19,7 +19,14 @@ Classify the primary input before building the Knowledge Atom map:
 
 Use the most information-rich primary mode. A textbook with a table of contents remains `sources`. A short syllabus with a few references remains `outline`. Mixed inputs may retain secondary fields while using one primary mode.
 
-Create the base workspace, write an intake payload, and run:
+For a new workspace, prefer the unified [start wizard](START_WIZARD.md), which generates intake and retrieval state from one request:
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py start <workspace> --topic <name>
+python <SKILL_DIR>/scripts/atomlearn.py start <workspace> --input <start.yaml>
+```
+
+For manual subsystem control, create the base workspace, write an intake payload, and run:
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py intake init <workspace> --input <intake.yaml>

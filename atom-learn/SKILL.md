@@ -25,7 +25,7 @@ Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, includin
 
 ### Start from any input
 
-1. Create the base workspace with `init`.
+1. Prefer the unified `start` entry for a new course. Accept one topic phrase or one JSON/YAML payload conforming to `assets/schemas/start.schema.json`; do not ask the learner to prepare separate intake, source, coverage, and plan files.
 2. Read [references/COURSE_INTAKE.md](references/COURSE_INTAKE.md) and [references/INTAKE_SCHEMA.md](references/INTAKE_SCHEMA.md).
 3. Classify the primary input as `sources`, `outline`, or `topic`. Use the most information-rich mode and retain secondary inputs.
 4. Create an intake payload from the matching template and run `intake init` followed by `intake guidance`.
@@ -36,6 +36,8 @@ Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, includin
 9. Build and import a source-grounded plan, then run `intake complete`, `validate`, and `render`.
 
 ```text
+python <SKILL_DIR>/scripts/atomlearn.py start <workspace> --topic <name>
+python <SKILL_DIR>/scripts/atomlearn.py start <workspace> --input <start.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py init <workspace> --course-id <id> --title <title> --goal <goal>
 python <SKILL_DIR>/scripts/atomlearn.py intake init <workspace> --input <intake.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py intake guidance <workspace>
@@ -48,6 +50,8 @@ python <SKILL_DIR>/scripts/atomlearn.py intake complete <workspace>
 ```
 
 Never ask a topic-only user to supply a complete outline. Never treat a source table of contents or user outline as the final prerequisite graph. Keep every non-archived Atom traceable to a source locator.
+
+When `start` returns `web_search_required`, execute its bounded harness tasks and call the same entry again with `web_evidence` and candidate-grounded `verdicts`. When it returns `course_plan_required`, generate the requested source-grounded DAG and call the same entry with `course_plan`. The auto-generated `.atomlearn/start.yaml` is orchestration state, not another user-authored form.
 
 ### Retrieve and correct source gaps
 
@@ -308,6 +312,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) when mapping a field, choosing a reading order, reading papers, or identifying evidence-linked gaps.
 - Read [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md) when creating paper import plans or critical notes, or troubleshooting research state.
 - Read [references/COURSE_INTAKE.md](references/COURSE_INTAKE.md) when the user supplies full sources, an outline, mixed materials, or only a topic name.
+- Read [references/START_WIZARD.md](references/START_WIZARD.md) when creating or resuming a course through the unified one-input workflow.
 - Read [references/INTAKE_SCHEMA.md](references/INTAKE_SCHEMA.md) when creating or updating an intake payload, or troubleshooting intake state.
 - Read [references/RAG.md](references/RAG.md) when indexing materials, retrieving course evidence, correcting outline/topic gaps with Web Search, reranking, or evaluating retrieval and grounding quality.
 - Read [references/RAG_SCHEMA.md](references/RAG_SCHEMA.md) when creating source, web-evidence, query, embedding, correction, coverage, or evaluation payloads, or troubleshooting retrieval state.

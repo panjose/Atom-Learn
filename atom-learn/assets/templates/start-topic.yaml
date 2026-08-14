@@ -1,0 +1,6 @@
+topic: causal inference
+goal: Understand the foundations and evaluate common methods.
+desired_outcome: working_knowledge
+target_depth: working
+prior_knowledge: [basic probability]
+constraints: []

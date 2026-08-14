@@ -2573,6 +2573,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage AtomLearn course state")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    start_parser = sub.add_parser("start", add_help=False)
+    start_parser.add_argument("-h", "--help", action="store_true", dest="start_help")
+    start_parser.add_argument("start_args", nargs=argparse.REMAINDER)
     init_parser = sub.add_parser("init", help="Create a course workspace")
     init_parser.add_argument("workspace")
     init_parser.add_argument("--course-id", required=True)
@@ -2705,6 +2708,16 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "start":
+        from intake import IntakeError
+        from rag import RagError
+        from wizard import WizardError, run as run_wizard
+
+        try:
+            run_wizard(["--help"] if args.start_help else args.start_args)
+        except (WizardError, IntakeError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "lineage":
         from lineage import AtomLearnError as LineageAtomLearnError
         from lineage import LineageError, run as run_lineage
