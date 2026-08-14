@@ -25,7 +25,7 @@ AtomLearn answers these questions with a multi-lens lineage map. The structural 
 
 ## Two graph layers
 
-The prerequisite DAG remains the authority for learning order. Its edges mean that one Atom must be understood before another can be activated. Lineage analysis derives roots, leaves, topological order, the longest learning spine, hubs, module boundaries, and cross-module bridges from this DAG.
+The prerequisite DAG remains the authority for learning order. Its edges require a mastery-like state or an explicit provisional skip before a successor can be activated. The latter is a disclosed traversal assumption, not understanding. Lineage analysis derives roots, leaves, topological order, the longest learning spine, hubs, module boundaries, and cross-module bridges from this DAG.
 
 Semantic relations explain conceptual meaning without changing activation rules. Supported relation types are:
 
@@ -120,7 +120,7 @@ The shortest route may traverse prerequisite or semantic edges. Every step expos
 
 `--lens structure` shows the prerequisite architecture. Use it for orientation and course diagnosis.
 
-`--lens learning` overlays current status, available Atoms, review-due Atoms, the Active Atom, and status along the main spine. Use it to turn a map into a next action.
+`--lens learning` overlays current status, available, review-due, skipped, and deferred Atoms, the Active Atom, and status along the main spine. Use it to turn a map into a next action and to make provisional assumptions visible.
 
 `--lens conceptual` shows annotations, relation counts, grounded semantic edges, and curated threads. Use it to explain why ideas appear and how schools, methods, or applications connect.
 

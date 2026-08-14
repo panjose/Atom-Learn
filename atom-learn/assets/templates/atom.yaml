@@ -18,5 +18,7 @@ mastery:
 attempts: 0
 confidence: null
 last_reviewed_at: null
+evidence_ids: []
+flexibility: null
 created_at: ""
 updated_at: ""

@@ -83,6 +83,9 @@ SUPPORTED_METRICS = {
     "atom.blocking_questions_as_current",
     "atom.parked_questions",
     "course.mastered_ratio",
+    "course.skipped_atoms",
+    "course.skipped_ratio",
+    "course.deferred_atoms",
     "course.open_questions",
     "course.parked_questions",
     "course.pending_reviews",
@@ -387,6 +390,8 @@ class EvolutionEngine:
             }
         non_archived = [atom for atom in self.workspace.atoms.values() if atom.get("status") != "archived"]
         mastered = [atom for atom in non_archived if atom.get("status") in {"mastered", "review_due"}]
+        skipped = [atom for atom in non_archived if atom.get("status") == "skipped"]
+        deferred = [atom for atom in non_archived if atom.get("status") == "deferred"]
         adaptation = self.adaptation_summary()
         return {
             "schema_version": SCHEMA_VERSION,
@@ -397,6 +402,9 @@ class EvolutionEngine:
                 "total_atoms": len(non_archived),
                 "mastered_atoms": len(mastered),
                 "mastered_ratio": round(len(mastered) / len(non_archived), 3) if non_archived else 0.0,
+                "skipped_atoms": len(skipped),
+                "skipped_ratio": round(len(skipped) / len(non_archived), 3) if non_archived else 0.0,
+                "deferred_atoms": len(deferred),
                 "open_questions": sum(item.get("status") == "open" for item in questions),
                 "parked_questions": sum(item.get("status") == "parked" for item in questions),
                 "pending_reviews": sum(item.get("status") == "pending" for item in reviews),

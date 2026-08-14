@@ -10,6 +10,7 @@ learner:
 settings:
   review_intervals_days: [1, 3, 7, 30]
   mastery_default_threshold: 0.8
+  skip_policy: diagnostic_first
 sources: []
 created_at: ""
 updated_at: ""

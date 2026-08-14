@@ -37,6 +37,9 @@ Atom metrics:
 Course metrics:
 
 - `course.mastered_ratio`
+- `course.skipped_atoms`
+- `course.skipped_ratio`
+- `course.deferred_atoms`
 - `course.open_questions`
 - `course.parked_questions`
 - `course.pending_reviews`

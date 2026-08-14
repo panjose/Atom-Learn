@@ -7,6 +7,7 @@
 - Session recovery
 - Backtracking
 - Advancement
+- Flexible progression
 - Failure recovery
 
 ## Orientation
@@ -16,6 +17,8 @@ Start by establishing the learner's target, current level, time constraints, pre
 Build the map in bounded batches. For a large field, map the core path and immediate dependencies first, then expand nearby modules when the learner approaches them. State uncertainty about dependency choices or source conflicts.
 
 Finish orientation by reporting the course goal and scope, source inventory and conflicts, module and Atom counts, important prerequisite assumptions, first available Atom, and anything requiring learner confirmation. Do not turn orientation into the first lecture.
+
+When prior knowledge appears substantial, offer short diagnostics for likely-known Atoms. Do not make the learner sit through introductory teaching merely to reach the check.
 
 ## Teaching loop
 
@@ -63,6 +66,12 @@ Advance when all conditions hold:
 - the learner asks to continue, or the original request clearly authorizes continuous guided study.
 
 When multiple Atoms are available, prefer lower difficulty, then map order. Explain a non-obvious choice.
+
+## Flexible progression
+
+Treat a request to skip as a state command, not as proof of understanding. Read [FLEXIBLE_PROGRESSION.md](FLEXIBLE_PROGRESSION.md). Prefer a short diagnostic. If the learner explicitly confirms a provisional skip, allow traversal while labeling the Atom `skipped` and preserving zero mastery claim. Use `deferred` for “not now”; it must not satisfy prerequisites.
+
+If a downstream gap exposes a bad assumption, backtrack to the skipped Atom and let the CLI revoke the skip. Keep the tone neutral: reversible assumptions are part of the protocol, not learner failure.
 
 ## Failure recovery
 

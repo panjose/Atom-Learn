@@ -304,3 +304,42 @@ def test_lineage_fails_closed_on_ungrounded_or_tampered_maps() -> None:
     assert invalid.returncode == 2
     assert "lineage" in invalid.stderr.lower()
     assert "unknown Atom" in invalid.stderr
+
+
+def test_learning_overlay_discloses_skipped_and_deferred_atoms() -> None:
+    path = workspace("flexibility")
+    revision = output(invoke("status", path, "--json"))["course"]["revision"]
+    skipped = output(
+        invoke(
+            "skip",
+            path,
+            "calculus.limit.approach",
+            "--mode",
+            "provisional",
+            "--reason-code",
+            "already_mastered",
+            "--confirmed",
+            "--expected-revision",
+            revision,
+        )
+    )
+    output(
+        invoke(
+            "skip",
+            path,
+            "calculus.rate.average",
+            "--mode",
+            "defer",
+            "--reason-code",
+            "time_constraint",
+            "--expected-revision",
+            skipped["revision"],
+        )
+    )
+    learning = output(invoke("lineage", "overview", path, "--lens", "learning"))["learning"]
+    assert learning["skipped_atom_ids"] == ["calculus.limit.approach"]
+    assert learning["deferred_atom_ids"] == ["calculus.rate.average"]
+    output(invoke("lineage", "render", path))
+    rendered = (path / "KNOWLEDGE_LINEAGE.md").read_text(encoding="utf-8")
+    assert "Provisionally skipped" in rendered
+    assert "Deferred" in rendered

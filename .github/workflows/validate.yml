@@ -23,3 +23,5 @@ jobs:
       - run: python atom-learn/scripts/atomlearn.py adapt --help
       - run: python atom-learn/scripts/atomlearn.py exam --help
       - run: python atom-learn/scripts/atomlearn.py lineage --help
+      - run: python atom-learn/scripts/atomlearn.py skip --help
+      - run: python atom-learn/scripts/atomlearn.py unskip --help

@@ -203,6 +203,22 @@ def test_due_review_can_be_activated() -> None:
     assert state["active_atom"]["status"] == "active"
     assert revision == refreshed["revision"] + 1
 
+    blocked = invoke(
+        "skip",
+        workspace,
+        "calculus.limit.approach",
+        "--mode",
+        "defer",
+        "--reason-code",
+        "time_constraint",
+        "--expected-revision",
+        revision,
+        check=False,
+    )
+    assert blocked.returncode == 2
+    assert "already has mastered Evidence" in blocked.stderr
+    assert status(workspace)["course"]["revision"] == revision
+
 
 def test_invalid_cycle_is_rejected_without_persisting() -> None:
     workspace, revision = new_workspace("cycle")

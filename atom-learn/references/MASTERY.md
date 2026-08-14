@@ -4,6 +4,7 @@
 
 - Evidence dimensions
 - Check design
+- Test-out checks
 - Scoring
 - Remediation
 - Spaced review
@@ -21,6 +22,10 @@ Select dimensions that match the Atom objective. Do not force computation onto a
 ## Check design
 
 Use short, diagnostic checks. Ask one or two prompts at a time. Avoid copying the teaching example exactly. Include the central misconception when it is important to the objective. Do not ask “Do you understand?” as evidence.
+
+## Test-out checks
+
+When a learner says the Atom is easy or already mastered, skip the lecture before skipping the Evidence. Use `skip --mode diagnostic` to retrieve all required dimensions and thresholds, then create the smallest check that still covers them. A passed test-out check is normal mastered Evidence. A provisional skip is not Evidence and must not receive scores, confidence, or review scheduling.
 
 ## Scoring
 

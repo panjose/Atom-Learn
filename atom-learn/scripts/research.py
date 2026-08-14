@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any
 
 from atomlearn import (
-    MASTERY_LIKE,
+    SATISFIED_STATUSES,
     SCHEMA_VERSION,
     AtomLearnError,
     Workspace,
@@ -540,7 +540,12 @@ class ResearchEngine:
             knowledge_gaps = [
                 atom_id
                 for atom_id in paper.get("concept_atom_ids", [])
-                if self.workspace.atoms.get(atom_id, {}).get("status") not in MASTERY_LIKE
+                if self.workspace.atoms.get(atom_id, {}).get("status") not in SATISFIED_STATUSES
+            ]
+            provisional = [
+                atom_id
+                for atom_id in paper.get("concept_atom_ids", [])
+                if self.workspace.atoms.get(atom_id, {}).get("status") == "skipped"
             ]
             candidates.append(
                 {
@@ -550,7 +555,8 @@ class ResearchEngine:
                     "priority": paper.get("priority"),
                     "year": paper.get("year"),
                     "knowledge_gap_atom_ids": knowledge_gaps,
-                    "reason": self._reading_reason(paper, knowledge_gaps),
+                    "provisional_knowledge_atom_ids": provisional,
+                    "reason": self._reading_reason(paper, knowledge_gaps, provisional),
                 }
             )
         candidates.sort(
@@ -563,7 +569,9 @@ class ResearchEngine:
         )
         return candidates
 
-    def _reading_reason(self, paper: dict[str, Any], knowledge_gaps: list[str]) -> str:
+    def _reading_reason(
+        self, paper: dict[str, Any], knowledge_gaps: list[str], provisional: list[str] | None = None
+    ) -> str:
         role = paper.get("role")
         reason = {
             "survey": "Map the field vocabulary, branches, and major debates.",
@@ -578,6 +586,8 @@ class ResearchEngine:
         }.get(role, "Advance the mapped research question.")
         if knowledge_gaps:
             reason += " Repair Knowledge Atoms first: " + ", ".join(knowledge_gaps) + "."
+        if provisional:
+            reason += " Verify provisional Knowledge Atom assumptions if comprehension breaks: " + ", ".join(provisional) + "."
         return reason
 
     def activate(self, paper_id: str) -> dict[str, Any]:
@@ -600,9 +610,18 @@ class ResearchEngine:
         gaps = [
             atom_id
             for atom_id in paper.get("concept_atom_ids", [])
-            if self.workspace.atoms.get(atom_id, {}).get("status") not in MASTERY_LIKE
+            if self.workspace.atoms.get(atom_id, {}).get("status") not in SATISFIED_STATUSES
         ]
-        return {"paper_id": paper_id, "knowledge_gap_atom_ids": gaps}
+        provisional = [
+            atom_id
+            for atom_id in paper.get("concept_atom_ids", [])
+            if self.workspace.atoms.get(atom_id, {}).get("status") == "skipped"
+        ]
+        return {
+            "paper_id": paper_id,
+            "knowledge_gap_atom_ids": gaps,
+            "provisional_knowledge_atom_ids": provisional,
+        }
 
     def record_note(self, paper_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         paper = self.paper(paper_id)
@@ -747,12 +766,18 @@ class ResearchEngine:
         ]
         if active:
             analysis = active.get("analysis", {})
+            active_provisional = [
+                atom_id
+                for atom_id in active.get("concept_atom_ids", [])
+                if self.workspace.atoms.get(atom_id, {}).get("status") == "skipped"
+            ]
             current_lines.extend(
                 [
                     "## Reading Lens",
                     "",
                     f"- Role: {active.get('role')}",
-                    f"- Why now: {self._reading_reason(active, [])}",
+                    f"- Why now: {self._reading_reason(active, [], active_provisional)}",
+                    f"- Provisional concept assumptions: {compact(active_provisional, 'None')}",
                     f"- Problem: {analysis.get('problem') or 'Not recorded'}",
                     f"- Approach: {analysis.get('approach') or 'Not recorded'}",
                     f"- Field positioning: {analysis.get('field_positioning') or 'Not recorded'}",

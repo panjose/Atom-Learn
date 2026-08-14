@@ -100,11 +100,14 @@ python <SKILL_DIR>/scripts/atomlearn.py exam plan <workspace> --mode mixed --lim
 Choose `learning`, `review`, or `mixed`. The queue combines corpus emphasis, current learner gap, and question difficulty. It then applies prerequisite order and returns one of these actions:
 
 - `repair_prerequisites`;
+- `verify_skip`;
 - `learn`;
 - `remediate`;
 - `review`.
 
 Every queue entry includes its score components, Evidence status, prerequisite IDs, mapped knowledge points, and representative question IDs. Unmapped points remain coverage gaps and cannot silently influence a targeted Atom plan.
+
+`verify_skip` marks an exam-relevant Atom that the learner provisionally skipped without mastery Evidence. Mixed and review modes may surface it for a short diagnostic; learning mode honors the skip. Deferred Atoms remain outside the direct queue, while a deferred prerequisite can still block another target. Never silently convert either decision into mastery.
 
 When a target date is configured, the plan reports days remaining and warns on an expired or seven-day horizon. Time pressure may change iteration length, but it must not remove prerequisite or mastery guards.
 

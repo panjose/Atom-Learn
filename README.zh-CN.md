@@ -16,6 +16,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
 - 梳理知识根节点、学习主干、分支、枢纽、推导、历史演进、对比、应用及单点来龙去脉
 - 严格维持唯一 Active Atom，并执行所有先修守卫
+- 允许用户通过快速诊断、延后、暂定跳过或恢复 Atom 灵活调整路径，同时不伪造掌握状态
 - 分流当前 Atom 问题、阻塞性先修问题、未来问题和 Parking Lot 项目
 - 通过 explain/apply/discriminate/transfer/teach-back Evidence 判断掌握程度
 - 跨会话恢复状态，并提供 revision 冲突保护和事件审计
@@ -100,6 +101,19 @@ python atom-learn/scripts/atomlearn.py lineage route courses/calculus calculus.r
 
 使用 `overview` 查看领域全图，使用 `trace` 追溯单个概念的来龙去脉，使用 `route` 解释两个概念如何相连。同一张图还可以叠加当前学习状态、题库样本内考试重点，以及已映射论文所需概念。高置信语义关系必须具有已注册来源 locator，而先修 DAG 始终是激活顺序的唯一权威。详见[知识脉络工作流](atom-learn/references/KNOWLEDGE_LINEAGE.md)、[Lineage Schema](atom-learn/references/LINEAGE_SCHEMA.md)和[知识脉络设计](docs/KNOWLEDGE_LINEAGE_DESIGN.md)。
 
+## 弹性进度与跳过
+
+当内容比较简单、用户已经掌握、与当前目标无关，或暂时不想学习时，AtomLearn 会提供三条明确区分的路径。诊断模式只生成最小掌握检查且不修改状态；延后模式把 Atom 移出当前推荐但不解锁后续；暂定跳过模式在用户明确确认后解锁路径，却不会写入 mastery Evidence。所有决定都会显示在进度中，并且可以撤销。
+
+```powershell
+python atom-learn/scripts/atomlearn.py skip courses/calculus calculus.limit.approach --mode diagnostic
+python atom-learn/scripts/atomlearn.py skip courses/calculus calculus.limit.approach --mode defer --reason-code time_constraint
+python atom-learn/scripts/atomlearn.py skip courses/calculus calculus.limit.approach --mode provisional --reason-code already_mastered --confirmed
+python atom-learn/scripts/atomlearn.py unskip courses/calculus calculus.limit.approach
+```
+
+如果后续学习暴露知识缺口，系统可以回退到已跳过 Atom，并自动撤销原有假设。`strict_mastery` 课程会拒绝暂定绕过；包含假设的课程只能标记为 `completed_with_skips`，且 mastered、skipped 和 deferred 数量始终分开。考试计划可返回 `verify_skip`，科研阅读会显示暂定概念假设，知识脉络视图也会标出跳过和延后节点。详见[弹性进度工作流](atom-learn/references/FLEXIBLE_PROGRESSION.md)和[弹性进度设计](docs/FLEXIBLE_PROGRESSION_DESIGN.md)。
+
 ## 科研论文阅读
 
 AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会建立覆盖综述、奠基工作、理论与方法、基准与数据集、批评与复现以及应用工作的导向地图。每篇完成阅读的论文都会记录有证据支持的主张、局限、开放问题及其与其他工作的关系。
@@ -166,6 +180,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [灵活输入设计](docs/INTAKE_DESIGN.md)
 - [RAG 设计](docs/RAG_DESIGN.md)
 - [知识脉络设计](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
+- [弹性进度设计](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 
 ## 开发验证
 

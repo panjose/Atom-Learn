@@ -340,3 +340,36 @@ def test_tampered_exam_bank_fails_root_validation() -> None:
     blocked = invoke("validate", path, check=False)
     assert blocked.returncode == 2
     assert "unsupported fields: full_solution" in blocked.stderr
+
+
+def test_exam_plan_discloses_and_can_verify_provisional_skips() -> None:
+    path = workspace("flexible-skip")
+    output(invoke("exam", "import", path, "--input", payload(path, "exam.yaml", corpus())))
+    revision = output(invoke("status", path, "--json"))["course"]["revision"]
+    for atom_id in [
+        "calculus.limit.approach",
+        "calculus.rate.average",
+        "calculus.derivative.definition",
+    ]:
+        skipped = output(
+            invoke(
+                "skip",
+                path,
+                atom_id,
+                "--mode",
+                "provisional",
+                "--reason-code",
+                "already_mastered",
+                "--confirmed",
+                "--expected-revision",
+                revision,
+            )
+        )
+        revision = skipped["revision"]
+    mixed = output(invoke("exam", "plan", path, "--mode", "mixed", "--limit", 10))
+    target = next(item for item in mixed["queue"] if item["atom_id"] == "calculus.derivative.definition")
+    assert target["action"] == "verify_skip"
+    assert target["provisional_skip"] is True
+    assert any("assumptions, not mastery" in warning for warning in mixed["warnings"])
+    learning = output(invoke("exam", "plan", path, "--mode", "learning", "--limit", 10))
+    assert "calculus.derivative.definition" not in {item["atom_id"] for item in learning["queue"]}

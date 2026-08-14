@@ -15,6 +15,7 @@ import yaml
 
 from atomlearn import (
     MASTERY_LIKE,
+    SATISFIED_STATUSES,
     SCHEMA_VERSION,
     AtomLearnError,
     Workspace,
@@ -579,6 +580,8 @@ class ExamEngine:
             "active": max(0.45, 1 - confidence),
             "mastered": max(0.1, 1 - confidence),
             "review_due": max(0.45, 1 - confidence),
+            "skipped": 0.55,
+            "deferred": 0.9,
         }.get(status, 0.5)
         assessed = [
             item for item in self.workspace.evidence.get("items", [])
@@ -597,7 +600,7 @@ class ExamEngine:
 
         def visit(current: str) -> None:
             for prerequisite in self.workspace.atoms[current].get("prerequisites", []):
-                if self.workspace.atoms[prerequisite].get("status") not in MASTERY_LIKE and prerequisite not in required:
+                if self.workspace.atoms[prerequisite].get("status") not in SATISFIED_STATUSES and prerequisite not in required:
                     required.add(prerequisite)
                     visit(prerequisite)
                     ordered.append(prerequisite)
@@ -617,20 +620,23 @@ class ExamEngine:
             atom_id = item["id"]
             atom = self.workspace.atoms[atom_id]
             status = atom.get("status")
-            if mode == "learning" and status in MASTERY_LIKE:
+            if status == "deferred":
                 continue
-            if mode == "review" and status not in {"active", "mastered", "review_due"}:
+            if mode == "learning" and status in SATISFIED_STATUSES:
+                continue
+            if mode == "review" and status not in {"active", "mastered", "review_due", "skipped"}:
                 continue
             gap, latest_result = self._gap_score(atom_id)
             difficulty_component = max(0.0, min(1.0, (float(item["average_difficulty"]) - 1) / 4))
             priority = 0.50 * float(item["emphasis_score"]) + 0.35 * gap + 0.15 * difficulty_component
-            if mode == "learning" and status not in MASTERY_LIKE:
+            if mode == "learning" and status not in SATISFIED_STATUSES:
                 priority += 0.05
             if mode == "review" and status == "review_due":
                 priority += 0.08
             prerequisites = self._unmet_prerequisites(atom_id)
             action = (
                 "repair_prerequisites" if prerequisites
+                else "verify_skip" if status == "skipped"
                 else "review" if status in MASTERY_LIKE
                 else "remediate" if status == "active" or latest_result in {"partial", "not_mastered"}
                 else "learn"
@@ -652,6 +658,7 @@ class ExamEngine:
                     "corpus_tier": item["corpus_tier"],
                     "learner_gap_score": gap,
                     "latest_evidence_result": latest_result,
+                    "provisional_skip": status == "skipped",
                     "average_difficulty": item["average_difficulty"],
                     "knowledge_point_ids": item["knowledge_point_ids"],
                     "prerequisite_atom_ids": prerequisites,
@@ -672,6 +679,12 @@ class ExamEngine:
             warnings.append("The configured target date has passed; update the exam workspace before scheduling preparation.")
         elif days_remaining is not None and days_remaining <= 7:
             warnings.append("Seven or fewer days remain; preserve prerequisite guards and prioritize short diagnostic loops.")
+        if any(item["provisional_skip"] for item in candidates):
+            warnings.append(
+                "Provisionally skipped exam-mapped Atoms are assumptions, not mastery; verify them when their corpus emphasis matters."
+            )
+        if any(self.workspace.atoms[item["id"]].get("status") == "deferred" for item in analysis["atoms"]):
+            warnings.append("Deferred exam-mapped Atoms remain outside the queue until the learner restores them.")
         if not candidates:
             warnings.append(f"No mapped Atoms currently qualify for {mode} mode; use mixed mode or repair mappings.")
         return {

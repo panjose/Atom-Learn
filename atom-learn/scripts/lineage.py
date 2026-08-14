@@ -507,6 +507,14 @@ class LineageEngine:
                 atom_id for atom_id in structure["topological_order"]
                 if self.workspace.atoms[atom_id].get("status") == "review_due"
             ],
+            "skipped_atom_ids": [
+                atom_id for atom_id in structure["topological_order"]
+                if self.workspace.atoms[atom_id].get("status") == "skipped"
+            ],
+            "deferred_atom_ids": [
+                atom_id for atom_id in structure["topological_order"]
+                if self.workspace.atoms[atom_id].get("status") == "deferred"
+            ],
             "spine_status": [
                 {"atom_id": atom_id, "status": self.workspace.atoms[atom_id].get("status")}
                 for atom_id in structure["main_learning_spine"]
@@ -985,6 +993,8 @@ class LineageEngine:
         lines.extend(["", "## Learning Overlay", ""])
         lines.append("- Status counts: " + markdown(learning["status_counts"]))
         lines.append(f"- Active Atom: `{learning['active_atom_id'] or 'none'}`")
+        lines.append("- Provisionally skipped: " + markdown(learning["skipped_atom_ids"] or "None"))
+        lines.append("- Deferred: " + markdown(learning["deferred_atom_ids"] or "None"))
         exam = overview["exam"]
         lines.extend(["", "## Exam Overlay", ""])
         lines.extend(

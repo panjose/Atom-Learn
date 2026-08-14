@@ -16,6 +16,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Map roots, learning spines, branches, hubs, derivations, historical development, contrasts, applications, and each concept's lineage
 - Enforce exactly one Active Atom and guard all prerequisites
+- Let learners test out, defer, provisionally skip, or restore Atoms without fabricating mastery
 - Route in-Atom questions, blocking prerequisites, future questions, and Parking Lot items
 - Evaluate mastery through explain/apply/discriminate/transfer/teach-back Evidence
 - Restore state across sessions with revision conflict protection and event auditing
@@ -100,6 +101,19 @@ python atom-learn/scripts/atomlearn.py lineage route courses/calculus calculus.r
 
 Use `overview` for a field map, `trace` for one concept's origins and consequences, and `route` to explain how two concepts connect. The same map can overlay current learning status, sample-contained exam emphasis, or the concepts demanded by mapped research papers. High-confidence semantic relations require a registered source locator, while the prerequisite DAG remains the only authority for activation. See [Knowledge Lineage Workflow](atom-learn/references/KNOWLEDGE_LINEAGE.md), [Lineage Schema](atom-learn/references/LINEAGE_SCHEMA.md), and [Knowledge Lineage Design](docs/KNOWLEDGE_LINEAGE_DESIGN.md).
 
+## Flexible Progression and Skips
+
+When material is easy, already known, irrelevant to the current goal, or simply not timely, AtomLearn offers three distinct paths. Diagnostic mode is read-only and prepares the smallest mastery check; defer mode removes an Atom from current recommendations without unlocking successors; provisional mode unlocks the route after explicit confirmation but records no mastery Evidence. Every decision is visible and reversible.
+
+```powershell
+python atom-learn/scripts/atomlearn.py skip courses/calculus calculus.limit.approach --mode diagnostic
+python atom-learn/scripts/atomlearn.py skip courses/calculus calculus.limit.approach --mode defer --reason-code time_constraint
+python atom-learn/scripts/atomlearn.py skip courses/calculus calculus.limit.approach --mode provisional --reason-code already_mastered --confirmed
+python atom-learn/scripts/atomlearn.py unskip courses/calculus calculus.limit.approach
+```
+
+A later downstream gap can backtrack into a skipped Atom and revoke the assumption automatically. `strict_mastery` courses reject provisional bypass; courses traversed with assumptions report `completed_with_skips` and keep mastered, skipped, and deferred totals separate. Exam plans can emit `verify_skip`, research reading exposes provisional concept assumptions, and lineage views show both skipped and deferred nodes. See [Flexible Progression Workflow](atom-learn/references/FLEXIBLE_PROGRESSION.md) and [Flexible Progression Design](docs/FLEXIBLE_PROGRESSION_DESIGN.md).
+
 ## Research Reading
 
 AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It builds a guided map across surveys, seminal work, theory and methods, benchmarks and datasets, critiques and replications, and applications. Each completed paper records evidence-linked claims, limitations, open questions, and relations to other work.
@@ -166,6 +180,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Flexible Intake Design](docs/INTAKE_DESIGN.md)
 - [RAG Design](docs/RAG_DESIGN.md)
 - [Knowledge Lineage Design](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
+- [Flexible Progression Design](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 
 ## Development Validation
 

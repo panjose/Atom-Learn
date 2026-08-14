@@ -76,6 +76,8 @@ Do not ask for confirmation after every inferred signal. Ask only when a contest
 
 Guidance converts active profile values into concrete instructions. Apply only dimensions valid for the current context. For example, `research.orientation` applies to research mapping, while challenge and feedback preferences can apply to exam preparation without changing difficulty statistics or mastery thresholds.
 
+A pacing preference may cause the harness to offer shorter explanations or a diagnostic earlier. It must never create a provisional skip automatically. Only an explicit learner choice through the flexible-progression workflow may do that, and the result remains separate from mastery.
+
 Active session preferences may change:
 
 - response detail and structure;

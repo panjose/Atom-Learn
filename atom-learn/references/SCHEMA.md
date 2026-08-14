@@ -7,6 +7,7 @@
 - Course intake
 - Import plan
 - Mutation payloads
+- Flexible progression state
 - Revisions and timestamps
 
 ## Workspace layout
@@ -37,7 +38,9 @@ Knowledge lineage uses `.atomlearn/lineage/{state.yaml,map.yaml,events.ndjson}` 
 
 Use lowercase dot-separated IDs matching `[a-z0-9][a-z0-9.-]*`. Never place `/` or `\\` in an ID.
 
-Atom statuses are `locked`, `available`, `active`, `mastered`, `review_due`, and `archived`. Session phases are `orientation`, `teaching`, `questioning`, `checking`, `reviewing`, `paused`, `blocked`, and `transitioning`.
+Atom statuses are `locked`, `available`, `active`, `mastered`, `review_due`, `skipped`, `deferred`, and `archived`. `skipped` satisfies traversal without claiming mastery; `deferred` does neither. Session phases are `orientation`, `teaching`, `questioning`, `checking`, `reviewing`, `paused`, `blocked`, and `transitioning`.
+
+Course statuses are `orientation`, `active`, `completed`, `completed_with_skips`, and `paused`. `completed` requires mastery-like status for every required Atom; `completed_with_skips` discloses that traversal finished with at least one required provisional assumption.
 
 Use these question classifications: `in_atom`, `blocking_prerequisite`, `non_blocking`, `future_atom`, and `out_of_scope`.
 
@@ -98,7 +101,24 @@ atoms:
       minimum_dimension_score: 0.6
 ```
 
-Import plans add or update sources and Atoms. They do not silently remove missing records. The CLI recalculates `locked` and `available`, preserves `mastered`, `active`, `review_due`, and `archived`, then rebuilds graph edges.
+Import plans add or update sources and Atoms. They do not silently remove missing records. The CLI recalculates `locked` and `available`, preserves `mastered`, `active`, `review_due`, `skipped`, `deferred`, and `archived`, then rebuilds graph edges and existing flexibility metadata.
+
+## Flexible progression state
+
+An Atom may carry `flexibility: null` or an exact record:
+
+```yaml
+flexibility:
+  mode: provisional
+  reason_code: already_mastered
+  note: Prior coursework covers this objective.
+  diagnostic_offered: true
+  confirmed: true
+  created_at: "2026-08-14T10:00:00+00:00"
+  revoked_at: null
+```
+
+`mode` is `provisional` or `defer`. Reason codes are `already_mastered`, `too_easy`, `not_relevant`, `time_constraint`, `different_goal`, and `other`. A non-null `revoked_at` retains the latest decision record while returning the Atom to normal availability calculation. See [FLEXIBLE_PROGRESSION.md](FLEXIBLE_PROGRESSION.md).
 
 ## Mutation payloads
 

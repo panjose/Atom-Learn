@@ -24,8 +24,15 @@ except ImportError as exc:  # pragma: no cover - environment-specific guidance
 
 SCHEMA_VERSION = 1
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9.-]*$")
-ATOM_STATUSES = {"locked", "available", "active", "mastered", "review_due", "archived"}
+ATOM_STATUSES = {"locked", "available", "active", "mastered", "review_due", "skipped", "deferred", "archived"}
 MASTERY_LIKE = {"mastered", "review_due"}
+SATISFIED_STATUSES = MASTERY_LIKE | {"skipped"}
+SKIP_MODES = {"diagnostic", "provisional", "defer"}
+SKIP_REASON_CODES = {"already_mastered", "too_easy", "not_relevant", "time_constraint", "different_goal", "other"}
+SKIP_POLICIES = {"diagnostic_first", "learner_choice", "strict_mastery"}
+FLEXIBILITY_KEYS = {
+    "mode", "reason_code", "note", "diagnostic_offered", "confirmed", "created_at", "revoked_at",
+}
 PHASES = {
     "orientation",
     "teaching",
@@ -193,7 +200,11 @@ class Workspace:
             "goal": goal,
             "status": "orientation",
             "learner": {"prior_knowledge": [], "preferences": []},
-            "settings": {"review_intervals_days": [1, 3, 7, 30], "mastery_default_threshold": 0.8},
+            "settings": {
+                "review_intervals_days": [1, 3, 7, 30],
+                "mastery_default_threshold": 0.8,
+                "skip_policy": "diagnostic_first",
+            },
             "sources": [],
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -309,11 +320,11 @@ class Workspace:
 
     def recalculate_availability(self) -> None:
         for atom in self.atoms.values():
-            if atom.get("status") in {"active", "mastered", "review_due", "archived"}:
+            if atom.get("status") in {"active", "mastered", "review_due", "skipped", "deferred", "archived"}:
                 continue
             prerequisites = atom.get("prerequisites", [])
             satisfied = all(
-                prereq in self.atoms and self.atoms[prereq].get("status") in MASTERY_LIKE
+                prereq in self.atoms and self.atoms[prereq].get("status") in SATISFIED_STATUSES
                 for prereq in prerequisites
             )
             atom["status"] = "available" if satisfied else "locked"
@@ -330,8 +341,10 @@ class Workspace:
             item.get("classification") == "blocking_prerequisite" and item.get("status") == "open"
             for item in self.questions.get("items", [])
         )
-        if self.atoms and all(atom.get("status") in MASTERY_LIKE for atom in required) and not blocking_open:
-            self.course["status"] = "completed"
+        if self.atoms and all(atom.get("status") in SATISFIED_STATUSES for atom in required) and not blocking_open:
+            self.course["status"] = (
+                "completed_with_skips" if any(atom.get("status") == "skipped" for atom in required) else "completed"
+            )
         elif self.atoms:
             self.course["status"] = "active"
         else:
@@ -362,8 +375,11 @@ class Workspace:
             errors.append(str(exc))
         if not isinstance(self.course.get("revision"), int) or self.course.get("revision", -1) < 0:
             errors.append("course.revision must be a non-negative integer")
-        if self.course.get("status") not in {"orientation", "active", "completed", "paused"}:
+        if self.course.get("status") not in {"orientation", "active", "completed", "completed_with_skips", "paused"}:
             errors.append(f"course.status is invalid: {self.course.get('status')!r}")
+        settings = self.course.get("settings", {})
+        if not isinstance(settings, dict) or settings.get("skip_policy", "diagnostic_first") not in SKIP_POLICIES:
+            errors.append("course.settings.skip_policy must be diagnostic_first, learner_choice, or strict_mastery")
 
         source_ids: set[str] = set()
         for index, source in enumerate(self.course.get("sources", [])):
@@ -431,6 +447,7 @@ class Workspace:
                 atom_evidence = [item for item in self.evidence.get("items", []) if item.get("atom_id") == atom_id]
                 if not any(item.get("result") == "mastered" for item in atom_evidence):
                     errors.append(f"{atom_id} is {status} without mastered Evidence")
+            self._validate_flexibility(atom_id, atom, errors)
             for evidence_id in atom.get("evidence_ids", []):
                 if evidence_id not in evidence_ids:
                     errors.append(f"{atom_id} references missing Evidence {evidence_id!r}")
@@ -448,7 +465,7 @@ class Workspace:
             unsatisfied = [
                 prereq
                 for prereq in self.atoms[current_active].get("prerequisites", [])
-                if self.atoms.get(prereq, {}).get("status") not in MASTERY_LIKE
+                if self.atoms.get(prereq, {}).get("status") not in SATISFIED_STATUSES
             ]
             if unsatisfied:
                 errors.append(f"Active Atom {current_active} has unsatisfied prerequisites: {', '.join(unsatisfied)}")
@@ -464,21 +481,79 @@ class Workspace:
         self._validate_course_completion(errors)
         return unique(errors)
 
+    def _validate_flexibility(self, atom_id: str, atom: dict[str, Any], errors: list[str]) -> None:
+        record = atom.get("flexibility")
+        status = atom.get("status")
+        if record is None:
+            if status in {"skipped", "deferred"}:
+                errors.append(f"{atom_id} is {status} without an active flexibility record")
+            return
+        if not isinstance(record, dict) or set(record) != FLEXIBILITY_KEYS:
+            errors.append(f"{atom_id}.flexibility fields are invalid")
+            return
+        mode = record.get("mode")
+        if mode not in {"provisional", "defer"}:
+            errors.append(f"{atom_id}.flexibility.mode is invalid")
+        if record.get("reason_code") not in SKIP_REASON_CODES:
+            errors.append(f"{atom_id}.flexibility.reason_code is invalid")
+        note = record.get("note")
+        if not isinstance(note, str) or len(note) > 1000:
+            errors.append(f"{atom_id}.flexibility.note must be a string of at most 1000 characters")
+        if not isinstance(record.get("diagnostic_offered"), bool) or not isinstance(record.get("confirmed"), bool):
+            errors.append(f"{atom_id}.flexibility diagnostic and confirmation flags must be booleans")
+        try:
+            created_at = record.get("created_at")
+            if not isinstance(created_at, str) or not created_at:
+                raise AtomLearnError("created_at must be a timestamp string")
+            parse_time(created_at)
+            revoked_at = record.get("revoked_at")
+            if revoked_at is not None:
+                if not isinstance(revoked_at, str) or not revoked_at:
+                    raise AtomLearnError("revoked_at must be null or a timestamp string")
+                parse_time(revoked_at)
+        except AtomLearnError as exc:
+            errors.append(f"{atom_id}.flexibility: {exc}")
+        active = record.get("revoked_at") is None
+        expected_status = "skipped" if mode == "provisional" else "deferred"
+        if active and status != expected_status:
+            errors.append(f"{atom_id} has an active {mode} record but status is {status}")
+        if not active and status in {"skipped", "deferred"}:
+            errors.append(f"{atom_id} is {status} with a revoked flexibility record")
+        if mode == "provisional" and active and (
+            record.get("diagnostic_offered") is not True or record.get("confirmed") is not True
+        ):
+            errors.append(f"{atom_id} provisional skip requires an offered diagnostic and explicit confirmation")
+        if (
+            mode == "provisional"
+            and active
+            and self.course.get("settings", {}).get("skip_policy", "diagnostic_first") == "strict_mastery"
+        ):
+            errors.append(f"{atom_id} has a provisional skip under strict_mastery policy")
+
     def _validate_course_completion(self, errors: list[str]) -> None:
-        if self.course.get("status") != "completed":
+        course_status = self.course.get("status")
+        if course_status not in {"completed", "completed_with_skips"}:
             return
         incomplete = [
             atom["id"] for atom in self.atoms.values()
             if atom.get("status") != "archived"
             and not atom.get("optional", False)
-            and atom.get("status") not in MASTERY_LIKE
+            and atom.get("status") not in SATISFIED_STATUSES
         ]
         blocking = [
             item.get("id") for item in self.questions.get("items", [])
             if item.get("classification") == "blocking_prerequisite" and item.get("status") == "open"
         ]
         if incomplete or blocking:
-            errors.append("course.status is completed while required work remains")
+            errors.append(f"course.status is {course_status} while required work remains")
+        required_skips = [
+            atom["id"] for atom in self.atoms.values()
+            if atom.get("status") == "skipped" and not atom.get("optional", False)
+        ]
+        if course_status == "completed" and required_skips:
+            errors.append("course.status is completed despite required provisional skips")
+        if course_status == "completed_with_skips" and not required_skips:
+            errors.append("course.status is completed_with_skips but no required Atom is skipped")
 
     def _validate_dag(self, errors: list[str]) -> None:
         indegree = {atom_id: 0 for atom_id, atom in self.atoms.items() if atom.get("status") != "archived"}
@@ -677,7 +752,9 @@ class Workspace:
                 updated += 1
                 progress = {
                     key: copy.deepcopy(existing.get(key))
-                    for key in ["status", "attempts", "confidence", "last_reviewed_at", "evidence_ids", "created_at"]
+                    for key in [
+                        "status", "attempts", "confidence", "last_reviewed_at", "evidence_ids", "flexibility", "created_at"
+                    ]
                 }
             else:
                 added += 1
@@ -700,6 +777,7 @@ class Workspace:
                 "confidence": None,
                 "last_reviewed_at": None,
                 "evidence_ids": [],
+                "flexibility": None,
                 "created_at": timestamp,
                 "updated_at": timestamp,
             }
@@ -720,6 +798,16 @@ class Workspace:
             counts[atom.get("status", "unknown")] += 1
         open_questions = [item for item in self.questions.get("items", []) if item.get("status") in {"open", "parked"}]
         due_reviews = [item for item in self.reviews.get("items", []) if item.get("status") == "pending" and self.atoms.get(item.get("atom_id"), {}).get("status") == "review_due"]
+        flexibility = [
+            {
+                "atom_id": atom["id"],
+                "title": atom.get("title"),
+                "status": atom.get("status"),
+                **copy.deepcopy(atom.get("flexibility", {})),
+            }
+            for atom in self.atoms.values()
+            if atom.get("status") in {"skipped", "deferred"}
+        ]
         return {
             "valid": not validation_errors,
             "validation_errors": validation_errors,
@@ -735,6 +823,7 @@ class Workspace:
             "counts": dict(sorted(counts.items())),
             "open_questions": open_questions,
             "due_reviews": due_reviews,
+            "active_flexibility_decisions": flexibility,
             "next_candidates": [] if validation_errors else self.suggest_next(),
         }
 
@@ -781,6 +870,146 @@ class Workspace:
         self.current["learner_confusions"] = []
         self.current["next_action"] = "Run a focused review check." if reviewing else f"Teach why {atom['title']} matters."
         self.course["status"] = "active"
+
+    def skip_guidance(self, atom_id: str) -> dict[str, Any]:
+        atom_id = require_id(atom_id, "atom id")
+        atom = self.atoms.get(atom_id)
+        if not atom:
+            raise AtomLearnError(f"Unknown Atom: {atom_id}")
+        if atom.get("status") == "archived":
+            raise AtomLearnError(f"Archived Atom {atom_id} cannot be skipped")
+        status = atom.get("status")
+        if status in MASTERY_LIKE:
+            recommendation = "No skip is needed because this Atom already has mastered Evidence."
+        elif status == "locked":
+            recommendation = (
+                "This Atom is locked. Repair its prerequisites before a recorded diagnostic, or explicitly confirm a provisional skip."
+            )
+        elif status in {"skipped", "deferred"}:
+            recommendation = "Run unskip before taking a diagnostic or changing the flexibility decision."
+        else:
+            recommendation = "Run a short diagnostic covering every required mastery dimension before skipping instruction."
+        return {
+            "mode": "diagnostic",
+            "mutated": False,
+            "course_revision": self.revision,
+            "atom": {
+                "id": atom_id,
+                "title": atom.get("title"),
+                "objective": atom.get("objective"),
+                "status": status,
+                "required_dimensions": list(atom.get("mastery", {}).get("required_dimensions", [])),
+                "pass_threshold": atom.get("mastery", {}).get("pass_threshold"),
+                "minimum_dimension_score": atom.get("mastery", {}).get("minimum_dimension_score"),
+                "misconceptions": list(atom.get("misconceptions", [])),
+            },
+            "can_activate_for_diagnostic": (
+                status in {"available", "active", "review_due"}
+                and (self.current.get("active_atom_id") in {None, atom_id})
+            ),
+            "recommendation": recommendation,
+        }
+
+    def skip_atom(
+        self,
+        atom_id: str,
+        mode: str,
+        reason_code: str | None,
+        note: str,
+        confirmed: bool,
+    ) -> dict[str, Any]:
+        atom_id = require_id(atom_id, "atom id")
+        if mode not in {"provisional", "defer"}:
+            raise AtomLearnError("Mutating skip mode must be provisional or defer")
+        atom = self.atoms.get(atom_id)
+        if not atom:
+            raise AtomLearnError(f"Unknown Atom: {atom_id}")
+        status = atom.get("status")
+        if status == "archived":
+            raise AtomLearnError(f"Archived Atom {atom_id} cannot be skipped")
+        if status in MASTERY_LIKE:
+            raise AtomLearnError(f"Atom {atom_id} already has mastered Evidence and does not need skipping")
+        if status == "skipped":
+            raise AtomLearnError(f"Atom {atom_id} is already provisionally skipped")
+        if mode == "defer" and status == "deferred":
+            raise AtomLearnError(f"Atom {atom_id} is already deferred")
+        if status == "active" and self.current.get("phase") == "reviewing":
+            raise AtomLearnError(
+                f"Active review Atom {atom_id} already has mastered Evidence and cannot be skipped"
+            )
+        if reason_code not in SKIP_REASON_CODES:
+            raise AtomLearnError("reason-code must be one of: " + ", ".join(sorted(SKIP_REASON_CODES)))
+        if not isinstance(note, str) or len(note.strip()) > 1000:
+            raise AtomLearnError("skip note must be at most 1000 characters")
+        policy = self.course.get("settings", {}).get("skip_policy", "diagnostic_first")
+        if mode == "provisional" and policy == "strict_mastery":
+            raise AtomLearnError("This course uses strict_mastery skip policy; use a diagnostic or defer the Atom")
+        if mode == "provisional" and not confirmed:
+            raise AtomLearnError(
+                "Provisional skip does not prove mastery. Review the diagnostic option and rerun with --confirmed."
+            )
+        if status == "active":
+            if self.current.get("active_atom_id") != atom_id:
+                raise AtomLearnError("Active Atom status and current session disagree")
+            self.current["active_atom_id"] = None
+            self.current["phase"] = "transitioning"
+            self.current["current_question"] = None
+            self.current["learner_confusions"] = []
+        timestamp = iso()
+        atom["status"] = "skipped" if mode == "provisional" else "deferred"
+        atom["flexibility"] = {
+            "mode": mode,
+            "reason_code": reason_code,
+            "note": note.strip(),
+            "diagnostic_offered": mode == "provisional",
+            "confirmed": bool(confirmed) if mode == "provisional" else False,
+            "created_at": timestamp,
+            "revoked_at": None,
+        }
+        if self.current.get("active_atom_id") is None:
+            if self.current.get("backtrack_stack"):
+                self.current["next_action"] = (
+                    "Resume the saved parent after the prerequisite is satisfied."
+                    if mode == "provisional"
+                    else "The remedial Atom is deferred; restore it or choose another prerequisite before resuming."
+                )
+            else:
+                self.current["next_action"] = "Review the flexibility decision and choose the next available Atom."
+        return {
+            "atom_id": atom_id,
+            "mode": mode,
+            "status": atom["status"],
+            "reason_code": reason_code,
+            "mastery_claimed": False,
+            "reversible": True,
+        }
+
+    def unskip_atom(self, atom_id: str) -> dict[str, Any]:
+        atom_id = require_id(atom_id, "atom id")
+        atom = self.atoms.get(atom_id)
+        if not atom:
+            raise AtomLearnError(f"Unknown Atom: {atom_id}")
+        status = atom.get("status")
+        if status not in {"skipped", "deferred"}:
+            raise AtomLearnError(f"Atom {atom_id} is not skipped or deferred")
+        active_id = self.current.get("active_atom_id")
+        if active_id and atom_id in self.atoms.get(active_id, {}).get("prerequisites", []):
+            raise AtomLearnError(
+                f"Cannot restore {atom_id} while dependent Atom {active_id} is active; finish or leave the Active Atom first"
+            )
+        record = atom.get("flexibility")
+        if not isinstance(record, dict) or record.get("revoked_at") is not None:
+            raise AtomLearnError(f"Atom {atom_id} has no active flexibility record")
+        previous_mode = record.get("mode")
+        record["revoked_at"] = iso()
+        atom["status"] = "locked"
+        self.recalculate_availability()
+        return {
+            "atom_id": atom_id,
+            "restored_from": previous_mode,
+            "status": atom["status"],
+            "mastery_claimed": False,
+        }
 
     def update_session(self, payload: dict[str, Any]) -> None:
         if "phase" in payload:
@@ -993,8 +1222,18 @@ class Workspace:
         target = self.atoms.get(target_id)
         if not target:
             raise AtomLearnError(f"Unknown backtrack target: {target_id}")
-        if target.get("status") not in {"available", "mastered", "review_due"}:
+        if target.get("status") not in {"available", "mastered", "review_due", "skipped", "deferred"}:
             raise AtomLearnError(f"Backtrack target {target_id} is not available for remediation")
+        if target.get("status") in {"skipped", "deferred"}:
+            unmet_target_prerequisites = [
+                prerequisite
+                for prerequisite in target.get("prerequisites", [])
+                if self.atoms.get(prerequisite, {}).get("status") not in SATISFIED_STATUSES
+            ]
+            if unmet_target_prerequisites:
+                raise AtomLearnError(
+                    f"Cannot reopen {target_id}; repair its prerequisites first: {', '.join(unmet_target_prerequisites)}"
+                )
         if question_id:
             question = self.find_record(self.questions["items"], question_id, "Question")
             if question.get("classification") != "blocking_prerequisite":
@@ -1008,6 +1247,9 @@ class Workspace:
         }
         self.current.setdefault("backtrack_stack", []).append(stack_item)
         self.atoms[parent_id]["status"] = "available"
+        flexibility = target.get("flexibility")
+        if isinstance(flexibility, dict) and flexibility.get("revoked_at") is None:
+            flexibility["revoked_at"] = iso()
         target["status"] = "active"
         self.current["active_atom_id"] = target_id
         self.current["phase"] = "reviewing" if target.get("last_reviewed_at") else "teaching"
@@ -1027,7 +1269,7 @@ class Workspace:
             raise AtomLearnError(f"Saved parent Atom {parent_id} is not available")
         unsatisfied = [
             prereq for prereq in parent.get("prerequisites", [])
-            if self.atoms.get(prereq, {}).get("status") not in MASTERY_LIKE
+            if self.atoms.get(prereq, {}).get("status") not in SATISFIED_STATUSES
         ]
         if unsatisfied:
             raise AtomLearnError(f"Cannot resume; prerequisites remain unmastered: {', '.join(unsatisfied)}")
@@ -1160,6 +1402,7 @@ class Workspace:
                 "confidence": None,
                 "last_reviewed_at": None,
                 "evidence_ids": [],
+                "flexibility": None,
                 "created_at": timestamp,
                 "updated_at": timestamp,
             }
@@ -1179,6 +1422,8 @@ class Workspace:
             "active": "▶",
             "mastered": "✓",
             "review_due": "↻",
+            "skipped": "⇥",
+            "deferred": "⏸",
             "archived": "—",
         }
         modules: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -1223,7 +1468,10 @@ class Workspace:
 
         non_archived = [atom for atom in self.atoms.values() if atom.get("status") != "archived"]
         mastered = [atom for atom in non_archived if atom.get("status") in MASTERY_LIKE]
-        percent = (100 * len(mastered) / len(non_archived)) if non_archived else 0
+        skipped = [atom for atom in non_archived if atom.get("status") == "skipped"]
+        deferred = [atom for atom in non_archived if atom.get("status") == "deferred"]
+        mastery_percent = (100 * len(mastered) / len(non_archived)) if non_archived else 0
+        path_percent = (100 * (len(mastered) + len(skipped)) / len(non_archived)) if non_archived else 0
         progress_lines = [
             "# Learning Progress",
             "",
@@ -1231,7 +1479,10 @@ class Workspace:
             "",
             "## Overall",
             "",
-            f"{len(mastered)} / {len(non_archived)} Atoms ({percent:.1f}%)",
+            f"- Mastered with Evidence: {len(mastered)} / {len(non_archived)} ({mastery_percent:.1f}%)",
+            f"- Provisionally skipped: {len(skipped)}",
+            f"- Deferred: {len(deferred)}",
+            f"- Path satisfied: {len(mastered) + len(skipped)} / {len(non_archived)} ({path_percent:.1f}%)",
             "",
             "## Current",
             "",
@@ -1241,6 +1492,15 @@ class Workspace:
             "",
         ]
         progress_lines.extend([f"- `{item['id']}` — {item['title']} ({item['status']})" for item in self.suggest_next()] or ["- None"])
+        progress_lines.extend(["", "## Flexible Decisions", ""])
+        progress_lines.extend(
+            [
+                f"- `{atom['id']}` — {atom['title']} ({atom['status']}; "
+                f"reason: {atom.get('flexibility', {}).get('reason_code', 'unknown')})"
+                for atom in skipped + deferred
+            ]
+            or ["- None"]
+        )
         progress_lines.append("")
 
         question_lines = ["# Questions", "", "> Generated by AtomLearn. Edit canonical `.atomlearn/` state through the CLI.", ""]
@@ -1315,6 +1575,20 @@ def build_parser() -> argparse.ArgumentParser:
     activate_parser.add_argument("workspace")
     activate_parser.add_argument("atom_id")
     mutation_args(activate_parser)
+
+    skip_parser = sub.add_parser("skip")
+    skip_parser.add_argument("workspace")
+    skip_parser.add_argument("atom_id")
+    skip_parser.add_argument("--mode", choices=sorted(SKIP_MODES), default="diagnostic")
+    skip_parser.add_argument("--reason-code", choices=sorted(SKIP_REASON_CODES))
+    skip_parser.add_argument("--note", default="")
+    skip_parser.add_argument("--confirmed", action="store_true")
+    mutation_args(skip_parser)
+
+    unskip_parser = sub.add_parser("unskip")
+    unskip_parser.add_argument("workspace")
+    unskip_parser.add_argument("atom_id")
+    mutation_args(unskip_parser)
 
     update_parser = sub.add_parser("update-session")
     update_parser.add_argument("workspace")
@@ -1597,6 +1871,31 @@ def run(args: argparse.Namespace) -> None:
         workspace.activate(args.atom_id)
         workspace.commit("atom.activated", "Activated a learner-selected Atom", {"atom_id": args.atom_id})
         emit({"ok": True, "revision": workspace.revision, "active_atom_id": args.atom_id})
+    elif args.command == "skip":
+        if args.mode == "diagnostic":
+            emit({"ok": True, **workspace.skip_guidance(args.atom_id)})
+            return
+        result = workspace.skip_atom(
+            args.atom_id,
+            args.mode,
+            args.reason_code,
+            args.note,
+            args.confirmed,
+        )
+        workspace.commit(
+            "atom.provisionally_skipped" if args.mode == "provisional" else "atom.deferred",
+            "Applied a learner-directed flexible progression decision",
+            result,
+        )
+        emit({"ok": True, "revision": workspace.revision, **result})
+    elif args.command == "unskip":
+        result = workspace.unskip_atom(args.atom_id)
+        workspace.commit(
+            "atom.flexibility_revoked",
+            "Restored a skipped or deferred Atom to the learning path",
+            result,
+        )
+        emit({"ok": True, "revision": workspace.revision, **result})
     elif args.command == "update-session":
         workspace.update_session(read_data(Path(args.input)))
         workspace.commit("session.updated", "Persisted the current teaching state")

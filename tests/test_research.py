@@ -12,6 +12,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CLI = ROOT / "atom-learn" / "scripts" / "atomlearn.py"
 PLAN = ROOT / "examples" / "research-mini" / "plan.yaml"
+CALCULUS_PLAN = ROOT / "examples" / "calculus-mini" / "plan.yaml"
 RUN_ROOT = ROOT / ".test-workspaces"
 
 
@@ -279,3 +280,49 @@ def test_research_rejects_full_text_storage() -> None:
     )
     assert blocked.returncode == 2
     assert "Do not store full paper text" in blocked.stderr
+
+
+def test_research_discloses_provisionally_skipped_concept_assumptions() -> None:
+    path = workspace("flexible-skip")
+    course = output(invoke("import-plan", path, "--input", CALCULUS_PLAN, "--expected-revision", 0))
+    plan = yaml.safe_load(PLAN.read_text(encoding="utf-8"))
+    plan["papers"][0]["concept_atom_ids"] = ["calculus.derivative.definition"]
+    imported = output(
+        invoke(
+            "research",
+            "import",
+            path,
+            "--input",
+            payload(path, "research-with-concepts.yaml", plan),
+            "--expected-research-revision",
+            0,
+        )
+    )
+    output(
+        invoke(
+            "skip",
+            path,
+            "calculus.derivative.definition",
+            "--mode",
+            "provisional",
+            "--reason-code",
+            "already_mastered",
+            "--confirmed",
+            "--expected-revision",
+            course["revision"],
+        )
+    )
+    candidate = output(invoke("research", "next", path))[0]
+    assert candidate["knowledge_gap_atom_ids"] == []
+    assert candidate["provisional_knowledge_atom_ids"] == ["calculus.derivative.definition"]
+    activated = output(
+        invoke(
+            "research",
+            "activate",
+            path,
+            "paper.field.survey",
+            "--expected-research-revision",
+            imported["research_revision"],
+        )
+    )
+    assert activated["result"]["provisional_knowledge_atom_ids"] == ["calculus.derivative.definition"]
