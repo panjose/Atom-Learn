@@ -8,6 +8,8 @@
 | 默认模式 | `proposal_only` |
 | 核心原则 | Observe -> Hypothesize -> Propose -> Approve -> Apply -> Measure -> Promote/Roll back |
 
+> 本文记录已经实现的 workspace-local v1。跨课程 User Profile、Effective Policy、确定性迁移、策略实验、Evolution Capsule 和版本化更新器属于尚未实施的 [v2 设计](SELF_EVOLUTION_V2_DESIGN.md)与[v2 实施方案](SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md)。
+
 ## 1. 设计目标
 
 AtomLearn 的自进化不是让模型随时改写自身，而是把学习过程中出现的问题转成可追踪、可审批、可验证、可回滚的变更。系统需要做到：

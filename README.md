@@ -217,6 +217,8 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
+- [Self-Evolution v2 Proposal](docs/SELF_EVOLUTION_V2_DESIGN.md)
+- [Self-Evolution v2 Implementation Plan](docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md)
 - [Session Adaptation Design](docs/SESSION_ADAPTATION_DESIGN.md)
 - [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md)
 - [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
