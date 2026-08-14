@@ -4,6 +4,7 @@
 
 - Atom test
 - Splitting and merging
+- Detailed expansion
 - Dependency rules
 - Multi-source synthesis
 - Dynamic restructuring
@@ -28,6 +29,12 @@ Propose a merge when adjacent Atoms cannot be taught or checked independently, a
 
 Preserve stable history: archive old IDs rather than deleting them, add aliases, retain old Evidence, migrate open questions deliberately, replace downstream prerequisites with the declared replacement, and validate the full DAG before applying.
 
+## Detailed expansion
+
+Treat an explicit “explain this Atom in detail” request differently from a corrective split. Keep the parent as the eventual integration objective, create ordered child Atoms beneath it, and teach only one child at a time. Use `expand`, not `restructure split`; read [DETAILED_EXPANSION.md](DETAILED_EXPANSION.md).
+
+Every child needs an independent objective and check. If only one clarification is needed, do not expand. If the original Atom is invalid as a learning unit for everyone rather than merely too broad for the requested depth, use a confirmed split instead.
+
 ## Dependency rules
 
 Create an edge `A → B` only when mastering A materially reduces the reasoning required for B or B cannot be checked fairly without A. Do not encode mere textbook order as dependency.
@@ -44,4 +51,4 @@ Distinguish source-grounded statements with locators, pedagogical synthesis deri
 
 Use actual learning evidence, not response length alone. Consider a split after repeated dimension-specific failure or when the learner can explain one part but not another. Consider a merge when checks show the learner treats two small Atoms as one coherent operation.
 
-Generate a split or merge proposal, explain why it improves this learner's path, and obtain explicit confirmation before running `restructure --confirmed`.
+Generate a split or merge proposal, explain why it improves this learner's path, and obtain explicit confirmation before running `restructure --confirmed`. A direct request for detailed explanation authorizes a bounded expansion plan, but never authorizes a multi-concept lecture.

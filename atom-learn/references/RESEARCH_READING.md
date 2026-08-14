@@ -43,6 +43,8 @@ Use `prerequisite_paper_ids` for the reading order. Use `cites` for internal cit
 
 Treat a provisionally skipped concept as a disclosed assumption, returned under `provisional_knowledge_atom_ids`, rather than a proven competency. Deferred and otherwise unsatisfied concepts remain `knowledge_gap_atom_ids`. If paper comprehension exposes a skipped-concept gap, backtrack without losing the Active Paper.
 
+If a required concept has a detailed expansion, complete its ordered children and parent integration check before treating the paper's Knowledge Atom dependency as mastered. Keep the Active Paper state separate from the one Active learning Atom.
+
 Do not use citation count as evidence quality. Mark why each paper is in scope and what role it plays.
 
 ## Read one paper

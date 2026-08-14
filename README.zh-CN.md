@@ -16,6 +16,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
 - 梳理知识根节点、学习主干、分支、枢纽、推导、历史演进、对比、应用及单点来龙去脉
 - 严格维持唯一 Active Atom，并执行所有先修守卫
+- 把“详细讲讲”转换成有顺序的子 Atom 树，而不是一次输出多概念长讲解
 - 允许用户通过快速诊断、延后、暂定跳过或恢复 Atom 灵活调整路径，同时不伪造掌握状态
 - 分流当前 Atom 问题、阻塞性先修问题、未来问题和 Parking Lot 项目
 - 通过 explain/apply/discriminate/transfer/teach-back Evidence 判断掌握程度
@@ -114,6 +115,19 @@ python atom-learn/scripts/atomlearn.py unskip courses/calculus calculus.limit.ap
 
 如果后续学习暴露知识缺口，系统可以回退到已跳过 Atom，并自动撤销原有假设。`strict_mastery` 课程会拒绝暂定绕过；包含假设的课程只能标记为 `completed_with_skips`，且 mastered、skipped 和 deferred 数量始终分开。考试计划可返回 `verify_skip`，科研阅读会显示暂定概念假设，知识脉络视图也会标出跳过和延后节点。详见[弹性进度工作流](atom-learn/references/FLEXIBLE_PROGRESSION.md)和[弹性进度设计](docs/FLEXIBLE_PROGRESSION_DESIGN.md)。
 
+## 原子化详细讲解
+
+当用户要求把某个 Atom 详细讲解、分步骤说明或拆得更细时，AtomLearn 会判断请求是否跨越多个可独立教学和检查的目标。如果是，系统会创建 2–12 个有顺序的子 Atom，而不是一次返回长答案。第一个子 Atom 会立即成为 Active；只有前一个子 Atom 获得 mastered Evidence 后，系统才会激活下一个。
+
+```powershell
+python atom-learn/scripts/atomlearn.py expand courses/calculus calculus.derivative.definition --plan expand-derivative.yaml
+python atom-learn/scripts/atomlearn.py expand courses/calculus calculus.derivative.definition --plan expand-derivative.yaml --confirmed --expected-revision 4
+```
+
+父 Atom 仍然是必须完成的整合目标。所有子 Atom 掌握后，系统会以 `integrating` 阶段激活父 Atom，并要求新的综合检查；通过之前不会解锁下游。子 Atom 还可以继续展开为嵌套树，但任意时刻仍只有一个 Active Atom。快速诊断仍可用于真正 test-out；展开子项不能暂定跳过，但可以延后和恢复。学习图和知识脉络会把包含关系与先修边分开展示。详见[原子化详细展开](atom-learn/references/DETAILED_EXPANSION.md)和[详细展开设计](docs/DETAILED_EXPANSION_DESIGN.md)。
+
+可使用 `atom-learn/assets/templates/expand-plan.yaml` 作为起始 payload。
+
 ## 科研论文阅读
 
 AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会建立覆盖综述、奠基工作、理论与方法、基准与数据集、批评与复现以及应用工作的导向地图。每篇完成阅读的论文都会记录有证据支持的主张、局限、开放问题及其与其他工作的关系。
@@ -181,6 +195,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [RAG 设计](docs/RAG_DESIGN.md)
 - [知识脉络设计](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 - [弹性进度设计](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
+- [详细展开设计](docs/DETAILED_EXPANSION_DESIGN.md)
 
 ## 开发验证
 

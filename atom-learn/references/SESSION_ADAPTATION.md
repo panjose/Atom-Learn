@@ -42,6 +42,8 @@ Apply precedence in this order:
 
 Never force a stored preference when the current task clearly needs another format. A learner who usually prefers concise answers may still request a detailed proof in the current turn.
 
+Do not implement a `detailed` response preference by explaining several Atom-sized objectives at once. If the requested depth crosses independent objectives, use the detailed expansion workflow and apply the preferred style only inside the one Active child.
+
 ## Extract safe preference signals
 
 Observe once near the end of a meaningful session, or immediately after an explicit preference or correction that should persist. Do not write every conversational turn.

@@ -103,6 +103,8 @@ The Atom becomes `skipped`. This action:
 - never schedules spaced review;
 - never appears in the mastered count.
 
+An Atom created as a child of a detailed expansion cannot use provisional skip. Use a short diagnostic for genuine mastery or defer it. The expanded parent also cannot be provisionally skipped before its integration Evidence passes.
+
 Use these normalized reason codes:
 
 - `already_mastered`;

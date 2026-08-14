@@ -8,6 +8,7 @@
 - Import plan
 - Mutation payloads
 - Flexible progression state
+- Detailed expansion state
 - Revisions and timestamps
 
 ## Workspace layout
@@ -38,7 +39,7 @@ Knowledge lineage uses `.atomlearn/lineage/{state.yaml,map.yaml,events.ndjson}` 
 
 Use lowercase dot-separated IDs matching `[a-z0-9][a-z0-9.-]*`. Never place `/` or `\\` in an ID.
 
-Atom statuses are `locked`, `available`, `active`, `mastered`, `review_due`, `skipped`, `deferred`, and `archived`. `skipped` satisfies traversal without claiming mastery; `deferred` does neither. Session phases are `orientation`, `teaching`, `questioning`, `checking`, `reviewing`, `paused`, `blocked`, and `transitioning`.
+Atom statuses are `locked`, `available`, `active`, `mastered`, `review_due`, `skipped`, `deferred`, and `archived`. `skipped` satisfies traversal without claiming mastery; `deferred` does neither. Session phases are `orientation`, `teaching`, `questioning`, `checking`, `integrating`, `reviewing`, `paused`, `blocked`, and `transitioning`.
 
 Course statuses are `orientation`, `active`, `completed`, `completed_with_skips`, and `paused`. `completed` requires mastery-like status for every required Atom; `completed_with_skips` discloses that traversal finished with at least one required provisional assumption.
 
@@ -103,6 +104,8 @@ atoms:
 
 Import plans add or update sources and Atoms. They do not silently remove missing records. The CLI recalculates `locked` and `available`, preserves `mastered`, `active`, `review_due`, `skipped`, `deferred`, and `archived`, then rebuilds graph edges and existing flexibility metadata.
 
+Importing also preserves `parent_atom_id`, `expansion`, and computed prerequisites for Atoms already participating in a detailed expansion. A generic plan update cannot silently flatten an active expansion tree.
+
 ## Flexible progression state
 
 An Atom may carry `flexibility: null` or an exact record:
@@ -119,6 +122,24 @@ flexibility:
 ```
 
 `mode` is `provisional` or `defer`. Reason codes are `already_mastered`, `too_easy`, `not_relevant`, `time_constraint`, `different_goal`, and `other`. A non-null `revoked_at` retains the latest decision record while returning the Atom to normal availability calculation. See [FLEXIBLE_PROGRESSION.md](FLEXIBLE_PROGRESSION.md).
+
+## Detailed expansion state
+
+Normal Atoms use `parent_atom_id: null` and `expansion: null`. An expanded parent stores:
+
+```yaml
+expansion:
+  child_atom_ids: [calculus.derivative.definition.ratio, calculus.derivative.definition.limit]
+  base_prerequisite_ids: [calculus.limit.intuition]
+  reason_code: learner_requested_detail
+  note: The learner requested a step-by-step derivation.
+  requested_at: "2026-08-14T10:00:00+00:00"
+  completed_at: null
+```
+
+Each direct child stores `parent_atom_id` equal to the parent. `graph.expansions` projects containment as `{parent, children}` records while normal graph edges project the computed learning chain. `current.expansion_stack` stores frames with `parent_atom_id`, ordered `child_atom_ids`, `started_at`, and `backtrack_depth`.
+
+Expansion reason codes are `learner_requested_detail`, `cognitive_load`, `remediation`, and `other`. Only mastered parent integration Evidence may set `completed_at`. See [DETAILED_EXPANSION.md](DETAILED_EXPANSION.md).
 
 ## Mutation payloads
 
@@ -199,8 +220,32 @@ merged_atom:
   mastery:
     required_dimensions: [explain, apply]
     pass_threshold: 0.8
-    minimum_dimension_score: 0.6
+      minimum_dimension_score: 0.6
 ```
+
+### Detailed expansion plan
+
+```yaml
+reason_code: learner_requested_detail
+note: Explain the mechanism without combining several ideas in one response.
+child_atoms:
+  - id: topic.mechanism.motivation
+    title: Mechanism motivation
+    objective: Explain the problem that motivates the mechanism
+    mastery:
+      required_dimensions: [explain]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: topic.mechanism.operation
+    title: Mechanism operation
+    objective: Apply the mechanism one step at a time
+    mastery:
+      required_dimensions: [apply]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+```
+
+Child prerequisites are omitted because `expand` derives a strict sequence from payload order.
 
 ## Evolution state and proposal
 

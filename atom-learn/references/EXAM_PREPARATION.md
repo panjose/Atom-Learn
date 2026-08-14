@@ -107,6 +107,8 @@ Choose `learning`, `review`, or `mixed`. The queue combines corpus emphasis, cur
 
 Every queue entry includes its score components, Evidence status, prerequisite IDs, mapped knowledge points, and representative question IDs. Unmapped points remain coverage gaps and cannot silently influence a targeted Atom plan.
 
+If an exam-mapped Atom has a detailed expansion, its computed prerequisite closure reaches the ordered child Atoms before the parent integration check. Do not bypass that branch by presenting one exam-focused summary of every child.
+
 `verify_skip` marks an exam-relevant Atom that the learner provisionally skipped without mastery Evidence. Mixed and review modes may surface it for a short diagnostic; learning mode honors the skip. Deferred Atoms remain outside the direct queue, while a deferred prerequisite can still block another target. Never silently convert either decision into mastery.
 
 When a target date is configured, the plan reports days remaining and warns on an expired or seven-day horizon. Time pressure may change iteration length, but it must not remove prerequisite or mastery guards.

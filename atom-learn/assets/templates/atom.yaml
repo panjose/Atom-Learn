@@ -20,5 +20,7 @@ confidence: null
 last_reviewed_at: null
 evidence_ids: []
 flexibility: null
+parent_atom_id: null
+expansion: null
 created_at: ""
 updated_at: ""

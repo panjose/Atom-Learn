@@ -11,6 +11,8 @@
 
 Before answering, determine what concept the learner is asking about, whether it belongs to the Active Atom, whether it is necessary now, whether an existing Atom owns it, and what state action preserves the mainline. Save the classification and a short rationale.
 
+Also determine whether “explain in detail” still asks for one teachable move. If it requires multiple independently checkable ideas inside the current objective, treat it as a detailed expansion request rather than answering all parts as one `in_atom` response. Read [DETAILED_EXPANSION.md](DETAILED_EXPANSION.md).
+
 ## Categories
 
 ### `in_atom`
@@ -39,6 +41,7 @@ Use when the question does not serve the declared course goal. Record it only if
 - A real-world application can be `in_atom` when it is the planned example, otherwise it is often `non_blocking`.
 - A future-topic question can expose a current misconception. Route by the actual bottleneck, not surface vocabulary.
 - If uncertain between blocking and non-blocking, ask one diagnostic question while keeping the current Atom.
+- A request for more words is not automatically an expansion; a request that crosses multiple Atom-sized objectives is.
 
 ## Persistence rules
 

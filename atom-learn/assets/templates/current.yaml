@@ -7,4 +7,5 @@ learner_understands: []
 learner_confusions: []
 next_action: Complete orientation and select the first available Atom.
 backtrack_stack: []
+expansion_stack: []
 updated_at: ""

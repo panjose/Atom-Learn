@@ -1,0 +1,23 @@
+reason_code: learner_requested_detail
+note: The learner requested a step-by-step explanation without a multi-concept lecture.
+child_atoms:
+  - id: domain.topic.parent.first-child
+    title: First child concept
+    objective: Explain the first independently checkable part of the parent objective
+    estimated_minutes: 15
+    sources: []
+    misconceptions: []
+    mastery:
+      required_dimensions: [explain, discriminate]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6
+  - id: domain.topic.parent.second-child
+    title: Second child concept
+    objective: Apply the next independently checkable part using the first child
+    estimated_minutes: 15
+    sources: []
+    misconceptions: []
+    mastery:
+      required_dimensions: [apply]
+      pass_threshold: 0.8
+      minimum_dimension_score: 0.6

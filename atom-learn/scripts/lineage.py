@@ -480,6 +480,15 @@ class LineageEngine:
             "branch_points": [item for item in hubs if item["outgoing"] > 1][:10],
             "convergence_points": [item for item in hubs if item["incoming"] > 1][:10],
             "bridges": bridges,
+            "detailed_expansions": [
+                {
+                    "parent_atom_id": atom_id,
+                    "child_atom_ids": list(atom["expansion"]["child_atom_ids"]),
+                    "completed": atom["expansion"].get("completed_at") is not None,
+                }
+                for atom_id, atom in self.workspace.atoms.items()
+                if atom.get("status") != "archived" and isinstance(atom.get("expansion"), dict)
+            ],
             "modules": [
                 {
                     "module": module,
@@ -515,6 +524,7 @@ class LineageEngine:
                 atom_id for atom_id in structure["topological_order"]
                 if self.workspace.atoms[atom_id].get("status") == "deferred"
             ],
+            "expansion_focus_atom_id": self.workspace._expansion_next_atom_id(),
             "spine_status": [
                 {"atom_id": atom_id, "status": self.workspace.atoms[atom_id].get("status")}
                 for atom_id in structure["main_learning_spine"]
@@ -952,6 +962,16 @@ class LineageEngine:
                 for atom_id in structure["main_learning_spine"]
             ) or "None"
         )
+        lines.extend(["", "## Detailed Expansion Trees", ""])
+        for expansion in structure["detailed_expansions"]:
+            state = "completed" if expansion["completed"] else "in progress"
+            lines.append(f"- `{expansion['parent_atom_id']}` ({state})")
+            lines.extend(
+                f"  {index}. `{child_id}`"
+                for index, child_id in enumerate(expansion["child_atom_ids"], start=1)
+            )
+        if not structure["detailed_expansions"]:
+            lines.append("- None")
         lines.extend(["", "## Modules", "", "| Module | Atoms | Status counts |", "| --- | ---: | --- |"])
         for module in structure["modules"]:
             status = ", ".join(f"{key}: {value}" for key, value in module["status_counts"].items())

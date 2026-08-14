@@ -33,11 +33,19 @@ SKIP_POLICIES = {"diagnostic_first", "learner_choice", "strict_mastery"}
 FLEXIBILITY_KEYS = {
     "mode", "reason_code", "note", "diagnostic_offered", "confirmed", "created_at", "revoked_at",
 }
+EXPANSION_REASON_CODES = {"learner_requested_detail", "cognitive_load", "remediation", "other"}
+EXPANSION_KEYS = {
+    "child_atom_ids", "base_prerequisite_ids", "reason_code", "note", "requested_at", "completed_at",
+}
+EXPANSION_FRAME_KEYS = {"parent_atom_id", "child_atom_ids", "started_at", "backtrack_depth"}
+MIN_EXPANSION_CHILDREN = 2
+MAX_EXPANSION_CHILDREN = 12
 PHASES = {
     "orientation",
     "teaching",
     "questioning",
     "checking",
+    "integrating",
     "reviewing",
     "paused",
     "blocked",
@@ -209,7 +217,14 @@ class Workspace:
             "created_at": timestamp,
             "updated_at": timestamp,
         }
-        workspace.graph = {"schema_version": SCHEMA_VERSION, "revision": 0, "modules": [], "edges": [], "aliases": {}}
+        workspace.graph = {
+            "schema_version": SCHEMA_VERSION,
+            "revision": 0,
+            "modules": [],
+            "edges": [],
+            "expansions": [],
+            "aliases": {},
+        }
         workspace.current = {
             "schema_version": SCHEMA_VERSION,
             "revision": 0,
@@ -220,6 +235,7 @@ class Workspace:
             "learner_confusions": [],
             "next_action": "Complete orientation and select the first available Atom.",
             "backtrack_stack": [],
+            "expansion_stack": [],
             "updated_at": timestamp,
         }
         workspace.questions = {"schema_version": SCHEMA_VERSION, "revision": 0, "items": []}
@@ -321,6 +337,17 @@ class Workspace:
     def recalculate_availability(self) -> None:
         for atom in self.atoms.values():
             if atom.get("status") in {"active", "mastered", "review_due", "skipped", "deferred", "archived"}:
+                continue
+            expansion = atom.get("expansion")
+            if (
+                isinstance(expansion, dict)
+                and expansion.get("completed_at") is None
+                and not all(
+                    self.atoms.get(child_id, {}).get("status") in MASTERY_LIKE
+                    for child_id in expansion.get("child_atom_ids", [])
+                )
+            ):
+                atom["status"] = "locked"
                 continue
             prerequisites = atom.get("prerequisites", [])
             satisfied = all(
@@ -452,6 +479,8 @@ class Workspace:
                 if evidence_id not in evidence_ids:
                     errors.append(f"{atom_id} references missing Evidence {evidence_id!r}")
 
+        self._validate_expansions(errors)
+
         if len(active_status_ids) > 1:
             errors.append(f"Multiple active Atoms: {', '.join(active_status_ids)}")
         current_active = self.current.get("active_atom_id")
@@ -530,6 +559,144 @@ class Workspace:
         ):
             errors.append(f"{atom_id} has a provisional skip under strict_mastery policy")
 
+    def _validate_expansions(self, errors: list[str]) -> None:
+        claimed_children: dict[str, str] = {}
+        for parent_id, parent in self.atoms.items():
+            record = parent.get("expansion")
+            if record is None:
+                continue
+            if not isinstance(record, dict) or set(record) != EXPANSION_KEYS:
+                errors.append(f"{parent_id}.expansion fields are invalid")
+                continue
+            child_ids = record.get("child_atom_ids")
+            base_prerequisites = record.get("base_prerequisite_ids")
+            if (
+                not isinstance(child_ids, list)
+                or not MIN_EXPANSION_CHILDREN <= len(child_ids) <= MAX_EXPANSION_CHILDREN
+                or not all(isinstance(item, str) and ID_PATTERN.fullmatch(item) for item in child_ids)
+                or len(child_ids) != len(set(child_ids))
+            ):
+                errors.append(
+                    f"{parent_id}.expansion.child_atom_ids must contain "
+                    f"{MIN_EXPANSION_CHILDREN}-{MAX_EXPANSION_CHILDREN} unique valid IDs"
+                )
+                child_ids = []
+            if (
+                not isinstance(base_prerequisites, list)
+                or not all(isinstance(item, str) and ID_PATTERN.fullmatch(item) for item in base_prerequisites)
+                or len(base_prerequisites) != len(set(base_prerequisites))
+            ):
+                errors.append(f"{parent_id}.expansion.base_prerequisite_ids must be a unique valid ID list")
+                base_prerequisites = []
+            if record.get("reason_code") not in EXPANSION_REASON_CODES:
+                errors.append(f"{parent_id}.expansion.reason_code is invalid")
+            note = record.get("note")
+            if not isinstance(note, str) or len(note) > 1000:
+                errors.append(f"{parent_id}.expansion.note must be a string of at most 1000 characters")
+            for field in ["requested_at", "completed_at"]:
+                value = record.get(field)
+                if field == "completed_at" and value is None:
+                    continue
+                try:
+                    if not isinstance(value, str) or not value:
+                        raise AtomLearnError("timestamp must be a non-empty string")
+                    parse_time(value)
+                except AtomLearnError as exc:
+                    errors.append(f"{parent_id}.expansion.{field}: {exc}")
+            if child_ids and parent.get("prerequisites") != [child_ids[-1]]:
+                errors.append(f"{parent_id} must depend only on the final expanded child {child_ids[-1]}")
+            for prerequisite in base_prerequisites:
+                if prerequisite not in self.atoms:
+                    errors.append(f"{parent_id}.expansion references missing base prerequisite {prerequisite!r}")
+                elif self.atoms[prerequisite].get("status") == "archived":
+                    errors.append(f"{parent_id}.expansion references archived base prerequisite {prerequisite!r}")
+            for index, child_id in enumerate(child_ids):
+                child = self.atoms.get(child_id)
+                if child is None:
+                    errors.append(f"{parent_id}.expansion references missing child {child_id!r}")
+                    continue
+                previous_parent = claimed_children.setdefault(child_id, parent_id)
+                if previous_parent != parent_id:
+                    errors.append(f"Expanded child {child_id} is claimed by multiple parents")
+                if child.get("parent_atom_id") != parent_id:
+                    errors.append(f"Expanded child {child_id} must point to parent {parent_id}")
+                if child.get("optional", False) != parent.get("optional", False):
+                    errors.append(f"Expanded child {child_id} must inherit optional from parent {parent_id}")
+                if child.get("status") == "skipped":
+                    errors.append(f"Expanded child {child_id} cannot use a provisional skip")
+                expected = base_prerequisites if index == 0 else [child_ids[index - 1]]
+                child_expansion = child.get("expansion")
+                effective_prerequisites = (
+                    child_expansion.get("base_prerequisite_ids")
+                    if isinstance(child_expansion, dict)
+                    else child.get("prerequisites")
+                )
+                if effective_prerequisites != expected:
+                    errors.append(
+                        f"Expanded child {child_id} has invalid sequence prerequisites; expected {expected!r}"
+                    )
+            completed_at = record.get("completed_at")
+            mastered_evidence = any(
+                item.get("atom_id") == parent_id and item.get("result") == "mastered"
+                for item in self.evidence.get("items", [])
+            )
+            if completed_at is not None and not mastered_evidence:
+                errors.append(f"{parent_id}.expansion is complete without mastered integration Evidence")
+            if completed_at is None and parent.get("status") in MASTERY_LIKE:
+                errors.append(f"{parent_id} is mastered before its detailed expansion is integrated")
+
+        for atom_id, atom in self.atoms.items():
+            parent_id = atom.get("parent_atom_id")
+            if parent_id is None:
+                continue
+            if not isinstance(parent_id, str) or not ID_PATTERN.fullmatch(parent_id):
+                errors.append(f"{atom_id}.parent_atom_id must be null or a valid Atom ID")
+                continue
+            parent = self.atoms.get(parent_id)
+            if parent is None:
+                errors.append(f"{atom_id}.parent_atom_id references missing Atom {parent_id!r}")
+                continue
+            expansion = parent.get("expansion")
+            if not isinstance(expansion, dict) or atom_id not in expansion.get("child_atom_ids", []):
+                errors.append(f"{atom_id}.parent_atom_id is not mirrored by parent expansion metadata")
+
+        stack = self.current.get("expansion_stack", [])
+        if not isinstance(stack, list):
+            errors.append("current.expansion_stack must be a list")
+            return
+        seen_parents: set[str] = set()
+        for index, frame in enumerate(stack):
+            if not isinstance(frame, dict) or set(frame) != EXPANSION_FRAME_KEYS:
+                errors.append(f"current.expansion_stack[{index}] fields are invalid")
+                continue
+            parent_id = frame.get("parent_atom_id")
+            parent = self.atoms.get(parent_id)
+            expansion = parent.get("expansion") if parent else None
+            if not isinstance(expansion, dict):
+                errors.append(f"current.expansion_stack[{index}] references an Atom without expansion")
+                continue
+            if parent_id in seen_parents:
+                errors.append(f"current.expansion_stack repeats parent {parent_id}")
+            seen_parents.add(str(parent_id))
+            if frame.get("child_atom_ids") != expansion.get("child_atom_ids"):
+                errors.append(f"current.expansion_stack[{index}] child IDs do not match parent expansion")
+            depth = frame.get("backtrack_depth")
+            if not isinstance(depth, int) or isinstance(depth, bool) or depth < 0:
+                errors.append(f"current.expansion_stack[{index}].backtrack_depth must be a non-negative integer")
+            try:
+                started_at = frame.get("started_at")
+                if not isinstance(started_at, str) or not started_at:
+                    raise AtomLearnError("timestamp must be a non-empty string")
+                parse_time(started_at)
+            except AtomLearnError as exc:
+                errors.append(f"current.expansion_stack[{index}].started_at: {exc}")
+            if expansion.get("completed_at") is not None:
+                errors.append(f"current.expansion_stack[{index}] retains completed expansion {parent_id}")
+            if index > 0:
+                outer_children = stack[index - 1].get("child_atom_ids", []) if isinstance(stack[index - 1], dict) else []
+                if parent_id not in outer_children:
+                    errors.append(f"current.expansion_stack[{index}] is not nested under the previous frame")
+
     def _validate_course_completion(self, errors: list[str]) -> None:
         course_status = self.course.get("status")
         if course_status not in {"completed", "completed_with_skips"}:
@@ -591,6 +758,13 @@ class Workspace:
             actual.add((edge.get("from"), edge.get("to")))
         if actual != expected:
             errors.append("graph.edges does not match Atom prerequisites; run import-plan or restructure")
+        expected_expansions = [
+            {"parent": atom_id, "children": list(atom["expansion"]["child_atom_ids"])}
+            for atom_id, atom in self.atoms.items()
+            if isinstance(atom.get("expansion"), dict)
+        ]
+        if self.graph.get("expansions", []) != expected_expansions:
+            errors.append("graph.expansions does not match Atom expansion metadata; run expand or rebuild the graph")
 
     def _validate_questions(self, errors: list[str]) -> None:
         ids: set[str] = set()
@@ -697,6 +871,11 @@ class Workspace:
         ]
         self.graph["modules"] = modules
         self.graph["edges"] = edges
+        self.graph["expansions"] = [
+            {"parent": atom_id, "children": list(atom["expansion"]["child_atom_ids"])}
+            for atom_id, atom in self.atoms.items()
+            if isinstance(atom.get("expansion"), dict)
+        ]
 
     def import_plan(self, plan: dict[str, Any]) -> dict[str, int]:
         course_update = plan.get("course", {})
@@ -753,9 +932,12 @@ class Workspace:
                 progress = {
                     key: copy.deepcopy(existing.get(key))
                     for key in [
-                        "status", "attempts", "confidence", "last_reviewed_at", "evidence_ids", "flexibility", "created_at"
+                        "status", "attempts", "confidence", "last_reviewed_at", "evidence_ids", "flexibility",
+                        "parent_atom_id", "expansion", "created_at",
                     ]
                 }
+                if existing.get("parent_atom_id") is not None or existing.get("expansion") is not None:
+                    progress["prerequisites"] = copy.deepcopy(existing.get("prerequisites", []))
             else:
                 added += 1
             atom = {
@@ -778,6 +960,8 @@ class Workspace:
                 "last_reviewed_at": None,
                 "evidence_ids": [],
                 "flexibility": None,
+                "parent_atom_id": None,
+                "expansion": None,
                 "created_at": timestamp,
                 "updated_at": timestamp,
             }
@@ -788,6 +972,264 @@ class Workspace:
         if self.atoms and self.course.get("status") == "orientation":
             self.course["status"] = "active"
         return {"added": added, "updated": updated, "sources": len(sources)}
+
+    def _expansion_frame(self, parent_id: str, backtrack_depth: int | None = None) -> dict[str, Any]:
+        expansion = self.atoms[parent_id]["expansion"]
+        return {
+            "parent_atom_id": parent_id,
+            "child_atom_ids": list(expansion["child_atom_ids"]),
+            "started_at": expansion["requested_at"],
+            "backtrack_depth": (
+                len(self.current.get("backtrack_stack", [])) if backtrack_depth is None else backtrack_depth
+            ),
+        }
+
+    def _expansion_ancestors(self, atom_id: str) -> list[str]:
+        ancestors: list[str] = []
+        cursor = self.atoms.get(atom_id)
+        seen: set[str] = set()
+        while cursor and cursor.get("parent_atom_id") is not None:
+            parent_id = cursor["parent_atom_id"]
+            if parent_id in seen or parent_id not in self.atoms:
+                break
+            seen.add(parent_id)
+            parent = self.atoms[parent_id]
+            expansion = parent.get("expansion")
+            if isinstance(expansion, dict) and expansion.get("completed_at") is None:
+                ancestors.append(parent_id)
+            cursor = parent
+        return list(reversed(ancestors))
+
+    def _ensure_expansion_context(self, atom_id: str) -> None:
+        desired = self._expansion_ancestors(atom_id)
+        atom = self.atoms.get(atom_id)
+        if atom and isinstance(atom.get("expansion"), dict) and atom["expansion"].get("completed_at") is None:
+            desired.append(atom_id)
+        existing = {
+            frame.get("parent_atom_id"): frame
+            for frame in self.current.get("expansion_stack", [])
+            if isinstance(frame, dict)
+        }
+        self.current["expansion_stack"] = [
+            copy.deepcopy(existing[parent_id]) if parent_id in existing else self._expansion_frame(parent_id)
+            for parent_id in desired
+        ]
+
+    def _expansion_next_atom_id(self) -> str | None:
+        stack = self.current.get("expansion_stack", [])
+        parent_ids = [stack[-1].get("parent_atom_id")] if stack else [
+            atom_id for atom_id, atom in self.atoms.items()
+            if isinstance(atom.get("expansion"), dict)
+            and atom["expansion"].get("completed_at") is None
+            and not (
+                atom.get("parent_atom_id") in self.atoms
+                and isinstance(self.atoms[atom["parent_atom_id"]].get("expansion"), dict)
+                and self.atoms[atom["parent_atom_id"]]["expansion"].get("completed_at") is None
+            )
+        ]
+
+        def next_within(parent_id: str) -> str | None:
+            parent = self.atoms.get(parent_id)
+            expansion = parent.get("expansion") if parent else None
+            if not isinstance(expansion, dict) or expansion.get("completed_at") is not None:
+                return None
+            for child_id in expansion.get("child_atom_ids", []):
+                child = self.atoms.get(child_id, {})
+                if child.get("status") in MASTERY_LIKE:
+                    continue
+                nested = next_within(child_id)
+                return nested or child_id
+            return parent_id if parent.get("status") not in MASTERY_LIKE else None
+
+        for parent_id in parent_ids:
+            if isinstance(parent_id, str) and (candidate := next_within(parent_id)) is not None:
+                return candidate
+        return None
+
+    def active_expansions(self) -> list[dict[str, Any]]:
+        result: list[dict[str, Any]] = []
+        for parent_id, parent in self.atoms.items():
+            expansion = parent.get("expansion")
+            if not isinstance(expansion, dict):
+                continue
+            child_ids = expansion["child_atom_ids"]
+            mastered_children = [
+                child_id for child_id in child_ids
+                if self.atoms.get(child_id, {}).get("status") in MASTERY_LIKE
+            ]
+            result.append(
+                {
+                    "parent_atom_id": parent_id,
+                    "parent_title": parent.get("title"),
+                    "child_atom_ids": list(child_ids),
+                    "mastered_child_atom_ids": mastered_children,
+                    "children_mastered": len(mastered_children),
+                    "children_total": len(child_ids),
+                    "integration_status": (
+                        "completed" if expansion.get("completed_at") is not None
+                        else "ready" if len(mastered_children) == len(child_ids)
+                        else "pending"
+                    ),
+                    "completed_at": expansion.get("completed_at"),
+                }
+            )
+        return result
+
+    def expand_atom(self, atom_id: str, plan: dict[str, Any]) -> dict[str, Any]:
+        atom_id = require_id(atom_id, "atom id")
+        parent = self.atoms.get(atom_id)
+        if parent is None:
+            raise AtomLearnError(f"Unknown expansion parent Atom: {atom_id}")
+        if parent.get("status") not in {"available", "active"}:
+            raise AtomLearnError(
+                f"Atom {atom_id} can be expanded only while available or active, not {parent.get('status')}"
+            )
+        current_active = self.current.get("active_atom_id")
+        if current_active not in {None, atom_id}:
+            raise AtomLearnError(f"Finish or defer Active Atom {current_active} before expanding {atom_id}")
+        if parent.get("expansion") is not None:
+            raise AtomLearnError(f"Atom {atom_id} already has a detailed expansion")
+        if parent.get("status") == "active" and self.current.get("phase") == "reviewing":
+            raise AtomLearnError("A mastered review Atom cannot be expanded without an explicit reopen workflow")
+        pending_evidence = [
+            item.get("id") for item in self.evidence.get("items", [])
+            if item.get("atom_id") == atom_id and item.get("result") == "pending"
+        ]
+        if pending_evidence:
+            raise AtomLearnError(
+                f"Assess or replace pending Evidence before expansion: {', '.join(str(item) for item in pending_evidence)}"
+            )
+        if not isinstance(plan, dict):
+            raise AtomLearnError("expansion plan must be a mapping")
+        reason_code = plan.get("reason_code", "learner_requested_detail")
+        if reason_code not in EXPANSION_REASON_CODES:
+            raise AtomLearnError("reason_code must be one of: " + ", ".join(sorted(EXPANSION_REASON_CODES)))
+        note = plan.get("note", "")
+        if not isinstance(note, str) or len(note.strip()) > 1000:
+            raise AtomLearnError("expansion note must be at most 1000 characters")
+        candidates = plan.get("child_atoms")
+        if not isinstance(candidates, list) or not MIN_EXPANSION_CHILDREN <= len(candidates) <= MAX_EXPANSION_CHILDREN:
+            raise AtomLearnError(
+                f"Detailed expansion requires {MIN_EXPANSION_CHILDREN}-{MAX_EXPANSION_CHILDREN} child_atoms"
+            )
+        child_ids: list[str] = []
+        for index, candidate in enumerate(candidates):
+            if not isinstance(candidate, dict):
+                raise AtomLearnError(f"child_atoms[{index}] must be a mapping")
+            if "prerequisites" in candidate and candidate.get("prerequisites") not in (None, []):
+                raise AtomLearnError("expand computes child prerequisites from list order; omit prerequisites")
+            child_id = require_id(candidate.get("id"), f"child_atoms[{index}].id")
+            require_string(candidate.get("title"), f"{child_id}.title")
+            require_string(candidate.get("objective"), f"{child_id}.objective")
+            if child_id in self.atoms:
+                raise AtomLearnError(f"Expanded child Atom already exists: {child_id}")
+            child_ids.append(child_id)
+        if len(child_ids) != len(set(child_ids)):
+            raise AtomLearnError("Expanded child Atom IDs must be unique")
+
+        self._ensure_expansion_context(atom_id)
+        base_prerequisites = list(parent.get("prerequisites", []))
+        timestamp = iso()
+        normalized_candidates: list[dict[str, Any]] = []
+        for index, candidate in enumerate(candidates):
+            normalized = copy.deepcopy(candidate)
+            normalized["module"] = parent.get("module", "Uncategorized")
+            normalized["optional"] = bool(parent.get("optional", False))
+            normalized["prerequisites"] = base_prerequisites if index == 0 else [child_ids[index - 1]]
+            normalized_candidates.append(normalized)
+        self._add_restructure_atoms(normalized_candidates, inherited_sources=parent.get("sources", []))
+        for child_id in child_ids:
+            self.atoms[child_id]["parent_atom_id"] = atom_id
+        parent["prerequisites"] = [child_ids[-1]]
+        parent["expansion"] = {
+            "child_atom_ids": child_ids,
+            "base_prerequisite_ids": base_prerequisites,
+            "reason_code": reason_code,
+            "note": note.strip(),
+            "requested_at": timestamp,
+            "completed_at": None,
+        }
+        parent["status"] = "locked"
+        self.current.setdefault("expansion_stack", []).append(self._expansion_frame(atom_id))
+        first = self.atoms[child_ids[0]]
+        first["status"] = "active"
+        self.current["active_atom_id"] = first["id"]
+        self.current["phase"] = "teaching"
+        self.current["current_question"] = None
+        self.current["learner_confusions"] = []
+        self.current["next_action"] = (
+            f"Teach only expanded Atom 1/{len(child_ids)}: {first['title']}. "
+            f"Do not preview later children."
+        )
+        self.rebuild_graph()
+        return {
+            "parent_atom_id": atom_id,
+            "created_atom_ids": child_ids,
+            "active_atom_id": first["id"],
+            "integration_required": True,
+            "reason_code": reason_code,
+        }
+
+    def _activate_expansion_atom(self, atom_id: str, phase: str, next_action: str) -> None:
+        atom = self.atoms.get(atom_id)
+        if atom is None or atom.get("status") != "available":
+            status = atom.get("status") if atom else "missing"
+            raise AtomLearnError(f"Expansion cannot activate {atom_id} from status {status}")
+        atom["status"] = "active"
+        self.current["active_atom_id"] = atom_id
+        self.current["phase"] = phase
+        self.current["current_question"] = None
+        self.current["learner_confusions"] = []
+        self.current["next_action"] = next_action
+
+    def _advance_expansion_after_mastery(self, atom_id: str, at: datetime) -> None:
+        completed_id = atom_id
+        stack = self.current.get("expansion_stack", [])
+        while stack:
+            frame = stack[-1]
+            if len(self.current.get("backtrack_stack", [])) > frame.get("backtrack_depth", 0):
+                self.current["next_action"] = "Resume the saved Atom after prerequisite remediation."
+                return
+            parent_id = frame["parent_atom_id"]
+            child_ids = frame["child_atom_ids"]
+            parent = self.atoms[parent_id]
+            if completed_id == parent_id:
+                parent["expansion"]["completed_at"] = iso(at)
+                stack.pop()
+                completed_id = parent_id
+                self.recalculate_availability()
+                continue
+            if completed_id not in child_ids:
+                return
+            self.recalculate_availability()
+            remaining = [
+                child_id for child_id in child_ids
+                if self.atoms[child_id].get("status") not in MASTERY_LIKE
+            ]
+            if remaining:
+                next_id = remaining[0]
+                next_atom = self.atoms[next_id]
+                if next_atom.get("status") == "deferred":
+                    self.current["next_action"] = (
+                        f"Restore deferred expanded Atom {next_id} before continuing the detailed branch."
+                    )
+                    return
+                position = child_ids.index(next_id) + 1
+                self._activate_expansion_atom(
+                    next_id,
+                    "teaching",
+                    f"Teach only expanded Atom {position}/{len(child_ids)}: {next_atom['title']}. "
+                    "Do not preview later children.",
+                )
+                return
+            self._activate_expansion_atom(
+                parent_id,
+                "integrating",
+                f"Run the integration check for {parent['title']} across all mastered child Atoms.",
+            )
+            return
+        if self.current.get("backtrack_stack"):
+            self.current["next_action"] = "Resume the saved Atom after prerequisite remediation."
 
     def status_summary(self) -> dict[str, Any]:
         active_id = self.current.get("active_atom_id")
@@ -824,6 +1266,8 @@ class Workspace:
             "open_questions": open_questions,
             "due_reviews": due_reviews,
             "active_flexibility_decisions": flexibility,
+            "detailed_expansions": self.active_expansions(),
+            "expansion_focus_atom_id": self._expansion_next_atom_id(),
             "next_candidates": [] if validation_errors else self.suggest_next(),
         }
 
@@ -834,8 +1278,10 @@ class Workspace:
             if item.get("status") == "pending" and self.atoms.get(item.get("atom_id"), {}).get("status") == "review_due"
         }
         candidates = [atom for atom in self.atoms.values() if atom.get("status") in {"available", "review_due"}]
+        expansion_focus = self._expansion_next_atom_id()
         candidates.sort(
             key=lambda atom: (
+                0 if atom["id"] == expansion_focus else 1,
                 0 if atom["id"] in due_ids else 1,
                 atom.get("difficulty", 1),
                 atom.get("created_at", ""),
@@ -863,12 +1309,28 @@ class Workspace:
         if atom.get("status") not in {"available", "review_due"}:
             raise AtomLearnError(f"Atom {atom_id} cannot be activated from status {atom.get('status')}")
         reviewing = atom.get("status") == "review_due"
+        expansion = atom.get("expansion")
+        integrating = (
+            isinstance(expansion, dict)
+            and expansion.get("completed_at") is None
+            and all(
+                self.atoms.get(child_id, {}).get("status") in MASTERY_LIKE
+                for child_id in expansion.get("child_atom_ids", [])
+            )
+        )
+        self._ensure_expansion_context(atom_id)
         atom["status"] = "active"
         self.current["active_atom_id"] = atom_id
-        self.current["phase"] = "reviewing" if reviewing else "teaching"
+        self.current["phase"] = "reviewing" if reviewing else ("integrating" if integrating else "teaching")
         self.current["current_question"] = None
         self.current["learner_confusions"] = []
-        self.current["next_action"] = "Run a focused review check." if reviewing else f"Teach why {atom['title']} matters."
+        self.current["next_action"] = (
+            "Run a focused review check."
+            if reviewing
+            else f"Run the integration check for {atom['title']} across all mastered child Atoms."
+            if integrating
+            else f"Teach why {atom['title']} matters."
+        )
         self.course["status"] = "active"
 
     def skip_guidance(self, atom_id: str) -> dict[str, Any]:
@@ -944,6 +1406,13 @@ class Workspace:
         policy = self.course.get("settings", {}).get("skip_policy", "diagnostic_first")
         if mode == "provisional" and policy == "strict_mastery":
             raise AtomLearnError("This course uses strict_mastery skip policy; use a diagnostic or defer the Atom")
+        if mode == "provisional" and atom.get("parent_atom_id") is not None:
+            raise AtomLearnError(
+                "Expanded child Atoms require mastered Evidence; use a diagnostic test-out or defer instead"
+            )
+        expansion = atom.get("expansion")
+        if mode == "provisional" and isinstance(expansion, dict) and expansion.get("completed_at") is None:
+            raise AtomLearnError("An expanded parent requires child mastery and an integration check before completion")
         if mode == "provisional" and not confirmed:
             raise AtomLearnError(
                 "Provisional skip does not prove mastery. Review the diagnostic option and rerun with --confirmed."
@@ -955,6 +1424,8 @@ class Workspace:
             self.current["phase"] = "transitioning"
             self.current["current_question"] = None
             self.current["learner_confusions"] = []
+            if mode == "defer":
+                self.current["expansion_stack"] = []
         timestamp = iso()
         atom["status"] = "skipped" if mode == "provisional" else "deferred"
         atom["flexibility"] = {
@@ -1150,6 +1621,7 @@ class Workspace:
             self.current["next_action"] = "Review progress and choose the next available Atom."
             self._complete_due_review(atom_id, evidence_id)
             self._schedule_next_review(atom_id, at or now_utc())
+            self._advance_expansion_after_mastery(atom_id, at or now_utc())
         else:
             atom["status"] = "active"
             weakest = min(required, key=lambda dimension: evidence["scores"][dimension])
@@ -1276,6 +1748,7 @@ class Workspace:
         stack.pop()
         parent["status"] = "active"
         self.current["active_atom_id"] = parent_id
+        self._ensure_expansion_context(parent_id)
         self.current["phase"] = "questioning"
         self.current["current_question"] = saved.get("current_question")
         self.current["next_action"] = saved.get("next_action") or "Reconnect the repaired prerequisite to the original question."
@@ -1302,6 +1775,8 @@ class Workspace:
             raise AtomLearnError(f"Unknown split source Atom: {source_id!r}")
         if source.get("status") == "active":
             raise AtomLearnError("Cannot split the Active Atom")
+        if source.get("parent_atom_id") is not None or source.get("expansion") is not None:
+            raise AtomLearnError("Cannot split an Atom that participates in a detailed expansion")
         candidates = proposal.get("new_atoms")
         if not isinstance(candidates, list) or len(candidates) < 2:
             raise AtomLearnError("Split requires at least two new_atoms")
@@ -1333,6 +1808,12 @@ class Workspace:
             raise AtomLearnError("One or more merge source Atoms do not exist")
         if any(self.atoms[atom_id].get("status") == "active" for atom_id in source_ids):
             raise AtomLearnError("Cannot merge an Active Atom")
+        if any(
+            self.atoms[atom_id].get("parent_atom_id") is not None
+            or self.atoms[atom_id].get("expansion") is not None
+            for atom_id in source_ids
+        ):
+            raise AtomLearnError("Cannot merge Atoms that participate in a detailed expansion")
         merged = proposal.get("merged_atom")
         if not isinstance(merged, dict):
             raise AtomLearnError("merged_atom must be a mapping")
@@ -1403,6 +1884,8 @@ class Workspace:
                 "last_reviewed_at": None,
                 "evidence_ids": [],
                 "flexibility": None,
+                "parent_atom_id": None,
+                "expansion": None,
                 "created_at": timestamp,
                 "updated_at": timestamp,
             }
@@ -1432,8 +1915,37 @@ class Workspace:
         map_lines = [f"# {self.course.get('title')} Learning Map", "", "> Generated by AtomLearn. Edit canonical `.atomlearn/` state through the CLI.", ""]
         for module, atoms in modules.items():
             map_lines.extend([f"## {module}", ""])
+            atom_ids = {atom["id"] for atom in atoms}
+            children: dict[str, list[dict[str, Any]]] = defaultdict(list)
             for atom in atoms:
-                map_lines.append(f"- {status_icon.get(atom.get('status'), '?')} `{atom['id']}` — {atom['title']} ({atom.get('status')})")
+                if atom.get("parent_atom_id") in atom_ids:
+                    children[atom["parent_atom_id"]].append(atom)
+            rendered_ids: set[str] = set()
+
+            def append_tree(atom: dict[str, Any], depth: int) -> None:
+                rendered_ids.add(atom["id"])
+                indent = "  " * depth
+                marker = " ↳" if depth else ""
+                map_lines.append(
+                    f"{indent}-{marker} {status_icon.get(atom.get('status'), '?')} "
+                    f"`{atom['id']}` — {atom['title']} ({atom.get('status')})"
+                )
+                ordered_children = (
+                    atom.get("expansion", {}).get("child_atom_ids", [])
+                    if isinstance(atom.get("expansion"), dict)
+                    else []
+                )
+                child_map = {item["id"]: item for item in children.get(atom["id"], [])}
+                for child_id in ordered_children:
+                    if child_id in child_map:
+                        append_tree(child_map[child_id], depth + 1)
+
+            for atom in atoms:
+                if atom.get("parent_atom_id") not in atom_ids:
+                    append_tree(atom, 0)
+            for atom in atoms:
+                if atom["id"] not in rendered_ids:
+                    append_tree(atom, 0)
             map_lines.append("")
 
         active = self.atoms.get(active_id) if active_id else None
@@ -1464,7 +1976,13 @@ class Workspace:
         current_lines.extend([f"- {item}" for item in self.current.get("learner_understands", [])] or ["- None recorded"])
         current_lines.extend(["", "## Learner Confusions", ""])
         current_lines.extend([f"- {item}" for item in self.current.get("learner_confusions", [])] or ["- None recorded"])
-        current_lines.extend(["", "## Next Action", "", str(self.current.get("next_action") or "None"), "", "## Backtrack Depth", "", str(len(self.current.get("backtrack_stack", []))), ""])
+        current_lines.extend(
+            [
+                "", "## Next Action", "", str(self.current.get("next_action") or "None"),
+                "", "## Backtrack Depth", "", str(len(self.current.get("backtrack_stack", []))),
+                "", "## Detailed Expansion Depth", "", str(len(self.current.get("expansion_stack", []))), "",
+            ]
+        )
 
         non_archived = [atom for atom in self.atoms.values() if atom.get("status") != "archived"]
         mastered = [atom for atom in non_archived if atom.get("status") in MASTERY_LIKE]
@@ -1498,6 +2016,15 @@ class Workspace:
                 f"- `{atom['id']}` — {atom['title']} ({atom['status']}; "
                 f"reason: {atom.get('flexibility', {}).get('reason_code', 'unknown')})"
                 for atom in skipped + deferred
+            ]
+            or ["- None"]
+        )
+        progress_lines.extend(["", "## Detailed Expansions", ""])
+        progress_lines.extend(
+            [
+                f"- `{item['parent_atom_id']}` — {item['children_mastered']}/{item['children_total']} "
+                f"children mastered; integration: {item['integration_status']}"
+                for item in self.active_expansions()
             ]
             or ["- None"]
         )
@@ -1589,6 +2116,13 @@ def build_parser() -> argparse.ArgumentParser:
     unskip_parser.add_argument("workspace")
     unskip_parser.add_argument("atom_id")
     mutation_args(unskip_parser)
+
+    expand_parser = sub.add_parser("expand", help="Turn a detailed explanation request into ordered child Atoms")
+    expand_parser.add_argument("workspace")
+    expand_parser.add_argument("atom_id")
+    expand_parser.add_argument("--plan", required=True)
+    expand_parser.add_argument("--confirmed", action="store_true")
+    mutation_args(expand_parser)
 
     update_parser = sub.add_parser("update-session")
     update_parser.add_argument("workspace")
@@ -1896,6 +2430,29 @@ def run(args: argparse.Namespace) -> None:
             result,
         )
         emit({"ok": True, "revision": workspace.revision, **result})
+    elif args.command == "expand":
+        plan = read_data(Path(args.plan))
+        if not args.confirmed:
+            emit(
+                {
+                    "ok": True,
+                    "applied": False,
+                    "parent_atom_id": args.atom_id,
+                    "plan": plan,
+                    "message": (
+                        "Review the ordered child Atoms and rerun with --confirmed. "
+                        "A learner request for a detailed explanation is explicit confirmation."
+                    ),
+                }
+            )
+            return
+        result = workspace.expand_atom(args.atom_id, plan)
+        workspace.commit(
+            "atom.expanded_for_detail",
+            "Converted a detailed explanation request into an ordered Atom branch",
+            result,
+        )
+        emit({"ok": True, "revision": workspace.revision, "applied": True, **result})
     elif args.command == "update-session":
         workspace.update_session(read_data(Path(args.input)))
         workspace.commit("session.updated", "Persisted the current teaching state")

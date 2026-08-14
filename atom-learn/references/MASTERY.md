@@ -5,6 +5,7 @@
 - Evidence dimensions
 - Check design
 - Test-out checks
+- Expanded-child and integration checks
 - Scoring
 - Remediation
 - Spaced review
@@ -26,6 +27,12 @@ Use short, diagnostic checks. Ask one or two prompts at a time. Avoid copying th
 ## Test-out checks
 
 When a learner says the Atom is easy or already mastered, skip the lecture before skipping the Evidence. Use `skip --mode diagnostic` to retrieve all required dimensions and thresholds, then create the smallest check that still covers them. A passed test-out check is normal mastered Evidence. A provisional skip is not Evidence and must not receive scores, confidence, or review scheduling.
+
+## Expanded-child and integration checks
+
+Check each expanded child against only its own objective. Do not require knowledge from a later child and do not accept one broad response as Evidence for several children.
+
+After all children are mastered, check the parent in `integrating` phase with a new prompt that requires their relationships or joint application. Child Evidence does not automatically master the parent. Expanded children may use diagnostic test-out Evidence, but cannot use provisional skip.
 
 ## Scoring
 

@@ -27,6 +27,8 @@ AtomLearn answers these questions with a multi-lens lineage map. The structural 
 
 The prerequisite DAG remains the authority for learning order. Its edges require a mastery-like state or an explicit provisional skip before a successor can be activated. The latter is a disclosed traversal assumption, not understanding. Lineage analysis derives roots, leaves, topological order, the longest learning spine, hubs, module boundaries, and cross-module bridges from this DAG.
 
+Detailed expansion adds a separate containment view: `parent_atom_id` and `graph.expansions` show which fine-grained Atoms belong inside a parent objective, while the derived prerequisite chain controls their teaching order. Lineage reports these trees separately so containment is not mistaken for a semantic or prerequisite relation.
+
 Semantic relations explain conceptual meaning without changing activation rules. Supported relation types are:
 
 - `motivates`: an earlier problem or limitation creates the need for the target;

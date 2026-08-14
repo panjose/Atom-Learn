@@ -16,6 +16,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Map roots, learning spines, branches, hubs, derivations, historical development, contrasts, applications, and each concept's lineage
 - Enforce exactly one Active Atom and guard all prerequisites
+- Turn “explain this in detail” into an ordered child-Atom tree instead of a long multi-concept lecture
 - Let learners test out, defer, provisionally skip, or restore Atoms without fabricating mastery
 - Route in-Atom questions, blocking prerequisites, future questions, and Parking Lot items
 - Evaluate mastery through explain/apply/discriminate/transfer/teach-back Evidence
@@ -114,6 +115,19 @@ python atom-learn/scripts/atomlearn.py unskip courses/calculus calculus.limit.ap
 
 A later downstream gap can backtrack into a skipped Atom and revoke the assumption automatically. `strict_mastery` courses reject provisional bypass; courses traversed with assumptions report `completed_with_skips` and keep mastered, skipped, and deferred totals separate. Exam plans can emit `verify_skip`, research reading exposes provisional concept assumptions, and lineage views show both skipped and deferred nodes. See [Flexible Progression Workflow](atom-learn/references/FLEXIBLE_PROGRESSION.md) and [Flexible Progression Design](docs/FLEXIBLE_PROGRESSION_DESIGN.md).
 
+## Atomic Detailed Explanations
+
+When a learner asks to explain an Atom in detail, step by step, or in smaller pieces, AtomLearn checks whether the request crosses multiple independently teachable objectives. If so, it creates 2–12 ordered child Atoms instead of returning one long answer. The first child becomes Active immediately; each later child is activated only after the preceding child has mastered Evidence.
+
+```powershell
+python atom-learn/scripts/atomlearn.py expand courses/calculus calculus.derivative.definition --plan expand-derivative.yaml
+python atom-learn/scripts/atomlearn.py expand courses/calculus calculus.derivative.definition --plan expand-derivative.yaml --confirmed --expected-revision 4
+```
+
+The parent remains a real integration objective. After every child is mastered, AtomLearn activates the parent in `integrating` phase and requires a new synthesis check before downstream Atoms unlock. A child can be expanded again, producing a nested tree while still maintaining exactly one Active Atom. Diagnostic test-out remains available, but expanded children cannot be provisionally skipped; they may be deferred and restored. Learning and lineage views display containment separately from prerequisite edges. See [Atomic Detailed Expansion](atom-learn/references/DETAILED_EXPANSION.md) and [Detailed Expansion Design](docs/DETAILED_EXPANSION_DESIGN.md).
+
+Use `atom-learn/assets/templates/expand-plan.yaml` as the starter payload.
+
 ## Research Reading
 
 AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It builds a guided map across surveys, seminal work, theory and methods, benchmarks and datasets, critiques and replications, and applications. Each completed paper records evidence-linked claims, limitations, open questions, and relations to other work.
@@ -181,6 +195,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [RAG Design](docs/RAG_DESIGN.md)
 - [Knowledge Lineage Design](docs/KNOWLEDGE_LINEAGE_DESIGN.md)
 - [Flexible Progression Design](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
+- [Detailed Expansion Design](docs/DETAILED_EXPANSION_DESIGN.md)
 
 ## Development Validation
 

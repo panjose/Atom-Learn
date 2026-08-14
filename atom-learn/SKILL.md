@@ -1,13 +1,13 @@
 ---
 name: atom-learn
-description: Build, retrieve for, run, personalize, map, and safely evolve persistent source-grounded learning courses, exam paths, research-reading programs, and knowledge-lineage maps. Accept textbooks, knowledge bases, outlines, exams, question banks, or only a topic; index sources; correct gaps with harness Web Search; analyze coverage and difficulty; organize prerequisite and semantic maps; support diagnostic-first skipping, deferral, and reversible provisional bypass when users say material is easy or already known; adapt teaching from privacy-preserving session signals; and track learning evidence. Use for RAG-grounded course creation, knowledge maps, flexible pacing, skip requests, targeted study or review, durable progress, personalization, mastery checks, spaced review, critical paper reading, literature synthesis, field orientation, exam analysis, or workspace recovery.
+description: Build, retrieve for, run, personalize, map, and safely evolve persistent source-grounded learning courses, exam paths, research-reading programs, and knowledge-lineage maps. Accept textbooks, knowledge bases, outlines, exams, question banks, or only a topic; index sources; correct gaps with harness Web Search; atomize detailed-explanation requests into ordered child concepts instead of long multi-concept lectures; analyze coverage and difficulty; organize prerequisite and semantic maps; support diagnostic-first skipping, deferral, and reversible provisional bypass; adapt teaching from privacy-preserving session signals; and track learning evidence. Use for RAG-grounded course creation, “explain this knowledge point in detail” or step-by-step requests, knowledge maps, flexible pacing, skips, targeted study or review, durable progress, personalization, mastery checks, spaced review, critical paper reading, literature synthesis, field orientation, exam analysis, or workspace recovery.
 ---
 
 # AtomLearn
 
 Follow the Atom Principle:
 
-> Never present an unverified skip as mastery.
+> Never replace Atomization with a long multi-concept answer. Never present an unverified skip as mastery.
 
 Maintain exactly one Active Atom. Permit unlimited questions, prerequisite review, parked side questions, and explicit flexible progression without losing state. Advance through mastery Evidence or a clearly labeled, reversible provisional skip; never conflate the two.
 
@@ -122,6 +122,24 @@ python <SKILL_DIR>/scripts/atomlearn.py unskip <workspace> <atom-id>
 
 Do not create fake Evidence for a provisional skip. Report `mastered`, `skipped`, and `deferred` separately. Treat `completed_with_skips` as path completion with explicit assumptions, not as proof that every required Atom is mastered.
 
+### Expand a request for detail
+
+1. Read [references/DETAILED_EXPANSION.md](references/DETAILED_EXPANSION.md) when the learner asks to explain an Atom in detail, break it down, derive it step by step, or go deeper.
+2. Decide whether one focused clarification is sufficient. If the request requires two or more independently checkable ideas, do not answer them as one long response.
+3. Retrieve the parent Atom's source evidence and create an ordered plan of 2–12 child Atoms. Prefer 2–5. Keep every child inside the parent objective and omit child prerequisites; the CLI computes their strict order.
+4. Preview `expand`. The learner's direct detail request counts as confirmation for the bounded plan, so apply it with `--confirmed` without asking the same question again unless scope is ambiguous.
+5. Teach only the newly Active child. Do not preview later children beyond a short orientation list of titles.
+6. Record and assess child-specific Evidence. Let the CLI activate the next child automatically after mastery.
+7. After the final child, teach no new branch content. Run the parent integration check in `integrating` phase.
+8. If a child still contains multiple independent objectives, expand that child and complete the nested branch first.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py expand <workspace> <atom-id> --plan <expand.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py expand <workspace> <atom-id> --plan <expand.yaml> --confirmed --expected-revision <revision>
+```
+
+Do not use `response.detail=detailed` as permission to collapse several child Atoms into one answer. Expanded children require mastered Evidence; offer a diagnostic test-out or defer, but never provisionally skip them.
+
 ### Build and query knowledge lineage
 
 1. Read [references/KNOWLEDGE_LINEAGE.md](references/KNOWLEDGE_LINEAGE.md) and [references/LINEAGE_SCHEMA.md](references/LINEAGE_SCHEMA.md).
@@ -201,7 +219,7 @@ Do not call an observed open question a novel contribution without a current lit
 ### Teach one turn
 
 1. Read `status --json`, note its course and adaptation revisions, and apply context-valid adaptation guidance.
-2. Interpret the input as an answer, a question, a state command, or a scope change.
+2. Interpret the input as an answer, a question, a state command, a detail/expansion request, or a scope change.
 3. Route questions using [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md). Record the question before taking a routing action.
 4. Teach only the minimum needed for the Active Atom, using Why -> What -> How -> Example -> Intuition.
 5. Persist current question, understood ideas, confusions, and `next_action` with `update-session`.
@@ -235,6 +253,7 @@ Never mark an Atom mastered without persisted Evidence. A provisional skip is a 
 - Run `refresh-reviews` at the beginning of a study session. Prefer a due review before a new Atom unless the learner asks otherwise.
 - Use `restructure` only after reading [references/ATOMIZATION.md](references/ATOMIZATION.md). Generate a proposal first. Apply it only with explicit user confirmation and `--confirmed`.
 - Preserve archived Atom IDs, aliases, questions, and Evidence. Never erase learning history during split or merge.
+- Use `expand` for learner-requested depth while retaining the parent integration goal. Use `restructure split` only when the original Atom boundary itself should be replaced and archived.
 
 ### Evolve from evidence
 
@@ -279,7 +298,8 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/KNOWLEDGE_LINEAGE.md](references/KNOWLEDGE_LINEAGE.md) when the learner asks for a knowledge map, conceptual structure, main thread, branches, a concept's 来龙去脉, or connections between two concepts.
 - Read [references/LINEAGE_SCHEMA.md](references/LINEAGE_SCHEMA.md) when creating semantic annotations, relations, or curated threads, or troubleshooting lineage state.
 - Read [references/FLEXIBLE_PROGRESSION.md](references/FLEXIBLE_PROGRESSION.md) when the learner asks to skip, postpone, fast-track, test out of, or restore an Atom.
+- Read [references/DETAILED_EXPANSION.md](references/DETAILED_EXPANSION.md) when the learner asks for a detailed, step-by-step, decomposed, or deeper explanation of an Atom.
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a knowledge-lineage request, distinguish prerequisites from semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
