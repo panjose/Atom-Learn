@@ -2,5 +2,11 @@ schema_version: 1
 revision: 0
 title: ""
 target_date: null
+difficulty_calibration:
+  offset: 0.0
+  anchor_count: 0
+  mae_before: null
+  mae_after: null
+  updated_at: null
 created_at: ""
 updated_at: ""

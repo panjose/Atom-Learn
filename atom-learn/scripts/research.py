@@ -7,10 +7,13 @@ import argparse
 import copy
 import json
 import os
+import re
 import sys
 from collections import Counter
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
+from urllib.request import Request, urlopen
 
 from atomlearn import (
     SATISFIED_STATUSES,
@@ -50,6 +53,7 @@ PAPER_ROLES = {
 }
 RELATION_TYPES = {"supports", "extends", "contradicts", "replicates", "compares"}
 CLAIM_STRENGTHS = {"weak", "mixed", "moderate", "strong", "unclear"}
+METADATA_STATUSES = {"unverified", "verified", "conflict"}
 RESEARCH_STATUSES = {"scoping", "mapping", "reading", "synthesizing", "maintaining", "complete"}
 ROLE_ORDER = {
     "survey": 0,
@@ -101,6 +105,42 @@ def markdown(value: Any) -> str:
 def compact(items: list[Any], empty: str = "Not recorded") -> str:
     values = [markdown(item) for item in items if markdown(item)]
     return "; ".join(values) if values else empty
+
+
+def normalize_doi(value: Any, *, allow_empty: bool = True) -> str:
+    if value is None or not str(value).strip():
+        if allow_empty:
+            return ""
+        raise ResearchError("DOI is required")
+    doi = str(value).strip().lower()
+    doi = re.sub(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", "", doi, flags=re.IGNORECASE)
+    doi = doi.rstrip(". ,;)")
+    if not re.fullmatch(r"10\.\d{4,9}/\S+", doi):
+        raise ResearchError(f"invalid DOI: {value!r}")
+    return doi
+
+
+def title_fingerprint(value: Any) -> str:
+    return "".join(character for character in str(value or "").casefold() if character.isalnum())
+
+
+def synthesis_tokens(value: Any) -> set[str]:
+    text = str(value or "").casefold()
+    words = re.findall(r"[a-z0-9]{3,}|[\u4e00-\u9fff]", text)
+    stop = {
+        "the", "and", "for", "with", "that", "this", "from", "under", "paper", "study", "method",
+        "result", "results", "reported", "using", "into", "than", "their", "does", "show", "shows",
+    }
+    return {item for item in words if item not in stop}
+
+
+def fetch_json(url: str, user_agent: str, timeout: float) -> dict[str, Any]:
+    request = Request(url, headers={"User-Agent": user_agent, "Accept": "application/json"})
+    with urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed HTTPS provider URLs
+        data = json.load(response)
+    if not isinstance(data, dict):
+        raise ResearchError("metadata provider returned a non-object response")
+    return data
 
 
 class ResearchEngine:
@@ -172,8 +212,12 @@ class ResearchEngine:
                 raise ResearchError(f"Paper filename {paper_id} does not match id {paper.get('id')!r}")
             if paper_id in papers:
                 raise ResearchError(f"Duplicate paper ID: {paper_id}")
+            paper.setdefault("metadata_verification", {"status": "unverified", "checks": {}})
             papers[paper_id] = paper
-        return cls(workspace, read_data(state_path), papers)
+        state = read_data(state_path)
+        state.setdefault("paper_aliases", {})
+        state.setdefault("latest_synthesis", None)
+        return cls(workspace, state, papers)
 
     @property
     def revision(self) -> int:
@@ -202,6 +246,8 @@ class ResearchEngine:
         except (AtomLearnError, ResearchError) as exc:
             errors.append(str(exc))
         active_ids: list[str] = []
+        doi_owners: dict[str, str] = {}
+        title_owners: dict[str, str] = {}
         for paper_id, paper in self.papers.items():
             try:
                 require_id(paper_id, "paper key")
@@ -219,9 +265,21 @@ class ResearchEngine:
                 )
                 cites = string_list(paper.get("cites", []), f"{paper_id}.cites", limit=200)
                 concepts = string_list(paper.get("concept_atom_ids", []), f"{paper_id}.concept_atom_ids", limit=200)
+                doi = normalize_doi(paper.get("doi", ""))
             except (AtomLearnError, ResearchError) as exc:
                 errors.append(str(exc))
                 continue
+            if doi:
+                if doi in doi_owners and doi_owners[doi] != paper_id:
+                    errors.append(f"duplicate DOI across papers: {doi}")
+                doi_owners[doi] = paper_id
+            fingerprint = title_fingerprint(paper.get("title"))
+            if fingerprint in title_owners and title_owners[fingerprint] != paper_id:
+                errors.append(f"duplicate normalized title across papers: {paper.get('title')}")
+            title_owners[fingerprint] = paper_id
+            verification = paper.get("metadata_verification")
+            if not isinstance(verification, dict) or verification.get("status") not in METADATA_STATUSES:
+                errors.append(f"{paper_id}: invalid metadata_verification")
             if paper.get("status") not in PAPER_STATUSES:
                 errors.append(f"{paper_id}: invalid status {paper.get('status')!r}")
             if paper.get("role") not in PAPER_ROLES:
@@ -259,6 +317,17 @@ class ResearchEngine:
             errors.append("research state has no active_paper_id but a paper is active")
         if state_active is not None and active_ids != [state_active]:
             errors.append("active_paper_id does not match the Active Paper")
+        aliases = self.state.get("paper_aliases", {})
+        if not isinstance(aliases, dict):
+            errors.append("paper_aliases must be a mapping")
+        else:
+            for alias, target in aliases.items():
+                try:
+                    require_id(alias, "paper alias")
+                except AtomLearnError as exc:
+                    errors.append(str(exc))
+                if target not in self.papers or alias == target:
+                    errors.append(f"paper alias {alias!r} must target a different canonical paper")
         errors.extend(self._validate_prerequisite_dag())
         return unique(errors)
 
@@ -407,22 +476,70 @@ class ResearchEngine:
         raw_papers = plan.get("papers")
         if not isinstance(raw_papers, list) or not raw_papers:
             raise ResearchError("research import plan requires a non-empty papers list")
-        imported: list[str] = []
-        seen: set[str] = set()
+        doi_index = {
+            normalize_doi(paper.get("doi", "")): paper_id
+            for paper_id, paper in self.papers.items()
+            if paper.get("doi")
+        }
+        title_index = {title_fingerprint(paper["title"]): paper_id for paper_id, paper in self.papers.items()}
+        aliases = dict(self.state.get("paper_aliases", {}))
+        merged: dict[str, dict[str, Any]] = {}
+        deduplicated: list[dict[str, str]] = []
         for raw in raw_papers:
             if not isinstance(raw, dict):
                 raise ResearchError("each paper must be a mapping")
-            paper_id = require_id(raw.get("id"), "paper.id")
-            if paper_id in seen:
-                raise ResearchError(f"duplicate paper ID in import plan: {paper_id}")
-            seen.add(paper_id)
+            raw = copy.deepcopy(raw)
+            raw_id = require_id(raw.get("id"), "paper.id")
             if "full_text" in raw:
                 raise ResearchError("Do not store full paper text in research state; store metadata and locators")
+            raw_doi = normalize_doi(raw.get("doi", ""))
+            raw_title = require_text(raw.get("title"), f"{raw_id}.title", limit=1000)
+            identity_matches = {
+                candidate
+                for candidate in [
+                    raw_id if raw_id in self.papers or raw_id in merged else None,
+                    doi_index.get(raw_doi) if raw_doi else None,
+                    title_index.get(title_fingerprint(raw_title)),
+                ]
+                if candidate
+            }
+            if len(identity_matches) > 1:
+                raise ResearchError(f"{raw_id}: DOI, title, and ID resolve to conflicting canonical papers")
+            canonical_id = next(iter(identity_matches), raw_id)
+            if raw_id != canonical_id:
+                aliases[raw_id] = canonical_id
+                deduplicated.append({"duplicate_id": raw_id, "canonical_id": canonical_id})
+            raw["id"] = canonical_id
+            current = merged.get(canonical_id, {})
+            combined = copy.deepcopy(current)
+            for key, value in raw.items():
+                if key in {"authors", "prerequisite_paper_ids", "cites", "external_citations", "concept_atom_ids", "tags"}:
+                    combined[key] = unique([*combined.get(key, []), *(value or [])])
+                elif key not in combined or combined[key] is None or combined[key] == "" or combined[key] == []:
+                    combined[key] = value
+            merged[canonical_id] = combined
+            if raw_doi:
+                doi_index[raw_doi] = canonical_id
+            title_index[title_fingerprint(raw_title)] = canonical_id
+        aliases = {alias: aliases.get(target, target) for alias, target in aliases.items()}
+        imported: list[str] = []
+        for paper_id, raw in merged.items():
+            for field in ["prerequisite_paper_ids", "cites"]:
+                raw[field] = unique(
+                    aliases.get(reference, reference)
+                    for reference in raw.get(field, [])
+                    if aliases.get(reference, reference) != paper_id
+                )
             paper = self._normalize_paper(raw, self.papers.get(paper_id))
             self.papers[paper_id] = paper
             imported.append(paper_id)
+        self.state["paper_aliases"] = aliases
         self.state["status"] = "mapping"
-        return {"imported_paper_ids": imported, "total_papers": len(self.papers)}
+        return {
+            "imported_paper_ids": imported,
+            "deduplicated": deduplicated,
+            "total_papers": len(self.papers),
+        }
 
     def _normalize_paper(self, raw: dict[str, Any], existing: dict[str, Any] | None) -> dict[str, Any]:
         paper_id = require_id(raw.get("id"), "paper.id")
@@ -440,7 +557,7 @@ class ResearchEngine:
         ]:
             if field in raw or not existing:
                 paper[field] = string_list(raw.get(field, paper.get(field, [])), f"{paper_id}.{label}", limit=limit)
-        for field in ["venue", "doi", "url", "locator"]:
+        for field in ["venue", "url", "locator"]:
             if field in raw or not existing:
                 paper[field] = require_text(
                     raw.get(field, paper.get(field, "")),
@@ -448,6 +565,8 @@ class ResearchEngine:
                     allow_empty=True,
                     limit=2000,
                 )
+        if "doi" in raw or not existing:
+            paper["doi"] = normalize_doi(raw.get("doi", paper.get("doi", "")))
         if "year" in raw or not existing:
             paper["year"] = raw.get("year")
         if "role" in raw or not existing:
@@ -458,6 +577,9 @@ class ResearchEngine:
             paper["status"] = raw.get("status", paper.get("status", "queued"))
         if "analysis" in raw:
             paper["analysis"] = self._normalize_analysis(paper_id, raw["analysis"])
+        if "metadata_verification" in raw:
+            paper["metadata_verification"] = copy.deepcopy(raw["metadata_verification"])
+        paper.setdefault("metadata_verification", {"status": "unverified", "checks": {}})
         if paper.get("status") == "excluded":
             paper["exclusion_reason"] = require_text(
                 raw.get("exclusion_reason", paper.get("exclusion_reason")),
@@ -519,6 +641,258 @@ class ResearchEngine:
                 }
             )
         return analysis
+
+    def _metadata_indexes(self) -> tuple[dict[str, str], dict[str, str]]:
+        doi_index = {
+            normalize_doi(paper.get("doi", "")): paper_id
+            for paper_id, paper in self.papers.items()
+            if paper.get("doi")
+        }
+        title_index = {title_fingerprint(paper.get("title")): paper_id for paper_id, paper in self.papers.items()}
+        return doi_index, title_index
+
+    def reconcile_metadata(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("records"), list) or not payload["records"]:
+            raise ResearchError("metadata payload must contain a non-empty records list")
+        doi_index, title_index = self._metadata_indexes()
+        verified: list[str] = []
+        conflicts: list[dict[str, Any]] = []
+        citation_edges: list[dict[str, str]] = []
+        unresolved: list[dict[str, str]] = []
+        matched_records: list[tuple[str, dict[str, Any]]] = []
+        aliases = self.state.get("paper_aliases", {})
+        for index, record in enumerate(payload["records"]):
+            if not isinstance(record, dict):
+                raise ResearchError(f"records[{index}] must be a mapping")
+            record_doi = normalize_doi(record.get("doi", ""))
+            record_title = require_text(record.get("title"), f"records[{index}].title", limit=1000)
+            requested_id = record.get("paper_id")
+            if requested_id is not None:
+                requested_id = require_id(requested_id, f"records[{index}].paper_id")
+                requested_id = aliases.get(requested_id, requested_id)
+            matches = {
+                item
+                for item in [requested_id, doi_index.get(record_doi) if record_doi else None, title_index.get(title_fingerprint(record_title))]
+                if item in self.papers
+            }
+            if not matches:
+                raise ResearchError(f"records[{index}] does not match an imported paper by ID, DOI, or title")
+            if len(matches) != 1:
+                raise ResearchError(f"records[{index}] identifiers resolve to conflicting papers")
+            paper_id = next(iter(matches))
+            paper = self.papers[paper_id]
+            record_authors = string_list(record.get("authors", []), f"records[{index}].authors", limit=500)
+            checks = {
+                "title": title_fingerprint(paper.get("title")) == title_fingerprint(record_title),
+                "doi": not paper.get("doi") or not record_doi or normalize_doi(paper.get("doi")) == record_doi,
+                "year": paper.get("year") is None or record.get("year") is None or paper.get("year") == record.get("year"),
+                "authors": not paper.get("authors") or not record_authors or bool(
+                    {item.casefold() for item in paper.get("authors", [])} & {item.casefold() for item in record_authors}
+                ),
+            }
+            status = "verified" if all(checks.values()) else "conflict"
+            provider = require_text(record.get("provider", "harness"), f"records[{index}].provider", limit=200)
+            paper["metadata_verification"] = {
+                "status": status,
+                "provider": provider,
+                "provider_id": str(record.get("provider_id", "")),
+                "retrieved_at": str(record.get("retrieved_at") or iso()),
+                "checks": checks,
+            }
+            if status == "verified":
+                verified.append(paper_id)
+                if record_doi and not paper.get("doi"):
+                    paper["doi"] = record_doi
+                for field in ["year", "venue", "url"]:
+                    if not paper.get(field) and record.get(field):
+                        paper[field] = record[field]
+                if not paper.get("authors") and record_authors:
+                    paper["authors"] = record_authors
+            else:
+                conflicts.append({"paper_id": paper_id, "checks": checks})
+            matched_records.append((paper_id, record))
+        doi_index, title_index = self._metadata_indexes()
+        for paper_id, record in matched_records:
+            paper = self.papers[paper_id]
+            for reference in record.get("references", []):
+                if isinstance(reference, str):
+                    reference = {"doi": reference} if reference.lower().startswith("10.") else {"provider_id": reference}
+                if not isinstance(reference, dict):
+                    raise ResearchError(f"{paper_id}.references entries must be strings or mappings")
+                reference_doi = normalize_doi(reference.get("doi", ""))
+                target = doi_index.get(reference_doi) if reference_doi else None
+                if target is None and reference.get("title"):
+                    target = title_index.get(title_fingerprint(reference["title"]))
+                if target and target != paper_id:
+                    if target not in paper["cites"]:
+                        paper["cites"].append(target)
+                        citation_edges.append({"from": paper_id, "to": target})
+                elif not target:
+                    external = reference_doi or str(reference.get("provider_id") or reference.get("title") or "").strip()
+                    if external:
+                        paper["external_citations"] = unique([*paper.get("external_citations", []), external])
+                        unresolved.append({"paper_id": paper_id, "reference": external})
+        return {
+            "verified_paper_ids": unique(verified),
+            "conflicts": conflicts,
+            "citation_edges_added": citation_edges,
+            "unresolved_references": unresolved,
+        }
+
+    def fetch_metadata(self, provider: str, timeout: float, mailto: str) -> dict[str, Any]:
+        if provider not in {"crossref", "openalex"}:
+            raise ResearchError("metadata provider must be crossref or openalex")
+        if not 1 <= timeout <= 60:
+            raise ResearchError("metadata timeout must be between 1 and 60 seconds")
+        user_agent = "AtomLearn/0.11 (+https://github.com/panjose/Atom-Learn)"
+        if mailto:
+            user_agent += f" mailto:{mailto}"
+        records: list[dict[str, Any]] = []
+        failures: list[dict[str, str]] = []
+        for paper_id, paper in self.papers.items():
+            doi = normalize_doi(paper.get("doi", ""))
+            if not doi:
+                failures.append({"paper_id": paper_id, "error": "missing DOI"})
+                continue
+            try:
+                if provider == "crossref":
+                    data = fetch_json(f"https://api.crossref.org/works/{quote(doi, safe='')}", user_agent, timeout)
+                    message = data.get("message", {})
+                    authors = [
+                        " ".join(part for part in [item.get("given", ""), item.get("family", "")] if part).strip()
+                        for item in message.get("author", [])
+                    ]
+                    date_parts = (message.get("published-print") or message.get("published-online") or {}).get("date-parts", [[]])
+                    references = [
+                        {key: value for key, value in {"doi": item.get("DOI"), "title": item.get("article-title")}.items() if value}
+                        for item in message.get("reference", [])
+                    ]
+                    records.append(
+                        {
+                            "paper_id": paper_id,
+                            "provider": provider,
+                            "provider_id": message.get("DOI", doi),
+                            "retrieved_at": iso(),
+                            "title": (message.get("title") or [paper["title"]])[0],
+                            "authors": authors,
+                            "year": date_parts[0][0] if date_parts and date_parts[0] else None,
+                            "venue": (message.get("container-title") or [""])[0],
+                            "doi": message.get("DOI", doi),
+                            "url": message.get("URL", ""),
+                            "references": [item for item in references if item],
+                        }
+                    )
+                else:
+                    identifier = quote(doi, safe="")
+                    data = fetch_json(f"https://api.openalex.org/works/https://doi.org/{identifier}", user_agent, timeout)
+                    records.append(
+                        {
+                            "paper_id": paper_id,
+                            "provider": provider,
+                            "provider_id": data.get("id", ""),
+                            "retrieved_at": iso(),
+                            "title": data.get("display_name") or paper["title"],
+                            "authors": [
+                                item.get("author", {}).get("display_name", "") for item in data.get("authorships", [])
+                            ],
+                            "year": data.get("publication_year"),
+                            "venue": ((data.get("primary_location") or {}).get("source") or {}).get("display_name", ""),
+                            "doi": str(data.get("doi") or doi),
+                            "url": (data.get("primary_location") or {}).get("landing_page_url", ""),
+                            "references": [{"provider_id": item} for item in data.get("referenced_works", [])],
+                        }
+                    )
+            except Exception as exc:  # provider/network failures are reported per paper
+                failures.append({"paper_id": paper_id, "error": str(exc)})
+        if not records:
+            raise ResearchError("metadata acquisition produced no records: " + "; ".join(item["error"] for item in failures))
+        result = self.reconcile_metadata({"records": records})
+        result["provider"] = provider
+        result["acquired_records"] = len(records)
+        result["failures"] = failures
+        return result
+
+    def evidence_synthesis(self) -> dict[str, Any]:
+        claims: list[dict[str, Any]] = []
+        for paper_id, paper in self.papers.items():
+            if paper.get("status") not in {"read", "synthesized"}:
+                continue
+            for claim in paper.get("analysis", {}).get("claims", []):
+                claims.append({"paper_id": paper_id, **claim, "tokens": synthesis_tokens(claim.get("statement"))})
+        parents = list(range(len(claims)))
+
+        def find(index: int) -> int:
+            while parents[index] != index:
+                parents[index] = parents[parents[index]]
+                index = parents[index]
+            return index
+
+        def union(left: int, right: int) -> None:
+            left_root, right_root = find(left), find(right)
+            if left_root != right_root:
+                parents[right_root] = left_root
+
+        relation_lookup = {
+            (paper_id, relation.get("paper_id")): relation.get("type")
+            for paper_id, paper in self.papers.items()
+            for relation in paper.get("analysis", {}).get("relations", [])
+        }
+        claims_per_paper = Counter(item["paper_id"] for item in claims)
+        for left in range(len(claims)):
+            for right in range(left + 1, len(claims)):
+                if claims[left]["paper_id"] == claims[right]["paper_id"]:
+                    continue
+                overlap = claims[left]["tokens"] & claims[right]["tokens"]
+                denominator = min(len(claims[left]["tokens"]), len(claims[right]["tokens"])) or 1
+                explicit_relation = relation_lookup.get((claims[left]["paper_id"], claims[right]["paper_id"])) or relation_lookup.get(
+                    (claims[right]["paper_id"], claims[left]["paper_id"])
+                )
+                if len(overlap) / denominator >= 0.3 or (
+                    explicit_relation
+                    and (overlap or (claims_per_paper[claims[left]["paper_id"]] == claims_per_paper[claims[right]["paper_id"]] == 1))
+                ):
+                    union(left, right)
+        groups: dict[int, list[dict[str, Any]]] = {}
+        for index, claim in enumerate(claims):
+            groups.setdefault(find(index), []).append(claim)
+        themes = []
+        strength_score = {"strong": 4, "moderate": 3, "mixed": 2, "weak": 1, "unclear": 0}
+        for theme_index, group in enumerate(groups.values(), start=1):
+            paper_ids = unique(item["paper_id"] for item in group)
+            relations = unique(
+                relation_lookup.get((left, right)) or relation_lookup.get((right, left))
+                for left in paper_ids
+                for right in paper_ids
+                if left != right and (relation_lookup.get((left, right)) or relation_lookup.get((right, left)))
+            )
+            contested = "contradicts" in relations
+            corroborated = len(paper_ids) > 1 and any(item in relations for item in ["supports", "replicates", "extends"])
+            average_strength = sum(strength_score[item.get("strength", "unclear")] for item in group) / len(group)
+            evidence_grade = "strong" if len(paper_ids) >= 3 and average_strength >= 3 else "moderate" if len(paper_ids) >= 2 and average_strength >= 2 else "limited"
+            if contested:
+                evidence_grade = "contested"
+            token_counts = Counter(token for item in group for token in item["tokens"])
+            label = " / ".join(item for item, _ in token_counts.most_common(5)) or group[0]["statement"][:100]
+            themes.append(
+                {
+                    "id": f"theme.{theme_index:03d}",
+                    "label": label,
+                    "assessment": "contested" if contested else "corroborated" if corroborated else "single_source",
+                    "evidence_grade": evidence_grade,
+                    "paper_ids": paper_ids,
+                    "relation_types": relations,
+                    "claims": [
+                        {key: item[key] for key in ["paper_id", "id", "statement", "evidence_summary", "strength"]}
+                        for item in group
+                    ],
+                    "limitations": unique(
+                        limitation
+                        for paper_id in paper_ids
+                        for limitation in self.papers[paper_id].get("analysis", {}).get("limitations", [])
+                    ),
+                }
+            )
+        return {"generated_at": iso(), "source_paper_ids": unique(item["paper_id"] for item in claims), "themes": themes}
 
     def paper(self, paper_id: str) -> dict[str, Any]:
         paper_id = require_id(paper_id, "paper ID")
@@ -681,8 +1055,11 @@ class ResearchEngine:
             for paper in self.papers.values()
         )
         self.state["status"] = "maintaining" if remaining else "complete"
+        synthesis = self.evidence_synthesis()
+        self.state["latest_synthesis"] = synthesis
         return {
             "integrated_paper_ids": integrated,
+            "evidence_synthesis": synthesis,
             "open_questions": self.open_questions(),
             "contradictions": self.contradictions(),
         }
@@ -721,6 +1098,8 @@ class ResearchEngine:
             "next_candidates": self.next_papers(),
             "open_question_count": len(self.open_questions()),
             "contradiction_count": len(self.contradictions()),
+            "metadata": dict(Counter(paper.get("metadata_verification", {}).get("status", "unverified") for paper in self.papers.values())),
+            "synthesis_theme_count": len((self.state.get("latest_synthesis") or {}).get("themes", [])),
         }
 
     def render(self) -> None:
@@ -822,6 +1201,19 @@ class ResearchEngine:
             )
         if not completed:
             matrix_lines.append("| None completed |  |  |  |  |  |")
+        matrix_lines.extend(["", "## Cross-Paper Evidence Synthesis", ""])
+        themes = (self.state.get("latest_synthesis") or {}).get("themes", [])
+        for theme in themes:
+            matrix_lines.append(
+                f"- `{theme['id']}` **{markdown(theme['label'])}** — {theme['assessment']}, "
+                f"evidence `{theme['evidence_grade']}`; papers: {', '.join(theme['paper_ids'])}"
+            )
+            matrix_lines.extend(
+                f"  - `{claim['paper_id']}/{claim['id']}` [{claim['strength']}] {markdown(claim['statement'])} — {markdown(claim['evidence_summary'])}"
+                for claim in theme["claims"]
+            )
+        if not themes:
+            matrix_lines.append("- Not generated")
 
         gap_lines = [
             "# Research Gaps",
@@ -889,6 +1281,16 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("workspace")
     import_parser.add_argument("--input", required=True)
     add_revision_argument(import_parser)
+    reconcile = sub.add_parser("reconcile-metadata")
+    reconcile.add_argument("workspace")
+    reconcile.add_argument("--input", required=True)
+    add_revision_argument(reconcile)
+    fetch = sub.add_parser("fetch-metadata")
+    fetch.add_argument("workspace")
+    fetch.add_argument("--provider", choices=["crossref", "openalex"], default="crossref")
+    fetch.add_argument("--timeout", type=float, default=15.0)
+    fetch.add_argument("--mailto", default="")
+    add_revision_argument(fetch)
     for action in ["activate", "complete", "synthesize"]:
         parser_for_action = sub.add_parser(action)
         parser_for_action.add_argument("workspace")
@@ -954,6 +1356,12 @@ def run(argv: list[str] | None = None) -> None:
     if args.action == "import":
         result = engine.import_plan(read_data(Path(args.input)))
         event_type = "research.papers_imported"
+    elif args.action == "reconcile-metadata":
+        result = engine.reconcile_metadata(read_data(Path(args.input)))
+        event_type = "research.metadata_reconciled"
+    elif args.action == "fetch-metadata":
+        result = engine.fetch_metadata(args.provider, args.timeout, args.mailto)
+        event_type = "research.metadata_fetched"
     elif args.action == "activate":
         result = engine.activate(args.paper_id)
         event_type = "research.paper_activated"

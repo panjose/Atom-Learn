@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
 import sys
 from collections import Counter
 from datetime import date
@@ -48,15 +50,20 @@ DIFFICULTY_FACTORS = {
     "execution_load": 0.18,
     "time_pressure": 0.10,
 }
-STATE_KEYS = {"schema_version", "revision", "title", "target_date", "created_at", "updated_at"}
+STATE_KEYS = {"schema_version", "revision", "title", "target_date", "difficulty_calibration", "created_at", "updated_at"}
 BANK_KEYS = {"schema_version", "revision", "papers", "questions"}
 PAPER_KEYS = {"id", "title", "year", "session", "kind", "total_points", "source_id", "locator"}
 QUESTION_INPUT_KEYS = {
     "id", "paper_id", "number", "type", "points", "stem_summary", "source_locator", "family_id",
-    "cognitive_levels", "tags", "difficulty", "knowledge_points",
+    "answer_locator", "marking_locator", "marking_link_status", "cognitive_levels", "tags", "difficulty",
+    "knowledge_points",
 }
 KNOWLEDGE_POINT_KEYS = {"id", "label", "atom_id", "weight", "confidence", "basis"}
+KNOWLEDGE_POINT_AUTO_KEYS = {"review_status", "candidate_atom_ids", "mapping_method"}
+MAPPING_REVIEW_STATUSES = {"pending", "confirmed", "corrected"}
+MARKING_LINK_STATUSES = {"linked", "answer_only", "marking_only", "missing"}
 DIFFICULTY_INPUT_KEYS = set(DIFFICULTY_FACTORS) | {"basis", "confidence", "official_level"}
+DIFFICULTY_OUTPUT_KEYS = {"estimated_level", "calibrated_level", "calibration_offset", "effective_level", "band"}
 EVENT_KEYS = {"event_id", "revision", "type", "at", "course_revision", "details"}
 EXAM_VIEW_FILES = ["EXAM_BLUEPRINT.md", "EXAM_STUDY_PLAN.md"]
 
@@ -96,6 +103,73 @@ def difficulty_band(level: float) -> str:
     if level <= 4.2:
         return "advanced"
     return "challenge"
+
+
+QUESTION_PATTERNS = [
+    re.compile(r"^\s*(?:question|q)\s*(\d+(?:\([a-z0-9]+\))?)\s*[:.)-]?\s*(.*)$", re.IGNORECASE),
+    re.compile(r"^\s*第\s*(\d+)\s*题\s*[:：、.]?\s*(.*)$"),
+    re.compile(r"^\s*(\d+(?:\([a-z0-9]+\))?)[.)、]\s+(.*)$", re.IGNORECASE),
+]
+
+
+def question_header(line: str) -> tuple[str, str] | None:
+    for pattern in QUESTION_PATTERNS:
+        match = pattern.match(line)
+        if match:
+            return match.group(1), match.group(2)
+    return None
+
+
+def split_numbered_sections(value: str, label: str) -> list[dict[str, Any]]:
+    lines = value.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    headers = [(index, match) for index, line in enumerate(lines) if (match := question_header(line))]
+    if not headers:
+        raise ExamError(f"{label} has no recognizable numbered question headings")
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for position, (start, (number, remainder)) in enumerate(headers):
+        end = headers[position + 1][0] if position + 1 < len(headers) else len(lines)
+        if number in seen:
+            raise ExamError(f"{label} contains duplicate question number {number}")
+        seen.add(number)
+        text = "\n".join([remainder, *lines[start + 1 : end]]).strip()
+        if not text:
+            raise ExamError(f"{label} question {number} is empty")
+        result.append({"number": number, "text": text, "line_start": start + 1, "line_end": end})
+    return result
+
+
+def transient_text(spec: Any, label: str, base_dir: Path) -> str:
+    if isinstance(spec, str):
+        return spec
+    if not isinstance(spec, dict) or len({key for key in ["text", "path"] if key in spec}) != 1:
+        raise ExamError(f"{label} must be text or a mapping with exactly one of text/path")
+    if "text" in spec:
+        return limited_text(spec["text"], label, limit=2_000_000)
+    path = Path(str(spec["path"])).expanduser()
+    if not path.is_absolute():
+        path = base_dir / path
+    if not path.is_file():
+        raise ExamError(f"{label} path is not a file: {path.resolve()}")
+    if path.stat().st_size > 20_000_000:
+        raise ExamError(f"{label} file exceeds 20 MB")
+    return path.read_text(encoding="utf-8-sig")
+
+
+def exam_tokens(value: Any) -> set[str]:
+    text = str(value or "").casefold()
+    words = re.findall(r"[a-z0-9]{2,}|[\u4e00-\u9fff]", text)
+    stop = {"the", "and", "for", "with", "from", "that", "this", "question", "marks", "points", "using"}
+    return {item for item in words if item not in stop}
+
+
+def extract_points(value: str) -> float | None:
+    totals = re.findall(r"[\[(]\s*(\d+(?:\.\d+)?)\s*(?:marks?|points?|分)\s*[\])]", value, re.IGNORECASE)
+    if totals:
+        return float(totals[-1])
+    matches = re.findall(r"(?:\[|\()?\s*(\d+(?:\.\d+)?)\s*(?:marks?|points?|分)\s*(?:\]|\))?", value, re.IGNORECASE)
+    values = [float(item) for item in matches]
+    return round(sum(values), 3) if values else None
 
 
 class ExamEngine:
@@ -142,7 +216,12 @@ class ExamEngine:
         root = workspace.meta / "exam"
         if not (root / "state.yaml").is_file() or not (root / "bank.yaml").is_file():
             raise ExamError("Exam analysis is not initialized; run `exam init` first")
-        return cls(workspace, read_data(root / "state.yaml"), read_data(root / "bank.yaml"))
+        state = read_data(root / "state.yaml")
+        state.setdefault(
+            "difficulty_calibration",
+            {"offset": 0.0, "anchor_count": 0, "mae_before": None, "mae_after": None, "updated_at": None},
+        )
+        return cls(workspace, state, read_data(root / "bank.yaml"))
 
     @staticmethod
     def _target_date(value: str | None) -> str | None:
@@ -206,8 +285,8 @@ class ExamEngine:
     def _normalize_mapping(self, raw: Any, label: str) -> dict[str, Any]:
         if not isinstance(raw, dict):
             raise ExamError(f"{label} must be a mapping")
-        if set(raw) != KNOWLEDGE_POINT_KEYS:
-            raise ExamError(f"{label} fields must be exactly: {', '.join(sorted(KNOWLEDGE_POINT_KEYS))}")
+        if not KNOWLEDGE_POINT_KEYS.issubset(raw) or set(raw) - KNOWLEDGE_POINT_KEYS - KNOWLEDGE_POINT_AUTO_KEYS:
+            raise ExamError(f"{label} must contain the required mapping fields and only supported review metadata")
         point_id = require_id(raw.get("id"), f"{label}.id")
         atom_id = raw.get("atom_id")
         if atom_id is not None:
@@ -217,6 +296,12 @@ class ExamEngine:
         basis = raw.get("basis")
         if basis not in MAPPING_BASES:
             raise ExamError(f"{label}.basis must be one of: {', '.join(sorted(MAPPING_BASES))}")
+        review_status = raw.get("review_status", "confirmed")
+        if review_status not in MAPPING_REVIEW_STATUSES:
+            raise ExamError(f"{label}.review_status must be pending, confirmed, or corrected")
+        candidates = raw.get("candidate_atom_ids", [atom_id] if atom_id else [])
+        if not isinstance(candidates, list) or any(item not in self.workspace.atoms for item in candidates):
+            raise ExamError(f"{label}.candidate_atom_ids must contain existing course Atoms")
         return {
             "id": point_id,
             "label": limited_text(raw.get("label"), f"{label}.label", limit=300),
@@ -224,6 +309,11 @@ class ExamEngine:
             "weight": round(float(require_number(raw.get("weight"), f"{label}.weight", 0.001, 1.0)), 3),
             "confidence": round(float(require_number(raw.get("confidence"), f"{label}.confidence", 0.5, 1.0)), 3),
             "basis": basis,
+            "review_status": review_status,
+            "candidate_atom_ids": unique(candidates),
+            "mapping_method": limited_text(
+                raw.get("mapping_method", "human"), f"{label}.mapping_method", limit=100
+            ),
         }
 
     def _normalize_difficulty(self, raw: Any, label: str) -> dict[str, Any]:
@@ -240,13 +330,18 @@ class ExamEngine:
         if basis == "official" and official is None:
             raise ExamError(f"{label}.official_level is required when basis is official")
         estimated = round(sum(factors[key] * weight for key, weight in DIFFICULTY_FACTORS.items()), 3)
-        effective = official if official is not None else estimated
+        calibration = self.state.get("difficulty_calibration", {})
+        offset = round(float(calibration.get("offset", 0.0)), 3)
+        calibrated = round(min(5.0, max(1.0, estimated + offset)), 3)
+        effective = official if official is not None else calibrated
         return {
             "basis": basis,
             **factors,
             "confidence": round(float(require_number(raw.get("confidence"), f"{label}.confidence", 0.5, 1)), 3),
             "official_level": official,
             "estimated_level": estimated,
+            "calibrated_level": calibrated,
+            "calibration_offset": offset,
             "effective_level": effective,
             "band": difficulty_band(effective),
         }
@@ -288,6 +383,9 @@ class ExamEngine:
         family_id = raw.get("family_id")
         if family_id is not None:
             family_id = require_id(family_id, f"{question_id}.family_id")
+        marking_status = raw.get("marking_link_status", "missing")
+        if marking_status not in MARKING_LINK_STATUSES:
+            raise ExamError(f"{question_id}.marking_link_status is invalid")
         return {
             "id": question_id,
             "paper_id": paper_id,
@@ -297,6 +395,13 @@ class ExamEngine:
             "stem_summary": limited_text(raw.get("stem_summary"), f"{question_id}.stem_summary", limit=1000),
             "source_locator": limited_text(raw.get("source_locator"), f"{question_id}.source_locator", limit=1000),
             "family_id": family_id,
+            "answer_locator": limited_text(
+                raw.get("answer_locator", ""), f"{question_id}.answer_locator", allow_empty=True, limit=1000
+            ),
+            "marking_locator": limited_text(
+                raw.get("marking_locator", ""), f"{question_id}.marking_locator", allow_empty=True, limit=1000
+            ),
+            "marking_link_status": marking_status,
             "cognitive_levels": unique(cognitive),
             "tags": unique(item.strip() for item in tags if item.strip()),
             "difficulty": self._normalize_difficulty(raw.get("difficulty"), f"{question_id}.difficulty"),
@@ -349,6 +454,297 @@ class ExamEngine:
             "imported_questions": question_ids,
             "analysis": self.analyze(),
         }
+
+    def _auto_mappings(self, text: str, review_threshold: float) -> list[dict[str, Any]]:
+        query_tokens = exam_tokens(text)
+        ranked: list[tuple[float, str]] = []
+        for atom_id, atom in self.workspace.atoms.items():
+            if atom.get("status") == "archived":
+                continue
+            title_tokens = exam_tokens(atom.get("title"))
+            identifier_tokens = exam_tokens(atom_id.replace(".", " "))
+            detail_tokens = exam_tokens(
+                " ".join([str(atom.get("objective", "")), *atom.get("misconceptions", [])])
+            )
+            title_overlap = len(query_tokens & title_tokens) / max(1, len(title_tokens))
+            identifier_overlap = len(query_tokens & identifier_tokens) / max(1, len(identifier_tokens))
+            detail_overlap = len(query_tokens & detail_tokens) / max(1, min(len(detail_tokens), 12))
+            exact = 1.0 if str(atom.get("title", "")).casefold() in text.casefold() else 0.0
+            score = min(1.0, 0.4 * title_overlap + 0.4 * identifier_overlap + 0.15 * detail_overlap + 0.05 * exact)
+            if score > 0:
+                ranked.append((score, atom_id))
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        candidates = ranked[:3]
+        selected = [item for item in candidates if item[0] >= max(0.18, (candidates[0][0] * 0.72 if candidates else 1.0))]
+        if not selected:
+            label_tokens = sorted(query_tokens)[:5]
+            return [
+                {
+                    "id": "unmapped.auto",
+                    "label": "Unmapped: " + (" ".join(label_tokens) or "question concept"),
+                    "atom_id": None,
+                    "weight": 1.0,
+                    "confidence": 0.5,
+                    "basis": "inferred",
+                    "review_status": "pending",
+                    "candidate_atom_ids": [item[1] for item in candidates],
+                    "mapping_method": "atom-lexical-v1",
+                }
+            ]
+        total = sum(item[0] for item in selected)
+        mappings = []
+        for position, (score, atom_id) in enumerate(selected):
+            atom = self.workspace.atoms[atom_id]
+            gap = score - (candidates[position + 1][0] if position + 1 < len(candidates) else 0.0)
+            confirmed = position == 0 and score >= review_threshold and gap >= 0.15 and len(selected) == 1
+            mappings.append(
+                {
+                    "id": f"auto.{atom_id}",
+                    "label": atom["title"],
+                    "atom_id": atom_id,
+                    "weight": round(score / total, 3),
+                    "confidence": round(max(0.5, min(1.0, 0.5 + 0.5 * score)), 3),
+                    "basis": "inferred",
+                    "review_status": "confirmed" if confirmed else "pending",
+                    "candidate_atom_ids": [item[1] for item in candidates],
+                    "mapping_method": "atom-lexical-v1",
+                }
+            )
+        mappings[-1]["weight"] = round(1.0 - sum(item["weight"] for item in mappings[:-1]), 3)
+        return mappings
+
+    @staticmethod
+    def _auto_question_type(text: str) -> str:
+        lowered = text.casefold()
+        if re.search(r"(?:^|\n)\s*[a-d][.)]", lowered):
+            return "single_choice"
+        if any(term in lowered for term in ["prove", "show that", "证明"]):
+            return "proof"
+        if any(term in lowered for term in ["write a program", "implement", "代码", "编程"]):
+            return "programming"
+        if any(term in lowered for term in ["calculate", "compute", "solve", "determine", "计算", "求解"]):
+            return "calculation"
+        if any(term in lowered for term in ["discuss", "evaluate", "critique", "论述", "评价"]):
+            return "essay"
+        return "short_answer"
+
+    @staticmethod
+    def _auto_cognitive_levels(text: str) -> list[str]:
+        lowered = text.casefold()
+        levels = []
+        if any(term in lowered for term in ["define", "state", "list", "定义", "列出"]):
+            levels.append("remember")
+        if any(term in lowered for term in ["explain", "describe", "interpret", "解释", "说明"]):
+            levels.append("understand")
+        if any(term in lowered for term in ["apply", "calculate", "compute", "solve", "应用", "计算"]):
+            levels.append("apply")
+        if any(term in lowered for term in ["compare", "derive", "analyze", "prove", "比较", "推导", "分析", "证明"]):
+            levels.append("analyze")
+        if any(term in lowered for term in ["evaluate", "justify", "critique", "评价", "论证"]):
+            levels.append("evaluate")
+        if any(term in lowered for term in ["design", "create", "propose", "设计", "提出"]):
+            levels.append("create")
+        return unique(levels) or ["understand"]
+
+    def _auto_difficulty(self, text: str, mappings: list[dict[str, Any]], points: float | None, linked: bool) -> dict[str, Any]:
+        lowered = text.casefold()
+        conceptual = min(5, 1 + len(mappings) + int(any(term in lowered for term in ["concept", "why", "证明", "解释"])))
+        reasoning = 4 if any(term in lowered for term in ["prove", "derive", "evaluate", "证明", "推导", "评价"]) else 3 if any(
+            term in lowered for term in ["analyze", "compare", "justify", "分析", "比较"]
+        ) else 2
+        integration = min(5, max(1, len(mappings) + int(" and " in lowered or "以及" in lowered)))
+        execution = min(5, max(1, 1 + len(text) // 300 + len(re.findall(r"[=+*/^]", text)) // 3))
+        time_pressure = min(5, max(1, int(math.ceil((points or 5) / 5))))
+        return {
+            "basis": "rubric",
+            "conceptual_load": conceptual,
+            "reasoning_depth": reasoning,
+            "knowledge_integration": integration,
+            "execution_load": execution,
+            "time_pressure": time_pressure,
+            "confidence": 0.8 if linked else 0.65,
+            "official_level": None,
+        }
+
+    def process_documents(self, payload: Any, base_dir: Path) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) - {"documents", "options"}:
+            raise ExamError("exam process payload must contain documents and optional options")
+        documents = payload.get("documents")
+        if not isinstance(documents, list) or not documents:
+            raise ExamError("exam process requires a non-empty documents list")
+        options = payload.get("options", {})
+        if not isinstance(options, dict) or set(options) - {"mapping_review_threshold"}:
+            raise ExamError("exam process options are invalid")
+        threshold = float(options.get("mapping_review_threshold", 0.85))
+        if not 0.5 <= threshold <= 1.0:
+            raise ExamError("mapping_review_threshold must be between 0.5 and 1.0")
+        papers: list[dict[str, Any]] = []
+        questions: list[dict[str, Any]] = []
+        diagnostics: list[dict[str, Any]] = []
+        for document_index, document in enumerate(documents):
+            if not isinstance(document, dict) or set(document) - {"paper", "questions", "answers", "marking_scheme"}:
+                raise ExamError(f"documents[{document_index}] has unsupported fields")
+            paper = document.get("paper")
+            if not isinstance(paper, dict):
+                raise ExamError(f"documents[{document_index}].paper must be a mapping")
+            paper_id = require_id(paper.get("id"), f"documents[{document_index}].paper.id")
+            question_sections = split_numbered_sections(
+                transient_text(document.get("questions"), f"{paper_id}.questions", base_dir), f"{paper_id}.questions"
+            )
+            answer_sections = split_numbered_sections(
+                transient_text(document["answers"], f"{paper_id}.answers", base_dir), f"{paper_id}.answers"
+            ) if document.get("answers") is not None else []
+            marking_sections = split_numbered_sections(
+                transient_text(document["marking_scheme"], f"{paper_id}.marking_scheme", base_dir), f"{paper_id}.marking_scheme"
+            ) if document.get("marking_scheme") is not None else []
+            answers = {item["number"]: item for item in answer_sections}
+            marking = {item["number"]: item for item in marking_sections}
+            papers.append(paper)
+            question_numbers = {item["number"] for item in question_sections}
+            for section in question_sections:
+                number = section["number"]
+                answer = answers.get(number)
+                scheme = marking.get(number)
+                points = extract_points(scheme["text"] if scheme else section["text"])
+                mappings = self._auto_mappings(section["text"], threshold)
+                slug = re.sub(r"[^a-z0-9]+", "-", number.casefold()).strip("-") or str(len(questions) + 1)
+                question_id = f"{paper_id}.q{slug}"
+                if mappings[0]["id"] == "unmapped.auto":
+                    mappings[0]["id"] = f"unmapped.{question_id}"
+                status = "linked" if answer and scheme else "answer_only" if answer else "marking_only" if scheme else "missing"
+                collapsed = re.sub(r"\s+", " ", section["text"])
+                collapsed = re.sub(r"(?:\[|\()?\s*\d+(?:\.\d+)?\s*(?:marks?|points?|分)\s*(?:\]|\))?", "", collapsed, flags=re.IGNORECASE).strip()
+                questions.append(
+                    {
+                        "id": question_id,
+                        "paper_id": paper_id,
+                        "number": number,
+                        "type": self._auto_question_type(section["text"]),
+                        "points": points,
+                        "stem_summary": collapsed[:500],
+                        "source_locator": f"{paper.get('locator')}, lines {section['line_start']}-{section['line_end']}, question {number}",
+                        "family_id": None,
+                        "answer_locator": f"answer lines {answer['line_start']}-{answer['line_end']}, question {number}" if answer else "",
+                        "marking_locator": f"marking lines {scheme['line_start']}-{scheme['line_end']}, question {number}" if scheme else "",
+                        "marking_link_status": status,
+                        "cognitive_levels": self._auto_cognitive_levels(section["text"]),
+                        "tags": ["auto-split", "mapping-review-pending"] if any(item["review_status"] == "pending" for item in mappings) else ["auto-split"],
+                        "difficulty": self._auto_difficulty(section["text"], mappings, points, bool(scheme)),
+                        "knowledge_points": mappings,
+                    }
+                )
+            diagnostics.append(
+                {
+                    "paper_id": paper_id,
+                    "question_count": len(question_sections),
+                    "unmatched_answer_numbers": sorted(set(answers) - question_numbers),
+                    "unmatched_marking_numbers": sorted(set(marking) - question_numbers),
+                    "questions_without_answers": sorted(question_numbers - set(answers)),
+                    "questions_without_marking": sorted(question_numbers - set(marking)),
+                }
+            )
+        result = self.import_bundle({"papers": papers, "questions": questions})
+        result["processing"] = diagnostics
+        result["mapping_review_queue"] = self.mapping_review_queue()
+        return result
+
+    def mapping_review_queue(self) -> list[dict[str, Any]]:
+        return [
+            {
+                "question_id": question["id"],
+                "number": question["number"],
+                "mapping_id": mapping["id"],
+                "label": mapping["label"],
+                "proposed_atom_id": mapping["atom_id"],
+                "candidate_atom_ids": mapping.get("candidate_atom_ids", []),
+                "confidence": mapping["confidence"],
+            }
+            for question in self.bank.get("questions", [])
+            for mapping in question.get("knowledge_points", [])
+            if mapping.get("review_status") == "pending"
+        ]
+
+    def review_mappings(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("reviews"), list) or not payload["reviews"]:
+            raise ExamError("mapping review payload must contain a non-empty reviews list")
+        question_index = {item["id"]: item for item in self.bank.get("questions", [])}
+        touched: set[str] = set()
+        for index, review in enumerate(payload["reviews"]):
+            if not isinstance(review, dict) or set(review) - {"question_id", "mapping_id", "decision", "atom_id", "knowledge_point_id", "label"}:
+                raise ExamError(f"reviews[{index}] has unsupported fields")
+            question_id = require_id(review.get("question_id"), f"reviews[{index}].question_id")
+            question = question_index.get(question_id)
+            if question is None:
+                raise ExamError(f"mapping review question does not exist: {question_id}")
+            mapping_id = require_id(review.get("mapping_id"), f"reviews[{index}].mapping_id")
+            mapping = next((item for item in question["knowledge_points"] if item["id"] == mapping_id), None)
+            if mapping is None:
+                raise ExamError(f"mapping does not exist in {question_id}: {mapping_id}")
+            decision = review.get("decision")
+            if decision == "confirm":
+                mapping["review_status"] = "confirmed"
+                mapping["confidence"] = max(0.85, mapping["confidence"])
+                mapping["mapping_method"] = "reviewed"
+            elif decision in {"remap", "unmap"}:
+                atom_id = review.get("atom_id") if decision == "remap" else None
+                if decision == "remap":
+                    atom_id = require_id(atom_id, f"reviews[{index}].atom_id")
+                    if atom_id not in self.workspace.atoms:
+                        raise ExamError(f"review Atom is not in the course graph: {atom_id}")
+                mapping["atom_id"] = atom_id
+                mapping["id"] = require_id(
+                    review.get("knowledge_point_id") or (f"auto.{atom_id}" if atom_id else f"unmapped.{question_id}"),
+                    f"reviews[{index}].knowledge_point_id",
+                )
+                mapping["label"] = limited_text(
+                    review.get("label") or (self.workspace.atoms[atom_id]["title"] if atom_id else mapping["label"]),
+                    f"reviews[{index}].label",
+                    limit=300,
+                )
+                mapping["review_status"] = "corrected"
+                mapping["confidence"] = 1.0
+                mapping["basis"] = "inferred"
+                mapping["candidate_atom_ids"] = unique([*mapping.get("candidate_atom_ids", []), *([atom_id] if atom_id else [])])
+                mapping["mapping_method"] = "reviewed"
+            else:
+                raise ExamError(f"reviews[{index}].decision must be confirm, remap, or unmap")
+            touched.add(question_id)
+        registry: dict[str, tuple[str, str | None]] = {}
+        for question in self.bank.get("questions", []):
+            ids = [item["id"] for item in question.get("knowledge_points", [])]
+            if len(ids) != len(set(ids)):
+                raise ExamError(f"mapping review creates duplicate knowledge points in {question['id']}")
+            for mapping in question.get("knowledge_points", []):
+                signature = (mapping["label"], mapping["atom_id"])
+                if mapping["id"] in registry and registry[mapping["id"]] != signature:
+                    raise ExamError(f"mapping review makes knowledge point {mapping['id']} inconsistent across the corpus")
+                registry[mapping["id"]] = signature
+        return {"question_ids": sorted(touched), "review_count": len(payload["reviews"]), "remaining": len(self.mapping_review_queue())}
+
+    def calibrate_difficulty(self) -> dict[str, Any]:
+        anchors = [
+            question["difficulty"] for question in self.bank.get("questions", [])
+            if question.get("difficulty", {}).get("official_level") is not None
+        ]
+        if not anchors:
+            raise ExamError("difficulty calibration requires at least one question with an official_level")
+        residuals = [item["official_level"] - item["estimated_level"] for item in anchors]
+        offset = round(sum(residuals) / len(residuals), 3)
+        before = round(sum(abs(item) for item in residuals) / len(residuals), 3)
+        after = round(sum(abs(item - offset) for item in residuals) / len(residuals), 3)
+        self.state["difficulty_calibration"] = {
+            "offset": offset,
+            "anchor_count": len(anchors),
+            "mae_before": before,
+            "mae_after": after,
+            "updated_at": iso(),
+        }
+        for question in self.bank.get("questions", []):
+            question["difficulty"] = self._normalize_difficulty(
+                {key: question["difficulty"][key] for key in DIFFICULTY_INPUT_KEYS},
+                f"{question['id']}.difficulty",
+            )
+        return {"offset": offset, "anchor_count": len(anchors), "mae_before": before, "mae_after": after}
 
     def _commit(self, event_type: str, details: dict[str, Any]) -> None:
         new_revision = self.revision + 1
@@ -539,6 +935,9 @@ class ExamEngine:
             limitations.append("Unmapped knowledge points require course-graph repair before targeted preparation is complete.")
         if any(item["mapping_confidence"] < 0.7 for item in knowledge_points):
             limitations.append("Some knowledge-point mappings have low confidence and need source or marking-scheme review.")
+        pending_mappings = self.mapping_review_queue()
+        if pending_mappings:
+            limitations.append("Automatically proposed knowledge mappings remain pending review and are provisional.")
         if unlinked_sources:
             limitations.append("Some exam sources are locator-only and have not been linked to the course or RAG source registry.")
         return {
@@ -559,6 +958,11 @@ class ExamEngine:
             "question_type_distribution": dict(sorted(question_types.items())),
             "cognitive_level_distribution": dict(sorted(cognitive_levels.items())),
             "difficulty_distribution": dict(sorted(difficulty_distribution.items())),
+            "difficulty_calibration": self.state.get("difficulty_calibration"),
+            "answer_marking_association": dict(
+                sorted(Counter(item.get("marking_link_status", "missing") for item in questions).items())
+            ),
+            "mapping_review": {"pending_count": len(pending_mappings), "queue": pending_mappings},
             "source_traceability": {
                 "rag_linked_papers": sum(item["source_id"] in rag_source_ids for item in papers),
                 "course_linked_papers": sum(item["source_id"] in course_source_ids for item in papers),
@@ -722,6 +1126,19 @@ class ExamEngine:
             self._target_date(self.state.get("target_date"))
         except (AtomLearnError, ExamError) as exc:
             errors.append(str(exc))
+        calibration = self.state.get("difficulty_calibration")
+        if not isinstance(calibration, dict) or set(calibration) != {
+            "offset", "anchor_count", "mae_before", "mae_after", "updated_at"
+        }:
+            errors.append("exam difficulty_calibration is invalid")
+        elif (
+            not isinstance(calibration.get("offset"), (int, float))
+            or isinstance(calibration.get("offset"), bool)
+            or not isinstance(calibration.get("anchor_count"), int)
+            or isinstance(calibration.get("anchor_count"), bool)
+            or calibration.get("anchor_count", -1) < 0
+        ):
+            errors.append("exam difficulty calibration values are invalid")
         for field in ["created_at", "updated_at"]:
             try:
                 value = self.state.get(field)
@@ -800,7 +1217,8 @@ class ExamEngine:
                 or event_revision != index
             ):
                 errors.append(f"exam event {index} has an invalid ID or revision")
-            if event.get("type") != "exam.questions_imported":
+            event_type = event.get("type")
+            if event_type not in {"exam.questions_imported", "exam.mappings_reviewed", "exam.difficulty_calibrated"}:
                 errors.append(f"{event_id}: invalid exam event type")
             try:
                 value = event.get("at")
@@ -818,18 +1236,25 @@ class ExamEngine:
             ):
                 errors.append(f"{event_id}: invalid course revision")
             details = event.get("details")
-            if not isinstance(details, dict) or set(details) != {"paper_ids", "question_ids"}:
-                errors.append(f"{event_id}: invalid event details")
-                continue
-            for field, destination in [("paper_ids", imported_papers), ("question_ids", imported_questions)]:
-                values = details.get(field)
-                if not isinstance(values, list) or any(not isinstance(item, str) for item in values) or len(values) != len(set(values)):
-                    errors.append(f"{event_id}: invalid {field}")
-                else:
-                    overlap = destination & set(values)
-                    if overlap:
-                        errors.append(f"{event_id}: {field} repeat earlier import records")
-                    destination.update(values)
+            if event_type == "exam.questions_imported":
+                if not isinstance(details, dict) or set(details) != {"paper_ids", "question_ids"}:
+                    errors.append(f"{event_id}: invalid import event details")
+                    continue
+                for field, destination in [("paper_ids", imported_papers), ("question_ids", imported_questions)]:
+                    values = details.get(field)
+                    if not isinstance(values, list) or any(not isinstance(item, str) for item in values) or len(values) != len(set(values)):
+                        errors.append(f"{event_id}: invalid {field}")
+                    else:
+                        overlap = destination & set(values)
+                        if overlap:
+                            errors.append(f"{event_id}: {field} repeat earlier import records")
+                        destination.update(values)
+            elif event_type == "exam.mappings_reviewed":
+                if not isinstance(details, dict) or set(details) != {"question_ids", "review_count", "remaining"}:
+                    errors.append(f"{event_id}: invalid mapping-review event details")
+            elif event_type == "exam.difficulty_calibrated":
+                if not isinstance(details, dict) or set(details) != {"offset", "anchor_count", "mae_before", "mae_after"}:
+                    errors.append(f"{event_id}: invalid calibration event details")
         if len(events) != revision:
             errors.append("exam event count does not match state revision")
         if imported_papers != set(paper_ids) or imported_questions != set(question_ids):
@@ -849,6 +1274,8 @@ class ExamEngine:
             "paper_count": len(self.bank.get("papers", [])),
             "question_count": len(self.bank.get("questions", [])),
             "atom_mapping_coverage": analysis["corpus"]["atom_mapping_coverage"] if analysis else 0.0,
+            "pending_mapping_reviews": len(self.mapping_review_queue()),
+            "difficulty_calibration": self.state.get("difficulty_calibration"),
             "top_knowledge_points": analysis["knowledge_points"][:5] if analysis else [],
         }
 
@@ -921,6 +1348,17 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("workspace")
     import_parser.add_argument("--input", required=True)
     add_revision(import_parser)
+    process = sub.add_parser("process")
+    process.add_argument("workspace")
+    process.add_argument("--input", required=True)
+    add_revision(process)
+    review = sub.add_parser("review-mappings")
+    review.add_argument("workspace")
+    review.add_argument("--input", required=True)
+    add_revision(review)
+    calibrate = sub.add_parser("calibrate")
+    calibrate.add_argument("workspace")
+    add_revision(calibrate)
     for action in ["status", "validate", "analyze", "render"]:
         command = sub.add_parser(action)
         command.add_argument("workspace")
@@ -947,9 +1385,19 @@ def run(argv: list[str] | None = None) -> None:
     errors = engine.validate()
     if errors:
         raise ExamError("Refusing to use invalid exam state:\n- " + "\n- ".join(errors))
-    if args.action == "import":
+    if args.action in {"import", "process", "review-mappings", "calibrate"}:
         engine.expect_revision(args.expected_exam_revision)
-        result = engine.import_bundle(read_data(Path(args.input)))
+        if args.action == "import":
+            result = engine.import_bundle(read_data(Path(args.input)))
+        elif args.action == "process":
+            input_path = Path(args.input).resolve()
+            result = engine.process_documents(read_data(input_path), input_path.parent)
+        elif args.action == "review-mappings":
+            result = engine.review_mappings(read_data(Path(args.input)))
+            engine._commit("exam.mappings_reviewed", result)
+        else:
+            result = engine.calibrate_difficulty()
+            engine._commit("exam.difficulty_calibrated", result)
         print(json.dumps({"ok": True, "exam_revision": engine.revision, "result": result}, ensure_ascii=False, indent=2))
     elif args.action == "status":
         print(json.dumps(engine.status(), ensure_ascii=False, indent=2))

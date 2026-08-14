@@ -1,0 +1,14 @@
+records:
+  - paper_id: paper.example
+    provider: crossref
+    provider_id: 10.1234/example
+    retrieved_at: 2026-08-14T10:00:00+08:00
+    title: Example paper
+    authors: [A. Researcher]
+    year: 2025
+    venue: Example Venue
+    doi: 10.1234/example
+    url: https://doi.org/10.1234/example
+    references:
+      - doi: 10.1234/prior
+        title: Prior paper

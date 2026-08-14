@@ -1,0 +1,18 @@
+documents:
+  - paper:
+      id: final-2025
+      title: 2025 final examination
+      year: 2025
+      session: annual
+      kind: official_past_exam
+      total_points: 100
+      source_id: final-2025-source
+      locator: pages 1-8
+    questions:
+      path: C:/materials/final-2025-questions.txt
+    answers:
+      path: C:/materials/final-2025-answers.txt
+    marking_scheme:
+      path: C:/materials/final-2025-marking.txt
+options:
+  mapping_review_threshold: 0.85

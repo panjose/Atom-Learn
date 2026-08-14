@@ -151,30 +151,35 @@ python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input co
 
 ## 科研论文阅读
 
-AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会建立覆盖综述、奠基工作、理论与方法、基准与数据集、批评与复现以及应用工作的导向地图。每篇完成阅读的论文都会记录有证据支持的主张、局限、开放问题及其与其他工作的关系。
+AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会规范化 DOI、合并 DOI/标题重复项、验证供应商元数据、从 Crossref/OpenAlex 或 harness 快照获取外向引用关系，并建立角色感知的论文导向地图。完成阅读的论文会形成保留来源的跨论文主张主题，明确保留一致、矛盾、证据强度、局限和 provenance。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
 python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
 python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
+python atom-learn/scripts/atomlearn.py research reconcile-metadata courses/agent-research --input research-metadata.yaml --expected-research-revision 1
+python atom-learn/scripts/atomlearn.py research fetch-metadata courses/agent-research --provider crossref --expected-research-revision 2
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-研究模式最多保留一个 Active Paper，会阻止未完成论文先修的激活、提示缺失的 Knowledge Atom，并生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。它不会保存完整论文正文，也不会在缺少最新文献检索时宣称创新性。完整方法见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)。
+研究模式最多保留一个 Active Paper，会阻止未完成论文先修的激活、提示缺失的 Knowledge Atom，并生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。元数据冲突与未解析外部引用保持可审计；单一来源的综合主题不会伪装成共识。它不会保存完整论文正文，也不会在缺少最新文献检索时宣称创新性。完整方法见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)。
 
 ## 试题分析与针对性备考
 
-AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理为来源可追踪的考试语料。每道题会映射到稳定知识点和可选 Knowledge Atom，标注题型与认知要求，并通过透明的五因素量表确定难度。分析会报告跨试卷覆盖、分值占比、样本内重点、置信度以及尚未进入课程图的知识缺口。
+AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理为来源可追踪的考试语料。它会自动切分有编号的题目、关联答案/评分细则、提出可复核的知识点与 Atom 映射，并用透明的五因素量表估计难度；官方锚点可用于校准非官方估计。分析会报告跨试卷覆盖、分值占比、样本内重点、置信度、复核状态以及尚未进入课程图的知识缺口。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
-python atom-learn/scripts/atomlearn.py exam import courses/calculus --input exam-import.yaml --expected-exam-revision 0
+python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
+python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
+python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
 python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
 python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
+# For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-针对性队列会综合语料重点、学习者当前 Evidence、题目难度和先修顺序，给出 `learn`、`remediate`、`review` 或 `repair_prerequisites` 建议。完整题目与评分细则保留在私有资料/RAG 层；考试规范状态只保存简短摘要和 locator。频率只描述用户提供的样本，绝不会被表述为未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)。
+针对性队列会综合语料重点、学习者当前 Evidence、校准后的题目难度和先修顺序，给出 `learn`、`remediate`、`review` 或 `repair_prerequisites` 建议。完整题目、答案与评分细则保留在私有资料/RAG 层；考试规范状态只保存简短摘要、关联和 locator。频率只描述用户提供的样本，绝不会被表述为未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)。
 
 ## 基于 Session 的自适应
 

@@ -40,10 +40,12 @@ If exam questions are the only course input, first treat them as source intake, 
 
 ## Build the structured corpus
 
-Read [EXAM_SCHEMA.md](EXAM_SCHEMA.md), create a payload from `assets/templates/exam-import.yaml`, and run:
+Read [EXAM_SCHEMA.md](EXAM_SCHEMA.md). For extracted question/answer/marking documents, start with the automatic processor; for an already structured corpus, use the manual import:
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py exam init <workspace> --title <title> [--target-date YYYY-MM-DD]
+python <SKILL_DIR>/scripts/atomlearn.py exam process <workspace> --input <exam-process.yaml> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam review-mappings <workspace> --input <exam-mapping-review.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-import.yaml> --expected-exam-revision <revision>
 ```
 
@@ -55,7 +57,7 @@ For every question, record:
 - one or more knowledge-point mappings whose weights total `1.0`;
 - an existing Atom ID when the course graph covers the point, or `null` when it does not.
 
-Use the same knowledge-point ID, label, and Atom mapping throughout the corpus. Do not force a weak mapping to obtain 100% coverage. Preserve it as an explicit coverage gap.
+The processor automatically splits stable question numbers, associates matching answers and marking sections by number, derives locators, and proposes mappings/difficulty. Inspect its diagnostics and review queue. Use the same knowledge-point ID, label, and Atom mapping throughout the corpus. Do not force a weak mapping to obtain 100% coverage. Preserve it as an explicit coverage gap.
 
 ## Determine difficulty
 
@@ -67,7 +69,7 @@ Rate every factor from `1` through `5`:
 - execution load;
 - time pressure.
 
-The runtime computes a weighted estimate and a band from `foundation` through `challenge`. Record whether the basis is an official rating, an explicit rubric, or a weaker estimate. If an official level exists, retain it separately and use it as the effective level.
+The runtime computes a weighted estimate and a band from `foundation` through `challenge`. Record whether the basis is an official rating, an explicit rubric, or a weaker estimate. If official levels exist, retain them and run `exam calibrate`: the learned offset adjusts non-official estimates, reports before/after MAE, and leaves the official anchors unchanged.
 
 Difficulty describes the task under the stated conditions. It is not a claim about the learner's intelligence. Lower confidence when the marking scheme, time allowance, prerequisite assumptions, or expected solution path is missing.
 

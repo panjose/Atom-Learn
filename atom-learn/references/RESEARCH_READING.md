@@ -41,6 +41,8 @@ Prefer an initial map of 8-20 representative papers, then expand deliberately. C
 
 Use `prerequisite_paper_ids` for the reading order. Use `cites` for internal citation links. Put references outside the imported set in `external_citations`. Link `concept_atom_ids` when a paper assumes knowledge that the learner may need to repair. When lineage is initialized, trace those Atoms to expose the smallest prerequisite and conceptual repair route while preserving the Active Paper.
 
+Import normalizes DOI forms and merges exact DOI/title duplicates before validating the paper graph. Run `research reconcile-metadata` with a provider snapshot, or `research fetch-metadata --provider crossref|openalex`, to verify title/DOI/year/authors and acquire outgoing citation relations. Review reported conflicts; do not overwrite contradictory metadata silently.
+
 Treat a provisionally skipped concept as a disclosed assumption, returned under `provisional_knowledge_atom_ids`, rather than a proven competency. Deferred and otherwise unsatisfied concepts remain `knowledge_gap_atom_ids`. If paper comprehension exposes a skipped-concept gap, backtrack without losing the Active Paper.
 
 If a required concept has a detailed expansion, complete its ordered children and parent integration check before treating the paper's Knowledge Atom dependency as mastered. Keep the Active Paper state separate from the one Active learning Atom.
@@ -63,7 +65,7 @@ Do not store complete paper text in the workspace. Store metadata, stable locato
 
 ## Synthesize across papers
 
-Run synthesis after a coherent group is critically complete. Compare papers on:
+Run synthesis after a coherent group is critically complete. The runtime forms source-preserving claim themes and compares papers on:
 
 - question and assumptions;
 - method or argument;
@@ -72,7 +74,7 @@ Run synthesis after a coherent group is critically complete. Compare papers on:
 - limitations and external validity;
 - support, extension, contradiction, or replication relations.
 
-Treat `LITERATURE_MATRIX.md` as a comparison surface, not a ranking. Use `RESEARCH_GAPS.md` to inspect open questions, repeated limitations, contradictions, and missing replications.
+Treat `LITERATURE_MATRIX.md` as a comparison surface, not a ranking. Each synthesized theme retains its claim IDs, evidence summaries, strengths, paper relations, and limitations; single-source and contested themes remain explicit. Use `RESEARCH_GAPS.md` to inspect open questions, repeated limitations, contradictions, and missing replications.
 
 ## Identify research gaps
 
@@ -91,6 +93,8 @@ State search limits, uncertainty, and the date of current-literature verificatio
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field> --question <question> --scope <scope>
 python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research reconcile-metadata <workspace> --input <research-metadata.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref
 python <SKILL_DIR>/scripts/atomlearn.py research status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py research next <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py research activate <workspace> <paper-id>

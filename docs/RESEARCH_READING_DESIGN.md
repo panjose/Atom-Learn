@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档状态 | Implemented v1 |
+| 文档状态 | Implemented v2 |
 | 更新时间 | 2026-08-14 |
 | 产品定位 | 问题导向、证据导向的领域论文阅读与综合 |
 | 核心原则 | Question -> Map -> Read -> Extract Evidence -> Relate -> Synthesize |
@@ -57,6 +57,8 @@ flowchart LR
 
 阅读先修使用 `prerequisite_paper_ids` 表示；论文内部引用使用 `cites` 表示。未导入的文献只记录在 `external_citations`，避免把不完整元数据伪装成受管理节点。
 
+导入时会把 DOI URL/前缀规范为裸 DOI，并按精确 DOI 或规范化标题自动合并重复记录、保存 alias、重写引用和阅读先修。`research reconcile-metadata` 会验证标题、DOI、年份和作者交集，只补齐通过验证的缺失字段；`research fetch-metadata` 可直接从 Crossref 或 OpenAlex 获取元数据和外向引用。冲突和未解析引用都作为显式结果保留。
+
 ## 4. 单篇论文完成标准
 
 一篇论文必须记录以下内容后才能从 `active` 进入 `read`：
@@ -94,7 +96,7 @@ flowchart LR
 - `LITERATURE_MATRIX.md`：跨论文贡献、方法、主张、局限与领域位置；
 - `RESEARCH_GAPS.md`：开放问题、重复局限、矛盾、复现结果和下一批候选。
 
-`research synthesize` 将已完成论文标记为 `synthesized`，但不会自动宣称发现了创新点。研究空白首先是候选假设，必须经过最新文献检索、相邻术语检索和反例检查。
+`research synthesize` 将已完成论文标记为 `synthesized`，并基于主张文本相似性生成跨论文证据主题。每个主题保留 paper/claim ID、证据摘要、强度、论文间关系与局限；支持/扩展/复现可形成 corroborated 主题，矛盾关系形成 contested 主题，只有一篇来源时明确标为 single-source。它不会自动宣称发现了创新点。研究空白首先是候选假设，必须经过最新文献检索、相邻术语检索和反例检查。
 
 ## 7. 状态与审计
 
@@ -113,7 +115,7 @@ flowchart LR
 ## 8. 命令闭环
 
 ```text
-research init -> research import -> research next -> research activate
+research init -> research import -> metadata reconcile/fetch -> research next -> research activate
               -> research note -> research complete -> research synthesize
 ```
 
@@ -123,10 +125,9 @@ research init -> research import -> research next -> research activate
 
 后续可在不破坏当前模型的前提下增加：
 
-- DOI/Crossref/OpenAlex 等元数据连接器；
-- 去重、版本与撤稿状态检查；
+- 版本/预印本族合并与撤稿状态检查；
 - PRISMA 风格的系统综述筛选日志；
-- 按 claim 构建更细粒度证据图；
+- 可学习的跨语言 claim matching 与人工主题合并；
 - 自动发现需要补足的 Knowledge Atom 候选；
 - 基于新论文的增量检索提醒；
 - 将研究阅读指标接入有审批边界的 Self-Evolution 提案。

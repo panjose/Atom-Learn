@@ -4,6 +4,7 @@
 
 - Runtime files
 - Import payload
+- Automatic document processing
 - Paper records
 - Question records
 - Difficulty rubric
@@ -99,7 +100,13 @@ Question type is one of `single_choice`, `multiple_choice`, `true_false`, `short
 
 Cognitive levels are `remember`, `understand`, `apply`, `analyze`, `evaluate`, and `create`.
 
-The schema has no full-stem, full-solution, or answer-key field. Keep those artifacts in the referenced private source layer.
+`answer_locator`, `marking_locator`, and `marking_link_status` (`linked`, `answer_only`, `marking_only`, or `missing`) associate each question with answer and marking artifacts without copying them. The schema has no full-stem, full-solution, or answer-key field. Keep those artifacts in the referenced private source layer.
+
+## Automatic document processing
+
+`exam process` accepts private question, answer, and marking text or paths through `assets/templates/exam-process.yaml`. It recognizes `Question 1`, `Q1`, `第 1 题`, and `1.` style boundaries, rejects ambiguous unnumbered text, produces stable question IDs and line locators, links matching answer/marking numbers, infers points and question/cognitive types, proposes Atom mappings, and derives the five-factor rubric. Only concise summaries and locators enter canonical state.
+
+The result includes unmatched answer/marking numbers, missing associations, and a mapping review queue. Use `exam review-mappings` with `assets/templates/exam-mapping-review.yaml` to confirm, remap, or explicitly unmap each uncertain proposal.
 
 ## Difficulty rubric
 
@@ -119,15 +126,18 @@ It stores `estimated_level`, `effective_level`, and a band: `foundation`, `stand
 
 ## Knowledge-point mappings
 
-Mapping fields are exactly `id`, `label`, `atom_id`, `weight`, `confidence`, and `basis`.
+Required mapping fields are `id`, `label`, `atom_id`, `weight`, `confidence`, and `basis`. Canonical mappings also retain `review_status`, `candidate_atom_ids`, and `mapping_method`.
 
 - `atom_id` references an existing course Atom or is `null` for a coverage gap;
 - weights are positive and total `1.0` within one question;
 - confidence is `0.5`-`1.0`;
 - basis is `direct`, `solution_step`, `prerequisite`, or `inferred`;
 - one knowledge-point ID must keep the same label and Atom mapping across the corpus.
+- automatic mappings are `pending` until a high-confidence separation or explicit review confirms/corrects them;
 
 Archived Atom aliases are resolved during analysis. An unresolved archived mapping becomes a coverage gap rather than being silently discarded.
+
+`exam calibrate` requires at least one official-level anchor. It learns the bounded mean offset between official and five-factor estimated levels, reports MAE before/after calibration, and applies the offset to non-official questions while retaining every original factor, estimate, and official value.
 
 ## Derived analysis
 
@@ -146,6 +156,9 @@ Archived Atom aliases are resolved during analysis. An unresolved archived mappi
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py exam init <workspace> --title <title> [--target-date YYYY-MM-DD]
 python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-import.yaml> [--expected-exam-revision N]
+python <SKILL_DIR>/scripts/atomlearn.py exam process <workspace> --input <exam-process.yaml> [--expected-exam-revision N]
+python <SKILL_DIR>/scripts/atomlearn.py exam review-mappings <workspace> --input <exam-mapping-review.yaml> [--expected-exam-revision N]
+python <SKILL_DIR>/scripts/atomlearn.py exam calibrate <workspace> [--expected-exam-revision N]
 python <SKILL_DIR>/scripts/atomlearn.py exam status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam analyze <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam plan <workspace> [--mode learning|review|mixed] [--limit N]

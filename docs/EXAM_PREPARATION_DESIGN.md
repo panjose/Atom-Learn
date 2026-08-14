@@ -16,9 +16,11 @@
 ```mermaid
 flowchart LR
     A["Past papers / question bank"] --> B["Private source + RAG index"]
-    B --> C["Question metadata and locators"]
-    C --> D["Knowledge-point and Atom mapping"]
+    B --> C["Automatic question splitting"]
+    C --> K["Answer and marking association"]
+    C --> D["Reviewable knowledge-point and Atom mapping"]
     C --> E["Five-factor difficulty rubric"]
+    E --> L["Official-anchor calibration"]
     D --> F["Corpus emphasis analysis"]
     E --> F
     G["Learner Evidence and prerequisites"] --> H["Targeted preparation planner"]
@@ -53,11 +55,15 @@ flowchart LR
 
 映射权重总和必须为 `1.0`。缺失的 Atom 映射保留为 coverage gap，不能通过猜测强行补齐。
 
+`exam process` 接受提取后的题目、答案和评分细则文本或路径，识别 `Question 1`、`Q1`、`第 1 题` 和 `1.` 等稳定边界。它按题号建立关联、生成行号 locator、推断分值/题型/认知层级，并根据 Atom 标题、ID、目标和易错点提出映射。低分或候选接近的映射进入 review queue；`exam review-mappings` 支持确认、纠正或明确取消映射。无法识别题目边界时失败关闭，不把一整篇文本误当成一道题。
+
 ## 5. 难度确定
 
 难度估计由概念负荷、推理深度、知识整合、执行负荷和时间压力组成，运行时使用固定权重计算 `1`-`5` 的估计值。若存在官方难度，则同时保存官方值和量表估值，并以官方值作为有效难度。
 
 难度结果必须展示 `official`、`rubric` 或 `estimated` 依据与置信度。缺少评分细则、标准解法、时间限制或先修假设时，应降低置信度，而不是提高模型措辞的确定性。
+
+当语料中存在官方难度锚点时，`exam calibrate` 计算“官方值 - 五因素估计值”的平均偏差，将其有界应用到非官方题目，并报告校准前后 MAE。原始五因素估计和官方值始终保留，校准不会回写或伪造官方标签。
 
 ## 6. 常考点统计
 
@@ -109,7 +115,10 @@ Web Search 只修补缺失证据，并通过 `rag ingest-web` 保存有限段落
 
 - 支持增量导入多份试卷与 revision 冲突保护；
 - 题目具备稳定来源 locator；
+- 自动切题失败关闭，答案/评分细则关联具有诊断报告；
+- 自动映射具有候选、方法、置信度和复核状态；
 - 难度由固定量表派生并保留依据；
+- 官方锚点可校准非官方难度并报告误差；
 - 常考点包含语料置信度与限制；
 - 未映射知识点显式出现；
 - 计划结合 Evidence、先修和复习状态；

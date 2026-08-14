@@ -151,30 +151,35 @@ Use `atom-learn/assets/templates/concept-route.yaml` as the starter payload.
 
 ## Research Reading
 
-AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It builds a guided map across surveys, seminal work, theory and methods, benchmarks and datasets, critiques and replications, and applications. Each completed paper records evidence-linked claims, limitations, open questions, and relations to other work.
+AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It normalizes DOI identifiers, merges DOI/title duplicates, verifies provider metadata, acquires outgoing citation relations from Crossref/OpenAlex or harness snapshots, and builds a guided role-aware paper map. Completed papers feed source-preserving cross-paper claim themes that keep agreements, contradictions, evidence strength, limitations, and provenance explicit.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
 python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
 python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
+python atom-learn/scripts/atomlearn.py research reconcile-metadata courses/agent-research --input research-metadata.yaml --expected-research-revision 1
+python atom-learn/scripts/atomlearn.py research fetch-metadata courses/agent-research --provider crossref --expected-research-revision 2
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. It does not store complete paper text or claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
+Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. Metadata conflicts and unresolved external references remain auditable; a synthesized single-source theme never masquerades as consensus. It does not store complete paper text or claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
 
 ## Exam Analysis and Targeted Preparation
 
-AtomLearn can turn supplied past papers, sample exams, mock exams, or question banks into a source-traceable assessment corpus. Each question is mapped to stable knowledge points and optional Knowledge Atoms, classified by type and cognitive demand, and rated with a transparent five-factor difficulty rubric. Analysis reports cross-paper coverage, score share, sample-contained emphasis, confidence, and unmapped course gaps.
+AtomLearn can turn supplied past papers, sample exams, mock exams, or question banks into a source-traceable assessment corpus. It automatically splits numbered questions, associates answer/marking sections, proposes reviewable knowledge-point and Atom mappings, and estimates a transparent five-factor difficulty rubric. Official anchors can calibrate non-official estimates. Analysis reports cross-paper coverage, score share, sample-contained emphasis, confidence, review status, and unmapped course gaps.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
-python atom-learn/scripts/atomlearn.py exam import courses/calculus --input exam-import.yaml --expected-exam-revision 0
+python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
+python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
+python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
 python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
 python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
+# For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-The targeted queue combines corpus emphasis, current learner Evidence, question difficulty, and prerequisite order to recommend `learn`, `remediate`, `review`, or `repair_prerequisites`. Full questions and marking schemes remain in the private source/RAG layer; canonical exam state keeps concise summaries and locators. Frequency describes only the supplied corpus and is never presented as a prediction of future questions. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md).
+The targeted queue combines corpus emphasis, current learner Evidence, calibrated question difficulty, and prerequisite order to recommend `learn`, `remediate`, `review`, or `repair_prerequisites`. Full questions, answers, and marking schemes remain in the private source/RAG layer; canonical exam state keeps concise summaries, associations, and locators. Frequency describes only the supplied corpus and is never presented as a prediction of future questions. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md).
 
 ## Session-Based Self-Adaptation
 

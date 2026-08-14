@@ -88,8 +88,8 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 2. Treat past papers, sample exams, mock exams, and question banks as source material. Ingest PDFs, DOCX, text, or extracted OCR into the workspace RAG index and preserve stable source IDs and per-question locators.
 3. If questions are the only input, complete source intake and build a prerequisite-aware course before final Atom mapping. Do not build a course around memorized answer patterns.
 4. Retrieve the relevant question, marking scheme, syllabus, and course evidence. Use harness Web Search only to correct missing official context and ingest bounded evidence with provenance.
-5. Create a structured exam payload. Store a concise stem summary, never the full question or solution in exam canonical state. Map each question to stable knowledge-point IDs and existing Atoms; keep uncertain or absent Atom mappings explicit.
-6. Run `exam import`, `exam analyze`, and `exam validate`. Present commonness as a property of the supplied corpus, not a forecast of future questions.
+5. Prefer `exam process` for extracted question, answer, and marking documents. It splits stable question boundaries, links matching artifacts, proposes Atom mappings, and derives difficulty without storing full text. Use `exam import` for already structured data.
+6. Inspect processing diagnostics and run `exam review-mappings` for pending proposals. Run `exam calibrate` when official difficulty anchors exist, then `exam analyze` and `exam validate`. Present commonness as a property of the supplied corpus, not a forecast of future questions.
 7. Run `adapt guidance --context exam`, then `exam plan --mode learning|review|mixed`. Use the queue's prerequisites, Evidence gaps, difficulty, and representative questions.
 8. If lineage is initialized, run `lineage trace` on the top target. Explain its prerequisite chain and exam-relevant conceptual thread before teaching it.
 9. Teach or review the top eligible Atom. Withhold the solution during a diagnostic attempt, record normal Evidence, assess it, and rerun the plan.
@@ -98,6 +98,9 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag ingest <workspace> --input <exam-sources.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py exam init <workspace> --title <title> --target-date <YYYY-MM-DD>
+python <SKILL_DIR>/scripts/atomlearn.py exam process <workspace> --input <exam-process.yaml> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam review-mappings <workspace> --input <exam-mapping-review.yaml> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam calibrate <workspace> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-import.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam analyze <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam plan <workspace> --mode mixed --limit 10
@@ -217,12 +220,12 @@ Use session adaptation only for presentation choices. Never let inferred prefere
 2. Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) and [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md).
 3. Define a research question, scope, inclusion criteria, exclusion criteria, and intended outcome before collecting papers.
 4. Run `adapt guidance --context research`; apply active research-orientation and source-priority preferences within the declared scope.
-5. Use the RAG corrective-search workflow to build an initial map of representative roles: survey, seminal, theory or method families, benchmarks or datasets, critiques or replications, and applications. Verify bibliographic metadata; do not equate citation count with evidence quality.
+5. Use the RAG corrective-search workflow to build an initial map of representative roles: survey, seminal, theory or method families, benchmarks or datasets, critiques or replications, and applications. Import normalizes DOI/title duplicates. Use `research reconcile-metadata` for harness/provider snapshots or `research fetch-metadata` for Crossref/OpenAlex verification and outgoing citation acquisition; do not equate citation count with evidence quality.
 6. Run `research init`, then `rag requirements --context research`. Pass research-question, survey, method, evaluation, and critique/replication coverage before finalizing the paper map.
 7. Create an import plan, then run `research import`, `research validate`, and `research next`.
 8. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, use `lineage trace` to explain and repair their prerequisite context without losing the paper position.
 9. Read in triage, structure, and evidence passes. Save a critical note with `research note`; mark it complete only after the critical-reading guard passes.
-10. Run `research synthesize` after a coherent group is complete. Report agreements, contradictions, replications, recurring limitations, open questions, and search limits.
+10. Run `research synthesize` after a coherent group is complete. Use its source-preserving claim themes to report agreements, contradictions, replications, evidence grades, recurring limitations, open questions, and search limits. Keep single-source and contested themes explicit.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field> --question <question> --scope <scope>
@@ -230,6 +233,8 @@ python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace> --context research
 python <SKILL_DIR>/scripts/atomlearn.py rag coverage <workspace> --input <research-coverage.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research reconcile-metadata <workspace> --input <research-metadata.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref
 python <SKILL_DIR>/scripts/atomlearn.py research next <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py research activate <workspace> <paper-id>
 python <SKILL_DIR>/scripts/atomlearn.py research note <workspace> <paper-id> --input <note.yaml>

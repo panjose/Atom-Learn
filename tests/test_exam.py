@@ -373,3 +373,108 @@ def test_exam_plan_discloses_and_can_verify_provisional_skips() -> None:
     assert any("assumptions, not mastery" in warning for warning in mixed["warnings"])
     learning = output(invoke("exam", "plan", path, "--mode", "learning", "--limit", 10))
     assert "calculus.derivative.definition" not in {item["atom_id"] for item in learning["queue"]}
+
+
+def test_exam_process_splits_questions_links_marking_and_proposes_reviewable_atom_mappings() -> None:
+    path = workspace("automatic")
+    process_payload = {
+        "documents": [
+            {
+                "paper": {
+                    "id": "auto-2025",
+                    "title": "Automatic calculus paper",
+                    "year": 2025,
+                    "session": "annual",
+                    "kind": "official_past_exam",
+                    "total_points": 15,
+                    "source_id": "auto-2025-source",
+                    "locator": "pages 1-2",
+                },
+                "questions": "Question 1. Calculate a derivative from the derivative definition. [10 marks]\nShow every limit step.\nQuestion 2. Explain the geometric meaning of a derivative. [5 marks]",
+                "answers": "1. The difference quotient limit gives the derivative.\n2. It is the tangent slope.",
+                "marking_scheme": "Q1: definition 3 marks, algebra 4 marks, limit 3 marks\nQ2: tangent 3 marks, interpretation 2 marks",
+            }
+        ]
+    }
+    processed = output(
+        invoke("exam", "process", path, "--input", payload(path, "process.yaml", process_payload))
+    )
+    assert processed["exam_revision"] == 1
+    assert processed["result"]["processing"][0]["question_count"] == 2
+    assert len(processed["result"]["imported_questions"]) == 2
+    assert processed["result"]["analysis"]["answer_marking_association"] == {"linked": 2}
+    review_queue = processed["result"]["mapping_review_queue"]
+    assert review_queue
+    assert "calculus.derivative.definition" in review_queue[0]["candidate_atom_ids"]
+
+    review = {
+        "reviews": [
+            {
+                "question_id": review_queue[0]["question_id"],
+                "mapping_id": review_queue[0]["mapping_id"],
+                "decision": "confirm",
+            }
+        ]
+    }
+    reviewed = output(
+        invoke(
+            "exam",
+            "review-mappings",
+            path,
+            "--input",
+            payload(path, "review.yaml", review),
+            "--expected-exam-revision",
+            1,
+        )
+    )
+    assert reviewed["exam_revision"] == 2
+    assert reviewed["result"]["review_count"] == 1
+    assert output(invoke("exam", "validate", path))["ok"] is True
+
+
+def test_exam_difficulty_calibration_uses_official_anchors_and_updates_effective_levels() -> None:
+    path = workspace("calibration")
+    data = corpus()
+    bundle = {"papers": data["papers"][:2], "questions": data["questions"][:2]}
+    anchor = bundle["questions"][0]["difficulty"]
+    anchor["basis"] = "official"
+    anchor["official_level"] = 4.0
+    output(invoke("exam", "import", path, "--input", payload(path, "anchors.yaml", bundle)))
+
+    calibrated = output(
+        invoke("exam", "calibrate", path, "--expected-exam-revision", 1)
+    )
+    assert calibrated["result"] == {
+        "offset": 2.0,
+        "anchor_count": 1,
+        "mae_before": 2.0,
+        "mae_after": 0.0,
+    }
+    status = output(invoke("exam", "status", path))
+    assert status["difficulty_calibration"]["offset"] == 2.0
+    assert output(invoke("exam", "validate", path))["ok"] is True
+
+
+def test_exam_process_fails_closed_when_question_boundaries_are_not_detectable() -> None:
+    path = workspace("split-guard")
+    raw = {
+        "documents": [
+            {
+                "paper": {
+                    "id": "bad-paper",
+                    "title": "Unstructured paper",
+                    "year": 2025,
+                    "session": "",
+                    "kind": "practice_set",
+                    "total_points": None,
+                    "source_id": "bad-source",
+                    "locator": "page 1",
+                },
+                "questions": "A paragraph with no stable question numbering.",
+            }
+        ]
+    }
+    blocked = invoke("exam", "process", path, "--input", payload(path, "bad-process.yaml", raw), check=False)
+    assert blocked.returncode == 2
+    assert "no recognizable numbered question headings" in blocked.stderr
+    assert output(invoke("exam", "status", path))["question_count"] == 0

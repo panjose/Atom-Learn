@@ -253,6 +253,9 @@ def test_research_synthesis_surfaces_claims_contradictions_and_gaps() -> None:
     assert len(result["integrated_paper_ids"]) == 3
     assert len(result["contradictions"]) == 1
     assert result["contradictions"][0]["target_paper_id"] == "paper.method.alpha"
+    assert len(result["evidence_synthesis"]["themes"]) == 1
+    assert result["evidence_synthesis"]["themes"][0]["assessment"] == "contested"
+    assert len(result["evidence_synthesis"]["themes"][0]["claims"]) == 3
     matrix = (path / "LITERATURE_MATRIX.md").read_text(encoding="utf-8")
     gaps = (path / "RESEARCH_GAPS.md").read_text(encoding="utf-8")
     assert "evidence-linked claim" not in matrix
@@ -260,6 +263,134 @@ def test_research_synthesis_surfaces_claims_contradictions_and_gaps() -> None:
     assert "contradicts `paper.method.alpha`" in gaps
     assert "Which setting would falsify" in gaps
     assert output(invoke("research", "status", path))["status"] == "complete"
+
+
+def test_research_import_deduplicates_doi_and_title_and_rewrites_citations() -> None:
+    path = workspace("deduplicate")
+    plan = {
+        "papers": [
+            {
+                "id": "paper.canonical",
+                "title": "A Reliable Method",
+                "doi": "https://doi.org/10.1234/Example.1",
+                "authors": ["A. Author"],
+                "role": "method",
+                "priority": 1,
+                "status": "queued",
+                "prerequisite_paper_ids": [],
+                "cites": [],
+            },
+            {
+                "id": "paper.duplicate",
+                "title": "A reliable method!",
+                "doi": "doi:10.1234/example.1",
+                "authors": ["B. Collaborator"],
+                "role": "method",
+                "priority": 2,
+                "status": "queued",
+                "prerequisite_paper_ids": [],
+                "cites": [],
+            },
+            {
+                "id": "paper.followup",
+                "title": "A Follow-up Evaluation",
+                "doi": "10.1234/example.2",
+                "authors": ["C. Evaluator"],
+                "role": "replication",
+                "priority": 2,
+                "status": "queued",
+                "prerequisite_paper_ids": [],
+                "cites": ["paper.duplicate"],
+            },
+        ]
+    }
+    imported = output(
+        invoke("research", "import", path, "--input", payload(path, "duplicates.yaml", plan))
+    )
+    assert imported["result"]["total_papers"] == 2
+    assert imported["result"]["deduplicated"] == [
+        {"duplicate_id": "paper.duplicate", "canonical_id": "paper.canonical"}
+    ]
+    papers = output(invoke("research", "list", path))
+    followup = next(item for item in papers if item["id"] == "paper.followup")
+    assert followup["cites"] == ["paper.canonical"]
+    assert next(item for item in papers if item["id"] == "paper.canonical")["doi"] == "10.1234/example.1"
+
+
+def test_research_metadata_reconciliation_verifies_records_and_acquires_internal_citations() -> None:
+    path = workspace("metadata")
+    plan = {
+        "papers": [
+            {
+                "id": "paper.base",
+                "title": "Base Evidence",
+                "authors": ["A. Researcher"],
+                "year": 2022,
+                "doi": "10.5555/base",
+                "role": "seminal",
+                "priority": 1,
+                "status": "queued",
+                "prerequisite_paper_ids": [],
+                "cites": [],
+            },
+            {
+                "id": "paper.new",
+                "title": "New Evidence",
+                "authors": ["B. Researcher"],
+                "year": 2024,
+                "doi": "10.5555/new",
+                "role": "replication",
+                "priority": 2,
+                "status": "queued",
+                "prerequisite_paper_ids": [],
+                "cites": [],
+            },
+        ]
+    }
+    imported = output(invoke("research", "import", path, "--input", payload(path, "papers.yaml", plan)))
+    metadata = {
+        "records": [
+            {
+                "paper_id": "paper.base",
+                "provider": "crossref-fixture",
+                "provider_id": "10.5555/base",
+                "title": "Base Evidence",
+                "authors": ["A. Researcher"],
+                "year": 2022,
+                "doi": "10.5555/base",
+                "venue": "Evidence Journal",
+                "references": [],
+            },
+            {
+                "paper_id": "paper.new",
+                "provider": "crossref-fixture",
+                "provider_id": "10.5555/new",
+                "title": "New Evidence",
+                "authors": ["B. Researcher"],
+                "year": 2024,
+                "doi": "10.5555/new",
+                "references": [{"doi": "10.5555/base"}, {"doi": "10.5555/external"}],
+            },
+        ]
+    }
+    reconciled = output(
+        invoke(
+            "research",
+            "reconcile-metadata",
+            path,
+            "--input",
+            payload(path, "metadata.yaml", metadata),
+            "--expected-research-revision",
+            imported["research_revision"],
+        )
+    )
+    assert reconciled["result"]["verified_paper_ids"] == ["paper.base", "paper.new"]
+    assert reconciled["result"]["citation_edges_added"] == [{"from": "paper.new", "to": "paper.base"}]
+    papers = output(invoke("research", "list", path))
+    newer = next(item for item in papers if item["id"] == "paper.new")
+    assert newer["cites"] == ["paper.base"]
+    assert newer["external_citations"] == ["10.5555/external"]
+    assert output(invoke("research", "validate", path))["ok"] is True
 
 
 def test_research_rejects_full_text_storage() -> None:
