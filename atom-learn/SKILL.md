@@ -1,6 +1,6 @@
 ---
 name: atom-learn
-description: Build and run persistent, source-grounded learning courses by turning textbooks, PDFs, notes, documentation, or multiple learning resources into a prerequisite DAG of small Knowledge Atoms. Use when a learner wants a controlled study path, one-concept-at-a-time tutoring, durable progress across sessions, question parking and prerequisite backtracking, mastery checks, spaced review, or recovery of an existing AtomLearn workspace.
+description: Build, run, and safely evolve persistent source-grounded learning courses by turning textbooks, PDFs, notes, documentation, or multiple resources into a prerequisite DAG of small Knowledge Atoms. Use when a learner wants a controlled one-concept-at-a-time study path, durable progress, question parking, prerequisite backtracking, mastery checks, spaced review, adaptive teaching, evidence-driven course evolution, or recovery of an AtomLearn workspace.
 ---
 
 # AtomLearn
@@ -84,6 +84,18 @@ Never mark an Atom mastered without persisted Evidence.
 - Use `restructure` only after reading [references/ATOMIZATION.md](references/ATOMIZATION.md). Generate a proposal first. Apply it only with explicit user confirmation and `--confirmed`.
 - Preserve archived Atom IDs, aliases, questions, and Evidence. Never erase learning history during split or merge.
 
+### Evolve from evidence
+
+1. Read [references/EVOLUTION.md](references/EVOLUTION.md), [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md), and [references/EVALUATION.md](references/EVALUATION.md).
+2. Run `evolve status` and note both course and evolution revisions.
+3. Run `evolve analyze --propose` only after meaningful Evidence, review failure, repeated backtracking, or an explicit learner request.
+4. Preview every proposal. Explain its observations, hypothesis, risk, expected effect, and validation result.
+5. Obtain the policy-required authority before approval and application.
+6. Monitor with new Evidence. Promote only when all criteria pass.
+7. Roll back only when no learning mutation occurred after application; otherwise create a compensating proposal.
+
+Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` from a course workspace.
+
 ## State command rules
 
 - Pass semantic payloads through YAML/JSON input files; do not construct complex shell strings from learner text.
@@ -99,6 +111,9 @@ Never mark an Atom mastered without persisted Evidence.
 - Read [references/ATOMIZATION.md](references/ATOMIZATION.md) when building or restructuring a map.
 - Read [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md) when a learner asks a side question or reveals a prerequisite gap.
 - Read [references/MASTERY.md](references/MASTERY.md) when creating checks, grading Evidence, or scheduling remediation.
+- Read [references/EVOLUTION.md](references/EVOLUTION.md) for the end-to-end evolution workflow.
+- Read [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md) before approval, application, or rollback.
+- Read [references/EVALUATION.md](references/EVALUATION.md) when defining success criteria or monitoring a proposal.
 
 ## Completion standard
 

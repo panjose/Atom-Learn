@@ -1,0 +1,32 @@
+schema_version: 1
+revision: 0
+mode: proposal_only
+auto_apply_types: []
+risk_permissions:
+  low: learner
+  medium: learner
+  high: maintainer
+bounds:
+  review_interval_days:
+    min: 1
+    max: 365
+  mastery_threshold:
+    min: 0.6
+    max: 0.95
+  minimum_dimension_score:
+    min: 0.4
+    max: 0.9
+  minimum_observations: 2
+privacy:
+  store_raw_messages: false
+  cross_workspace_aggregation: false
+learner_strategy:
+  default: {}
+  atoms: {}
+protected_invariants:
+  - exactly_one_active_atom
+  - prerequisites_before_activation
+  - mastery_requires_evidence
+  - preserve_sources
+  - preserve_history
+  - no_runtime_skill_patch

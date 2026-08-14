@@ -169,6 +169,35 @@ merged_atom:
     minimum_dimension_score: 0.6
 ```
 
+## Evolution state and proposal
+
+Evolution uses a separate revision domain under `.atomlearn/evolution/`. Its canonical files are `policy.yaml`, `state.yaml`, `metrics.yaml`, `hypotheses.yaml`, proposal and experiment directories, checkpoints, and an append-only ledger. `EVOLUTION.md` is a generated view.
+
+Create a manual proposal with this shape:
+
+```yaml
+scope: learner
+origin: manual
+type: adjust_mastery
+target_atom_ids: [calculus.derivative.definition]
+observations: [ev-000014, rv-000003]
+hypothesis: Delayed review failure indicates that transfer evidence is missing.
+change:
+  atom_id: calculus.derivative.definition
+  required_dimensions: [explain, apply, discriminate, transfer]
+evaluation:
+  success_criteria:
+    - metric: atom.average_score
+      atom_id: calculus.derivative.definition
+      operator: gte
+      value: 0.8
+      min_observations: 2
+```
+
+Supported types are `teaching_strategy`, `adjust_review_intervals`, `adjust_mastery`, `add_dependency`, `remove_dependency`, `split_atom`, `merge_atoms`, and `patch_skill`. The engine assigns risk from the type; input cannot lower it. Split and merge changes embed the corresponding restructure proposal under `change.proposal`.
+
+Read [EVOLUTION.md](EVOLUTION.md) for the lifecycle and [EVOLUTION_POLICY.md](EVOLUTION_POLICY.md) for authority, bounds, privacy, and rollback rules.
+
 ## Revisions and timestamps
 
 Read `course.yaml.revision` before a mutation and pass `--expected-revision`. Every canonical state file and Atom carries the same revision; a mismatch detects an interrupted multi-file write. A stale command or inconsistent revision must stop rather than overwrite state. Store timestamps as timezone-aware ISO 8601 values. Let the CLI create IDs, revisions, and timestamps.

@@ -1,0 +1,20 @@
+schema_version: 1
+id: evo-000001
+base_course_revision: 0
+origin: learner_request
+scope: learner
+type: teaching_strategy
+risk: low
+target_atom_ids: []
+observations: []
+hypothesis: ""
+change: {}
+evaluation:
+  success_criteria: []
+status: proposed
+ready_to_apply: false
+approval: null
+application: null
+monitoring: []
+created_at: ""
+updated_at: ""

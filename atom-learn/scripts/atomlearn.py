@@ -215,6 +215,9 @@ class Workspace:
         workspace.reviews = {"schema_version": SCHEMA_VERSION, "revision": 0, "items": []}
         workspace._write_all()
         atomic_text(workspace.meta / "events.ndjson", "")
+        from evolution import initialize_evolution
+
+        initialize_evolution(workspace.root)
         workspace.render()
         return workspace
 
@@ -1366,10 +1369,22 @@ def build_parser() -> argparse.ArgumentParser:
     restructure_parser.add_argument("--proposal", required=True)
     restructure_parser.add_argument("--confirmed", action="store_true")
     mutation_args(restructure_parser)
+    evolve_parser = sub.add_parser("evolve", add_help=False)
+    evolve_parser.add_argument("-h", "--help", action="store_true", dest="evolution_help")
+    evolve_parser.add_argument("evolution_args", nargs=argparse.REMAINDER)
     return parser
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "evolve":
+        from evolution import AtomLearnError as EvolutionAtomLearnError
+        from evolution import EvolutionError, run as run_evolution
+
+        try:
+            run_evolution(["--help"] if args.evolution_help else args.evolution_args)
+        except (EvolutionError, EvolutionAtomLearnError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "init":
         workspace = Workspace.create(Path(args.workspace), args.course_id, args.title, args.goal)
         emit({"ok": True, "workspace": str(workspace.root), "revision": 0})
@@ -1378,6 +1393,11 @@ def run(args: argparse.Namespace) -> None:
     workspace = load_workspace(args.workspace)
     if args.command == "validate":
         errors = workspace.validate()
+        evolution_root = workspace.meta / "evolution"
+        if evolution_root.is_dir():
+            from evolution import EvolutionEngine
+
+            errors.extend(f"evolution: {error}" for error in EvolutionEngine(workspace).validate())
         if errors:
             raise AtomLearnError("Workspace validation failed:\n- " + "\n- ".join(errors))
         emit({"ok": True, "revision": workspace.revision, "atoms": len(workspace.atoms)})
