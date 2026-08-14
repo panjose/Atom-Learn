@@ -1382,10 +1382,22 @@ def build_parser() -> argparse.ArgumentParser:
     rag_parser = sub.add_parser("rag", add_help=False)
     rag_parser.add_argument("-h", "--help", action="store_true", dest="rag_help")
     rag_parser.add_argument("rag_args", nargs=argparse.REMAINDER)
+    adapt_parser = sub.add_parser("adapt", add_help=False)
+    adapt_parser.add_argument("-h", "--help", action="store_true", dest="adaptation_help")
+    adapt_parser.add_argument("adaptation_args", nargs=argparse.REMAINDER)
     return parser
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "adapt":
+        from adaptation import AdaptationError, run as run_adaptation
+        from adaptation import AtomLearnError as AdaptationAtomLearnError
+
+        try:
+            run_adaptation(["--help"] if args.adaptation_help else args.adaptation_args)
+        except (AdaptationError, AdaptationAtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "rag":
         from rag import AtomLearnError as RagAtomLearnError
         from rag import RagError, run as run_rag
@@ -1465,6 +1477,16 @@ def run(args: argparse.Namespace) -> None:
                 errors.extend(f"rag: {error}" for error in rag_engine.validate())
             except (RagError, RagAtomLearnError) as exc:
                 errors.append(f"rag: {exc}")
+        adaptation_root = workspace.meta / "adaptation"
+        if adaptation_root.is_dir():
+            from adaptation import AdaptationEngine, AdaptationError
+            from adaptation import AtomLearnError as AdaptationAtomLearnError
+
+            try:
+                adaptation_engine = AdaptationEngine.load(str(workspace.root))
+                errors.extend(f"adaptation: {error}" for error in adaptation_engine.validate())
+            except (AdaptationError, AdaptationAtomLearnError) as exc:
+                errors.append(f"adaptation: {exc}")
         if errors:
             raise AtomLearnError("Workspace validation failed:\n- " + "\n- ".join(errors))
         emit({"ok": True, "revision": workspace.revision, "atoms": len(workspace.atoms)})
@@ -1477,7 +1499,18 @@ def run(args: argparse.Namespace) -> None:
         emit({"ok": True, "views": VIEW_FILES})
         return
     if args.command == "status":
-        emit(workspace.status_summary(), as_json=args.json)
+        summary = workspace.status_summary()
+        if (workspace.meta / "adaptation").is_dir():
+            from adaptation import AdaptationEngine
+
+            phase = workspace.current.get("phase")
+            context = "orientation" if phase == "orientation" else ("review" if phase == "reviewing" else "teaching")
+            adaptation_engine = AdaptationEngine.load(str(workspace.root))
+            adaptation_errors = adaptation_engine.validate()
+            if adaptation_errors:
+                raise AtomLearnError("Adaptation validation failed:\n- " + "\n- ".join(adaptation_errors))
+            summary["adaptation"] = adaptation_engine.guidance(context)
+        emit(summary, as_json=args.json)
         return
     if args.command == "suggest-next":
         errors = workspace.validate()

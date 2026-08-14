@@ -25,6 +25,8 @@ Keep `mode: proposal_only` until real usage demonstrates that a specific low-ris
 | Atom split/merge | medium | learner | allowed through restructure guards |
 | Skill patch | high | maintainer | forbidden |
 
+Session presentation preferences are governed separately by the adaptation policy. They may activate without an evolution proposal only when the dimension and value are allowlisted, context-scoped, reversible, and unable to change course invariants. Explicit current-turn instructions always take precedence.
+
 Risk is derived from proposal type and cannot be supplied or lowered by the proposer.
 
 ## Bounds
@@ -54,6 +56,8 @@ Reject a proposal if normal Workspace validation fails after applying it in memo
 ## Privacy
 
 Keep `store_raw_messages: false` and `cross_workspace_aggregation: false` by default.
+
+Keep session adaptation's `infer_sensitive_traits: false`. Do not infer identity, health, politics, religion, personality, intelligence, disability, or other sensitive traits from chat behavior. Store enum-only presentation signals with opaque turn references; never copy the message or a free-text summary.
 
 Metrics may store:
 

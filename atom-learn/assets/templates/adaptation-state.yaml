@@ -1,0 +1,13 @@
+schema_version: 1
+revision: 0
+created_at: ""
+updated_at: ""
+last_session_at: null
+session_count: 0
+policy:
+  store_raw_messages: false
+  cross_workspace_aggregation: false
+  infer_sensitive_traits: false
+  behavioral_min_sessions: 2
+  inferred_min_confidence: 0.7
+  conflict_margin: 0.15

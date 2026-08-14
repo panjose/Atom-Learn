@@ -1,6 +1,6 @@
 ---
 name: atom-learn
-description: Build, retrieve for, run, and safely evolve persistent source-grounded learning courses and research-reading programs. Accept complete textbooks or knowledge bases, a user-provided outline or syllabus, or only a field keyword, concept, skill, or topic name; index local sources; correct evidence gaps with harness Web Search; turn coverage into a prerequisite DAG of Knowledge Atoms; map research fields into guided paper graphs; and track learning evidence. Use for RAG-grounded course creation from sparse or rich inputs, one-concept-at-a-time study, durable progress, mastery checks, spaced review, adaptive teaching, critical paper reading, literature synthesis, field orientation, or recovery of an AtomLearn workspace.
+description: Build, retrieve for, run, personalize, and safely evolve persistent source-grounded learning courses and research-reading programs. Accept complete textbooks or knowledge bases, a user-provided outline or syllabus, or only a field keyword, concept, skill, or topic name; index local sources; correct evidence gaps with harness Web Search; adapt explanation style and research orientation from privacy-preserving cross-session chat signals; turn coverage into a prerequisite DAG of Knowledge Atoms; and track learning evidence. Use for RAG-grounded course creation, one-concept-at-a-time study, durable progress, session-aware personalization, mastery checks, spaced review, adaptive teaching, critical paper reading, literature synthesis, field orientation, or workspace recovery.
 ---
 
 # AtomLearn
@@ -81,21 +81,43 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 ### Resume a course
 
 1. Run `status --json`; do not rely on chat history.
-2. Read only the Active Atom, referenced questions, and necessary source locations.
-3. Restate the current Atom, learner confusion, and next action in one short orientation.
-4. Continue the recorded phase. Do not reactivate or advance an Atom merely because a new session started.
+2. Read the returned adaptation guidance. If adaptation is not initialized, run `adapt guidance` for the current context.
+3. Read only the Active Atom, referenced questions, and necessary source locations.
+4. Restate the current Atom, learner confusion, and next action using active preferences unless the current request overrides them.
+5. Continue the recorded phase. Do not reactivate or advance an Atom merely because a new session started.
+
+### Adapt across chat sessions
+
+1. Read [references/SESSION_ADAPTATION.md](references/SESSION_ADAPTATION.md) and [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md).
+2. At session start or resume, run `adapt guidance --context <context>`. Apply current-turn explicit requests before stored guidance.
+3. During the conversation, distinguish durable explicit preferences from one-off task instructions. Treat behavioral and outcome patterns as inferences, not facts.
+4. Near the end of a meaningful session, distill at most one observation payload with allowlisted dimensions, enum values, evidence class, reason code, confidence, and opaque turn IDs.
+5. Run `adapt observe-session` once for the session. Never pass raw messages, quotes, free-text summaries, secrets, personal identifiers, or sensitive-trait guesses.
+6. Let explicit preferences activate immediately. Let inferred preferences activate only after corroboration across distinct sessions; keep provisional or contested values out of guidance.
+7. Record a correction as newer explicit evidence. Use `adapt retire` when the learner rejects persistence or requests that a dimension stop influencing guidance.
+8. Run `adapt validate`. Show `PERSONALIZATION.md` when the learner asks what has been learned.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py adapt guidance <workspace> --context teaching
+python <SKILL_DIR>/scripts/atomlearn.py adapt observe-session <workspace> --input <session-signals.yaml> --expected-adaptation-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py adapt profile <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py adapt retire <workspace> <dimension> --reason-code user_rejection
+```
+
+Use session adaptation only for presentation choices. Never let it lower mastery, bypass prerequisites, change research scope, weaken source grounding, or modify safety rules. Keep course, evolution, and adaptation revisions independent.
 
 ### Map and read a research field
 
 1. Create the base workspace with `init`. Build Knowledge Atoms when the field has concepts or methods the learner may need to repair.
 2. Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) and [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md).
 3. Define a research question, scope, inclusion criteria, exclusion criteria, and intended outcome before collecting papers.
-4. Use the RAG corrective-search workflow to build an initial map of representative roles: survey, seminal, theory or method families, benchmarks or datasets, critiques or replications, and applications. Verify bibliographic metadata; do not equate citation count with evidence quality.
-5. Run `research init`, then `rag requirements --context research`. Pass research-question, survey, method, evaluation, and critique/replication coverage before finalizing the paper map.
-6. Create an import plan, then run `research import`, `research validate`, and `research next`.
-7. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, repair them through the learning workflow without losing the paper position.
-8. Read in triage, structure, and evidence passes. Save a critical note with `research note`; mark it complete only after the critical-reading guard passes.
-9. Run `research synthesize` after a coherent group is complete. Report agreements, contradictions, replications, recurring limitations, open questions, and search limits.
+4. Run `adapt guidance --context research`; apply active research-orientation and source-priority preferences within the declared scope.
+5. Use the RAG corrective-search workflow to build an initial map of representative roles: survey, seminal, theory or method families, benchmarks or datasets, critiques or replications, and applications. Verify bibliographic metadata; do not equate citation count with evidence quality.
+6. Run `research init`, then `rag requirements --context research`. Pass research-question, survey, method, evaluation, and critique/replication coverage before finalizing the paper map.
+7. Create an import plan, then run `research import`, `research validate`, and `research next`.
+8. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, repair them through the learning workflow without losing the paper position.
+9. Read in triage, structure, and evidence passes. Save a critical note with `research note`; mark it complete only after the critical-reading guard passes.
+10. Run `research synthesize` after a coherent group is complete. Report agreements, contradictions, replications, recurring limitations, open questions, and search limits.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field> --question <question> --scope <scope>
@@ -114,13 +136,14 @@ Do not call an observed open question a novel contribution without a current lit
 
 ### Teach one turn
 
-1. Read `status --json` and note its `revision`.
+1. Read `status --json`, note its course and adaptation revisions, and apply context-valid adaptation guidance.
 2. Interpret the input as an answer, a question, a state command, or a scope change.
 3. Route questions using [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md). Record the question before taking a routing action.
 4. Teach only the minimum needed for the Active Atom, using Why -> What -> How -> Example -> Intuition.
 5. Persist current question, understood ideas, confusions, and `next_action` with `update-session`.
 6. Run `validate` after a state-changing command. Use `--expected-revision` on mutations when supported.
 7. Keep the user-facing reply focused; mention parked or backtracked questions explicitly.
+8. Persist a session observation only for a new durable explicit preference, correction, or meaningful end-of-session pattern. Do not record every turn.
 
 Do not teach a future Atom to be conversationally helpful. Record it and return to the current objective.
 
@@ -151,7 +174,7 @@ Never mark an Atom mastered without persisted Evidence.
 
 ### Evolve from evidence
 
-1. Read [references/EVOLUTION.md](references/EVOLUTION.md), [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md), and [references/EVALUATION.md](references/EVALUATION.md).
+1. Read [references/EVOLUTION.md](references/EVOLUTION.md), [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md), and [references/EVALUATION.md](references/EVALUATION.md). Keep session presentation adaptation in the separate `adapt` workflow.
 2. Run `evolve status` and note both course and evolution revisions.
 3. Run `evolve analyze --propose` only after meaningful Evidence, review failure, repeated backtracking, or an explicit learner request.
 4. Preview every proposal. Explain its observations, hypothesis, risk, expected effect, and validation result.
@@ -185,7 +208,9 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/INTAKE_SCHEMA.md](references/INTAKE_SCHEMA.md) when creating or updating an intake payload, or troubleshooting intake state.
 - Read [references/RAG.md](references/RAG.md) when indexing materials, retrieving course evidence, correcting outline/topic gaps with Web Search, reranking, or evaluating coverage.
 - Read [references/RAG_SCHEMA.md](references/RAG_SCHEMA.md) when creating source, web-evidence, query, embedding, or coverage payloads, or troubleshooting retrieval state.
+- Read [references/SESSION_ADAPTATION.md](references/SESSION_ADAPTATION.md) when learning or applying presentation preferences from chat sessions, handling conflicts, corrections, or retirement, or deciding whether a signal is safe to persist.
+- Read [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md) when creating session signal payloads or troubleshooting adaptation state.
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.

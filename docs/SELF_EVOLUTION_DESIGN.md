@@ -4,7 +4,7 @@
 | --- | --- |
 | 文档状态 | Implemented v1 |
 | 更新时间 | 2026-08-14 |
-| 适用范围 | 单个 AtomLearn 课程工作区 |
+| 适用范围 | 单个 AtomLearn 课程工作区的高影响课程进化通道 |
 | 默认模式 | `proposal_only` |
 | 核心原则 | Observe -> Hypothesize -> Propose -> Approve -> Apply -> Measure -> Promote/Roll back |
 
@@ -18,6 +18,8 @@ AtomLearn 的自进化不是让模型随时改写自身，而是把学习过程�
 - 用后续学习证据检验提案，而不是用主观感觉宣告改进；
 - 在安全条件满足时恢复检查点，同时保留全部学习历史；
 - 将运行时课程适应与 Skill 源代码升级严格隔离。
+
+聊天 session 中的低风险表达偏好由独立的 `adapt` 通道处理，不进入本提案状态机。该通道使用单独的 adaptation revision，只允许白名单枚举值，并要求行为推断跨 session 交叉印证；详见[会话自适应设计](SESSION_ADAPTATION_DESIGN.md)。课程结构、掌握门槛、复习规则和 Skill 代码仍严格遵守本文的审批式进化流程。
 
 ## 2. 非目标
 
@@ -49,6 +51,8 @@ flowchart LR
 
 - `course revision` 保护课程、Atom、Evidence、问题和复习状态；
 - `evolution revision` 保护策略、指标、假设、提案和实验状态。
+
+另有一条隔离的 `adaptation revision`，只保护 session 信号与派生偏好画像。它的频繁更新不会让课程进化提案过期，也不能直接修改课程或进化状态。
 
 提案同时记录其 `base_course_revision`。课程已变化的旧提案不得直接应用，从而避免自进化覆盖正常学习进展。
 

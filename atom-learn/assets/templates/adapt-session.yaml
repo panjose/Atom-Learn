@@ -1,0 +1,10 @@
+session_id: session-opaque-id
+context: teaching
+signals:
+  - dimension: response.detail
+    value: concise
+    direction: prefer
+    evidence: explicit
+    reason_code: explicit_request
+    confidence: 0.95
+    turn_refs: [turn-opaque-id]

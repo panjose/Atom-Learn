@@ -1,4 +1,4 @@
 interface:
   display_name: "AtomLearn"
-  short_description: "Build RAG-grounded learning and research paths"
-  default_prompt: "Use $atom-learn to build a source-grounded learning or research path from my materials, outline, or topic, and retrieve authoritative evidence for any gaps."
+  short_description: "Build adaptive RAG-grounded learning and research"
+  default_prompt: "Use $atom-learn to build a source-grounded learning or research path and safely adapt it to my durable session preferences."

@@ -3,6 +3,7 @@
 ## Contents
 
 - Principle
+- Two evolution lanes
 - When to evolve
 - Workflow
 - Proposal lifecycle
@@ -21,6 +22,15 @@ Keep two independent revisions:
 
 Require both revisions to be current before applying a proposal. Route every course mutation through the normal Workspace commit and validation path.
 
+## Two evolution lanes
+
+Keep session adaptation separate from bounded course evolution:
+
+- use `adapt` for allowlisted presentation preferences distilled from chat sessions;
+- use `evolve` for teaching-policy experiments, mastery, reviews, dependencies, Atom structure, and Skill candidates.
+
+Read [SESSION_ADAPTATION.md](SESSION_ADAPTATION.md) before extracting chat preference signals. Session adaptation has its own revision so frequent low-risk preference updates do not stale pending evolution proposals. It may automatically apply explicit preferences and corroborated cross-session inferences, but it cannot mutate course or evolution state.
+
 ## When to evolve
 
 Run analysis after meaningful evidence accumulates, such as repeated mastery failure, delayed review failure, repeated blocking backtracks, or an explicit learner request. Do not analyze after every conversational turn.
@@ -31,7 +41,7 @@ Use:
 python <SKILL_DIR>/scripts/atomlearn.py evolve analyze <workspace> --propose
 ```
 
-The analyzer stores derived metrics and ID references, not raw learner messages. It may generate:
+The analyzer stores derived metrics and ID references, not raw learner messages. It may read adaptation session and active-preference counts, but it does not copy chat signals into evolution state. It may generate:
 
 - hypotheses based on deterministic signals;
 - ready low- or medium-risk proposals when the change is structurally complete;

@@ -202,6 +202,43 @@ class EvolutionEngine:
     def proposal_paths(self) -> list[Path]:
         return sorted((self.root / "proposals").glob("evo-*.yaml"))
 
+    def adaptation_summary(self) -> dict[str, Any]:
+        root = self.workspace.meta / "adaptation"
+        state_path = root / "state.yaml"
+        profile_path = root / "profile.yaml"
+        if not state_path.is_file() or not profile_path.is_file():
+            return {
+                "enabled": False,
+                "adaptation_revision": None,
+                "session_count": 0,
+                "active_preferences": {},
+                "pending_preferences": 0,
+            }
+        from adaptation import AdaptationEngine
+
+        engine = AdaptationEngine.load(str(self.workspace.root))
+        errors = engine.validate()
+        if errors:
+            raise EvolutionError("Session adaptation validation failed:\n- " + "\n- ".join(errors))
+        state = engine.state
+        profile = engine.profile
+        preferences = profile.get("preferences", {})
+        active = {
+            dimension: item.get("active_value")
+            for dimension, item in preferences.items()
+            if isinstance(item, dict) and item.get("status") == "active" and item.get("active_value")
+        }
+        return {
+            "enabled": True,
+            "adaptation_revision": state.get("revision"),
+            "session_count": state.get("session_count", 0),
+            "active_preferences": active,
+            "pending_preferences": sum(
+                isinstance(item, dict) and item.get("status") in {"provisional", "contested"}
+                for item in preferences.values()
+            ),
+        }
+
     def proposals(self) -> list[dict[str, Any]]:
         return [read_data(path) for path in self.proposal_paths()]
 
@@ -350,6 +387,7 @@ class EvolutionEngine:
             }
         non_archived = [atom for atom in self.workspace.atoms.values() if atom.get("status") != "archived"]
         mastered = [atom for atom in non_archived if atom.get("status") in {"mastered", "review_due"}]
+        adaptation = self.adaptation_summary()
         return {
             "schema_version": SCHEMA_VERSION,
             "evolution_revision": self.revision,
@@ -372,6 +410,8 @@ class EvolutionEngine:
                     "without mastered Evidence" in error for error in self.workspace.validate()
                 ),
                 "raw_messages_stored": False,
+                "adaptation_session_count": adaptation["session_count"],
+                "active_preference_count": len(adaptation["active_preferences"]),
             },
         }
 
@@ -1036,6 +1076,7 @@ class EvolutionEngine:
             "open_hypotheses": sum(item.get("status") == "open" for item in self.hypotheses.get("items", [])),
             "proposals": dict(sorted(by_status.items())),
             "learner_strategy": self.policy.get("learner_strategy", {}),
+            "session_adaptation": self.adaptation_summary(),
         }
 
     def render(self) -> None:
@@ -1068,6 +1109,22 @@ class EvolutionEngine:
             ]
             or ["- None"]
         )
+        adaptation = self.adaptation_summary()
+        lines.extend(["", "## Session Adaptation", ""])
+        if adaptation["enabled"]:
+            lines.extend(
+                [
+                    f"- Adaptation revision: `{adaptation['adaptation_revision']}`",
+                    f"- Observed sessions: `{adaptation['session_count']}`",
+                    f"- Pending preferences: `{adaptation['pending_preferences']}`",
+                ]
+            )
+            lines.extend(
+                [f"- `{dimension}` = `{value}`" for dimension, value in adaptation["active_preferences"].items()]
+                or ["- Active preferences: none"]
+            )
+        else:
+            lines.append("- Not initialized")
         lines.extend(["", "## Last Analysis", "", str(self.state.get("last_analysis_at") or "Not analyzed"), ""])
         atomic_text(self.workspace.root / "EVOLUTION.md", "\n".join(lines).rstrip() + "\n")
 

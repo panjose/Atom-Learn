@@ -25,7 +25,9 @@ Treat files under `.atomlearn/` as canonical:
 └── events.ndjson
 ```
 
-Treat the five Markdown files at workspace root as generated projections.
+Treat the five core Markdown files at workspace root as generated projections. Optional intake, RAG, research, evolution, and adaptation subsystems add their own canonical files under `.atomlearn/` and generated views at the workspace root.
+
+Session adaptation uses `.atomlearn/adaptation/{state.yaml,profile.yaml,signals.ndjson,ledger.ndjson}` and generates `PERSONALIZATION.md`. It has an independent adaptation revision; see [ADAPTATION_SCHEMA.md](ADAPTATION_SCHEMA.md).
 
 ## Core records
 

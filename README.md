@@ -22,8 +22,9 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Split or merge Atoms with user confirmation while preserving stable ID aliases
 - Map a research field into a role-aware paper dependency and citation graph
 - Guide one Active Paper through critical notes, claim-evidence extraction, and cross-paper synthesis
+- Adapt response style, pacing, examples, feedback, and research orientation from privacy-safe session signals
 - Analyze learning evidence and propose bounded, approval-gated course evolution
-- Generate learning, research, and evolution views from canonical YAML state
+- Generate learning, research, personalization, and evolution views from canonical YAML state
 
 ## Installation
 
@@ -96,6 +97,19 @@ python atom-learn/scripts/atomlearn.py research status courses/agent-research
 
 Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. It does not store complete paper text or claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
 
+## Session-Based Self-Adaptation
+
+AtomLearn can learn durable interaction preferences from chat sessions while keeping the current request in control. The harness distills only allowlisted enum signals—such as detail level, explanation order, example mode, pacing, feedback style, and research orientation—into a workspace-local profile. An explicit preference applies immediately; behavioral or outcome-based inference requires corroboration across at least two distinct sessions.
+
+```powershell
+python atom-learn/scripts/atomlearn.py adapt guidance courses/calculus --context teaching
+python atom-learn/scripts/atomlearn.py adapt observe-session courses/calculus --input adapt-session.yaml --expected-adaptation-revision 0
+python atom-learn/scripts/atomlearn.py adapt profile courses/calculus
+python atom-learn/scripts/atomlearn.py adapt retire courses/calculus response.detail --reason-code privacy_request --expected-adaptation-revision 1
+```
+
+Raw messages, quotes, free-text summaries, sensitive-trait guesses, and cross-workspace aggregation are forbidden. A new explicit correction overrides an older preference, users can retire any preference, research-only guidance does not leak into teaching, and a current-turn instruction always wins without becoming durable automatically. Start with `atom-learn/assets/templates/adapt-session.yaml`; see [Session Adaptation](atom-learn/references/SESSION_ADAPTATION.md) and [Session Adaptation Design](docs/SESSION_ADAPTATION_DESIGN.md).
+
 ## Self-Evolution
 
 AtomLearn can derive metrics from persisted Evidence, reviews, and prerequisite backtracking, then create testable proposals for teaching strategy, review intervals, mastery rubrics, dependency edges, or Atom structure. Evolution is `proposal_only` by default: every change must be previewed, approved by the required authority, validated, checkpointed, and monitored.
@@ -116,6 +130,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
+- [Session Adaptation Design](docs/SESSION_ADAPTATION_DESIGN.md)
 - [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
 - [Flexible Intake Design](docs/INTAKE_DESIGN.md)
 - [RAG Design](docs/RAG_DESIGN.md)
@@ -124,7 +139,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py
 ```
 
 The repository includes small calculus, operating-systems, and synthetic research-reading plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.
