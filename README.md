@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-AtomLearn is a progressive AI learning Skill built around knowledge atomization. It reorganizes textbooks or knowledge bases into a prerequisite-aware knowledge graph, then teaches, answers questions, verifies mastery, and schedules reviews around one Active Atom at a time.
+AtomLearn is a source-grounded AI Skill for progressive learning and research reading. It can reorganize textbooks into a prerequisite-aware Knowledge Atom graph, or map a research field into a guided paper graph for critical reading and evidence synthesis.
 
 > Never advance while the current atom remains unclear.  
 > Do not move to the next Knowledge Atom until the current one is genuinely understood.
@@ -16,8 +16,10 @@ AtomLearn is a progressive AI learning Skill built around knowledge atomization.
 - Restore state across sessions with revision conflict protection and event auditing
 - Schedule reviews at 1/3/7/30-day intervals, with course-level overrides
 - Split or merge Atoms with user confirmation while preserving stable ID aliases
+- Map a research field into a role-aware paper dependency and citation graph
+- Guide one Active Paper through critical notes, claim-evidence extraction, and cross-paper synthesis
 - Analyze learning evidence and propose bounded, approval-gated course evolution
-- Generate five learning views plus an evolution view from canonical YAML state
+- Generate learning, research, and evolution views from canonical YAML state
 
 ## Installation
 
@@ -46,6 +48,20 @@ python atom-learn/scripts/atomlearn.py status courses/calculus --json
 
 See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teaching behavior, and [SCHEMA.md](atom-learn/references/SCHEMA.md) for structured input formats. Runtime course state is stored in the learner's selected course workspace, not in the Skill installation directory.
 
+## Research Reading
+
+AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It builds a guided map across surveys, seminal work, theory and methods, benchmarks and datasets, critiques and replications, and applications. Each completed paper records evidence-linked claims, limitations, open questions, and relations to other work.
+
+```powershell
+python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
+python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
+python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
+python atom-learn/scripts/atomlearn.py research next courses/agent-research
+python atom-learn/scripts/atomlearn.py research status courses/agent-research
+```
+
+Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. It does not store complete paper text or claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
+
 ## Self-Evolution
 
 AtomLearn can derive metrics from persisted Evidence, reviews, and prerequisite backtracking, then create testable proposals for teaching strategy, review intervals, mastery rubrics, dependency edges, or Atom structure. Evolution is `proposal_only` by default: every change must be previewed, approved by the required authority, validated, checkpointed, and monitored.
@@ -66,12 +82,13 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
+- [Research Reading Design](docs/RESEARCH_READING_DESIGN.md)
 
 ## Development Validation
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py
 ```
 
-The repository includes small calculus and operating-systems course plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.
+The repository includes small calculus, operating-systems, and synthetic research-reading plans as test fixtures. Automated tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

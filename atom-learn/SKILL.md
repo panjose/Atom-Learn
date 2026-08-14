@@ -1,6 +1,6 @@
 ---
 name: atom-learn
-description: Build, run, and safely evolve persistent source-grounded learning courses by turning textbooks, PDFs, notes, documentation, or multiple resources into a prerequisite DAG of small Knowledge Atoms. Use when a learner wants a controlled one-concept-at-a-time study path, durable progress, question parking, prerequisite backtracking, mastery checks, spaced review, adaptive teaching, evidence-driven course evolution, or recovery of an AtomLearn workspace.
+description: Build, run, and safely evolve persistent source-grounded learning courses and research-reading programs. Turn textbooks, PDFs, notes, documentation, or multiple resources into a prerequisite DAG of Knowledge Atoms; map a research field into a guided paper graph; and track claims, evidence, limitations, contradictions, replications, and research gaps. Use for one-concept-at-a-time study, durable progress, mastery checks, spaced review, adaptive teaching, deciding which papers to read, critical paper reading, literature synthesis, field orientation, or recovery of an AtomLearn workspace.
 ---
 
 # AtomLearn
@@ -19,7 +19,7 @@ Set `SKILL_DIR` to this Skill directory and invoke:
 python <SKILL_DIR>/scripts/atomlearn.py <command> ...
 ```
 
-Treat `.atomlearn/` YAML as canonical state. Treat `LEARNING_MAP.md`, `CURRENT.md`, `PROGRESS.md`, `QUESTIONS.md`, and `SOURCES.md` as generated views. Do not edit generated views to mutate state.
+Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, including learning, evolution, and research views, as generated. Do not edit generated views to mutate state.
 
 ## Choose a workflow
 
@@ -46,6 +46,29 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 2. Read only the Active Atom, referenced questions, and necessary source locations.
 3. Restate the current Atom, learner confusion, and next action in one short orientation.
 4. Continue the recorded phase. Do not reactivate or advance an Atom merely because a new session started.
+
+### Map and read a research field
+
+1. Create the base workspace with `init`. Build Knowledge Atoms when the field has concepts or methods the learner may need to repair.
+2. Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) and [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md).
+3. Define a research question, scope, inclusion criteria, exclusion criteria, and intended outcome before collecting papers.
+4. Build an initial map of representative roles: survey, seminal, theory or method families, benchmarks or datasets, critiques or replications, and applications. Verify bibliographic metadata; do not equate citation count with evidence quality.
+5. Run `research init`, create an import plan, then run `research import`, `research validate`, and `research next`.
+6. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, repair them through the learning workflow without losing the paper position.
+7. Read in triage, structure, and evidence passes. Save a critical note with `research note`; mark it complete only after the critical-reading guard passes.
+8. Run `research synthesize` after a coherent group is complete. Report agreements, contradictions, replications, recurring limitations, open questions, and search limits.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field> --question <question> --scope <scope>
+python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research next <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py research activate <workspace> <paper-id>
+python <SKILL_DIR>/scripts/atomlearn.py research note <workspace> <paper-id> --input <note.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research complete <workspace> <paper-id>
+python <SKILL_DIR>/scripts/atomlearn.py research synthesize <workspace>
+```
+
+Do not call an observed open question a novel contribution without a current literature search. Do not mark a paper read from an abstract-only summary. Do not store complete paper text in canonical state.
 
 ### Teach one turn
 
@@ -114,7 +137,9 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/EVOLUTION.md](references/EVOLUTION.md) for the end-to-end evolution workflow.
 - Read [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md) before approval, application, or rollback.
 - Read [references/EVALUATION.md](references/EVALUATION.md) when defining success criteria or monitoring a proposal.
+- Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) when mapping a field, choosing a reading order, reading papers, or identifying evidence-linked gaps.
+- Read [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md) when creating paper import plans or critical notes, or troubleshooting research state.
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, `validate` passes, generated views are refreshed, and the learner is told the current Atom and next action. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open.
+Consider an interaction complete only after canonical state is saved, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Consider a course complete only when all non-optional, non-archived Atoms are mastered and no blocking question remains open. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.

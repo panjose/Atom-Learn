@@ -198,6 +198,10 @@ Supported types are `teaching_strategy`, `adjust_review_intervals`, `adjust_mast
 
 Read [EVOLUTION.md](EVOLUTION.md) for the lifecycle and [EVOLUTION_POLICY.md](EVOLUTION_POLICY.md) for authority, bounds, privacy, and rollback rules.
 
+## Research paper layer
+
+Research reading uses an independent revision and paper graph under `.atomlearn/research/`. Read [RESEARCH_SCHEMA.md](RESEARCH_SCHEMA.md) for research import plans, paper roles and statuses, critical notes, relations, and generated views. Read [RESEARCH_READING.md](RESEARCH_READING.md) for the operational workflow and research-gap safeguards.
+
 ## Revisions and timestamps
 
 Read `course.yaml.revision` before a mutation and pass `--expected-revision`. Every canonical state file and Atom carries the same revision; a mismatch detects an interrupted multi-file write. A stale command or inconsistent revision must stop rather than overwrite state. Store timestamps as timezone-aware ISO 8601 values. Let the CLI create IDs, revisions, and timestamps.

@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
-AtomLearn 是一个基于知识原子化的渐进式 AI 学习 Skill。它先把教材或知识库重组为带先修依赖的知识图谱，再围绕单一 Active Atom 进行教学、答疑、掌握验证与复习安排。
+AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI Skill。它既可以把教材重组为带先修依赖的 Knowledge Atom 图，也可以把科研领域组织为用于批判性阅读与证据综合的导向论文图。
 
 > 当前知识原子尚未真正理解，就绝不推进。  
 > 在当前 Knowledge Atom 真正掌握前，不进入下一个知识原子。
@@ -16,8 +16,10 @@ AtomLearn 是一个基于知识原子化的渐进式 AI 学习 Skill。它先把
 - 跨会话恢复状态，并提供 revision 冲突保护和事件审计
 - 按 1/3/7/30 天间隔安排复习，同时支持课程级覆盖
 - 经用户确认后拆分或合并 Atom，并保留稳定 ID alias
+- 将科研领域组织为带角色、阅读依赖和引用关系的论文图
+- 围绕单一 Active Paper 完成批判性笔记、主张—证据抽取和跨论文综合
 - 分析学习证据，并生成有边界、需审批的课程进化提案
-- 从规范化 YAML 状态生成五个学习视图和一个进化视图
+- 从规范化 YAML 状态生成学习、科研和进化视图
 
 ## 安装
 
@@ -46,6 +48,20 @@ python atom-learn/scripts/atomlearn.py status courses/calculus --json
 
 完整命令流程和教学行为见 [SKILL.md](atom-learn/SKILL.md)，结构化输入格式见 [SCHEMA.md](atom-learn/references/SCHEMA.md)。运行时课程状态存放在学习者选择的课程工作区，而不是 Skill 安装目录。
 
+## 科研论文阅读
+
+AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会建立覆盖综述、奠基工作、理论与方法、基准与数据集、批评与复现以及应用工作的导向地图。每篇完成阅读的论文都会记录有证据支持的主张、局限、开放问题及其与其他工作的关系。
+
+```powershell
+python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
+python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
+python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
+python atom-learn/scripts/atomlearn.py research next courses/agent-research
+python atom-learn/scripts/atomlearn.py research status courses/agent-research
+```
+
+研究模式最多保留一个 Active Paper，会阻止未完成论文先修的激活、提示缺失的 Knowledge Atom，并生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。它不会保存完整论文正文，也不会在缺少最新文献检索时宣称创新性。完整方法见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)。
+
 ## 自进化
 
 AtomLearn 可以从已持久化的 Evidence、复习结果和先修回退中派生指标，并针对教学策略、复习间隔、掌握标准、依赖边或 Atom 结构生成可检验的提案。进化默认使用 `proposal_only` 模式：每项变更都必须经过预览、所需权限审批、验证、检查点保存和效果监测。
@@ -66,12 +82,13 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [产品与技术设计](docs/PRODUCT_DESIGN.md)
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [自进化设计](docs/SELF_EVOLUTION_DESIGN.md)
+- [科研论文阅读设计](docs/RESEARCH_READING_DESIGN.md)
 
 ## 开发验证
 
 ```powershell
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py
 ```
 
-仓库提供微积分和操作系统两个小型课程计划作为测试夹具。自动测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。
+仓库提供微积分、操作系统和一个合成科研阅读计划作为测试夹具。自动测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

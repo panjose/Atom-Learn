@@ -1,0 +1,32 @@
+schema_version: 1
+revision: 0
+id: paper.example
+title: Example paper
+authors: []
+year: null
+venue: ""
+doi: ""
+url: ""
+locator: ""
+role: method
+priority: 3
+status: queued
+prerequisite_paper_ids: []
+cites: []
+external_citations: []
+concept_atom_ids: []
+tags: []
+analysis:
+  problem: ""
+  contributions: []
+  approach: ""
+  datasets: []
+  claims: []
+  limitations: []
+  open_questions: []
+  field_positioning: ""
+  relations: []
+exclusion_reason: null
+created_at: ""
+updated_at: ""
+completed_at: null

@@ -13,7 +13,8 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install PyYAML pytest
-      - run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py
+      - run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py
       - run: python -m pytest
       - run: python atom-learn/scripts/atomlearn.py --help
       - run: python atom-learn/scripts/atomlearn.py evolve --help
+      - run: python atom-learn/scripts/atomlearn.py research --help

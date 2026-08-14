@@ -12,5 +12,9 @@ __pycache__/
 **/SOURCES.md
 **/EVOLUTION.md
 !atom-learn/references/EVOLUTION.md
+**/RESEARCH_MAP.md
+**/CURRENT_PAPER.md
+**/LITERATURE_MATRIX.md
+**/RESEARCH_GAPS.md
 courses/
 materials/

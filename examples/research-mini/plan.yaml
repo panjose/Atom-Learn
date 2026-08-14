@@ -1,0 +1,40 @@
+research:
+  field: Reliable autonomous research agents
+  research_question: Which design choices make tool-using research agents reliable and auditable?
+  scope: Foundational architectures, evaluation methodology, and replication evidence.
+  inclusion_criteria:
+    - Makes an explicit architectural or empirical contribution.
+    - Reports evidence relevant to reliability or auditability.
+  exclusion_criteria:
+    - Provides only a product announcement without inspectable evidence.
+papers:
+  - id: paper.field.survey
+    title: A synthetic survey of reliable research agents
+    authors: [Example Author]
+    year: 2024
+    role: survey
+    priority: 1
+    status: queued
+    tags: [survey, reliability]
+    prerequisite_paper_ids: []
+    cites: [paper.method.alpha]
+  - id: paper.method.alpha
+    title: A synthetic tool-verification method
+    authors: [Example Researcher]
+    year: 2023
+    role: seminal
+    priority: 1
+    status: queued
+    tags: [verification, agents]
+    prerequisite_paper_ids: [paper.field.survey]
+    cites: []
+  - id: paper.replication.alpha
+    title: A synthetic replication of the tool-verification method
+    authors: [Example Replicator]
+    year: 2025
+    role: replication
+    priority: 2
+    status: queued
+    tags: [replication, robustness]
+    prerequisite_paper_ids: [paper.method.alpha]
+    cites: [paper.method.alpha]

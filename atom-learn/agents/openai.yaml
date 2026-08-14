@@ -1,4 +1,4 @@
 interface:
   display_name: "AtomLearn"
-  short_description: "Build adaptive, evidence-driven learning paths"
-  default_prompt: "Use $atom-learn to build an adaptive learning path from my materials and safely evolve it using mastery evidence."
+  short_description: "Build adaptive courses and research reading maps"
+  default_prompt: "Use $atom-learn to build a guided learning path or map and critically synthesize papers in a research field."
