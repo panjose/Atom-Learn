@@ -4,6 +4,9 @@ __pycache__/
 *.egg-info/
 .test-workspaces/
 
+# Local secrets and release-key backups. Never commit this directory.
+.private/
+
 # AtomLearn runtime workspaces may contain private source metadata and learner evidence.
 **/.atomlearn/
 **/LEARNING_MAP.md
