@@ -1,0 +1,24 @@
+{
+  "kind": "atomlearn.evolution-capsule",
+  "schema_version": 1,
+  "capsule_id": "cap-0123456789abcdef0123456789abcdef",
+  "core_version": "0.13.0",
+  "failure_type": "repeated_blocking_prerequisite",
+  "affected_feature": "concept_routing",
+  "window": "sessions_5_to_10",
+  "metrics": {
+    "occurrence_bucket": "3_to_5",
+    "mastery_attempt_delta_bucket": "1_to_2",
+    "delayed_review_bucket": "not_observed"
+  },
+  "candidate": {
+    "type": "routing_policy"
+  },
+  "privacy": {
+    "raw_messages_included": false,
+    "source_content_included": false,
+    "stable_user_id_included": false,
+    "local_paths_included": false,
+    "lint_status": "passed"
+  }
+}

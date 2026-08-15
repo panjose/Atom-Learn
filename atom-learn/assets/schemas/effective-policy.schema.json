@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/effective-policy.schema.json",
+  "title": "AtomLearn effective policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["context", "core_version", "policy_fingerprint", "effective", "ignored", "invariants"],
+  "properties": {
+    "context": {"enum": ["general", "orientation", "teaching", "review", "research", "exam"]},
+    "core_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "policy_fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "effective": {
+      "type": "object",
+      "additionalProperties": {"$ref": "#/$defs/decision"}
+    },
+    "ignored": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["dimension", "value", "source", "reason"],
+        "properties": {
+          "dimension": {"type": "string", "minLength": 1, "maxLength": 64},
+          "value": {"type": "string", "minLength": 1, "maxLength": 64},
+          "source": {"$ref": "#/$defs/source"},
+          "reason": {"enum": [
+            "overridden_by_current_turn",
+            "overridden_by_workspace_explicit",
+            "overridden_by_user_explicit",
+            "overridden_by_workspace_inferred",
+            "overridden_by_user_inferred",
+            "overridden_by_course_strategy",
+            "context_not_allowed",
+            "inactive_state",
+            "incompatible_schema",
+            "protected_invariant"
+          ]}
+        }
+      }
+    },
+    "invariants": {
+      "type": "object",
+      "additionalProperties": {"const": "enforced"},
+      "required": ["one_active_atom", "mastery_requires_evidence", "prerequisites_before_activation", "source_grounding", "privacy"]
+    }
+  },
+  "$defs": {
+    "source": {"enum": [
+      "current_turn",
+      "workspace_explicit",
+      "user_global_explicit",
+      "workspace_inferred",
+      "user_global_inferred",
+      "course_strategy",
+      "user_strategy",
+      "core_default"
+    ]},
+    "decision": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["value", "source", "source_revision"],
+      "properties": {
+        "value": {"type": "string", "minLength": 1, "maxLength": 64},
+        "source": {"$ref": "#/$defs/source"},
+        "source_revision": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

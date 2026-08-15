@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/user-strategy.schema.json",
+  "title": "AtomLearn user strategy state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "created_by_core_version",
+    "last_written_by_core_version",
+    "min_reader_core_version",
+    "revision",
+    "profile_id",
+    "experiments_enabled",
+    "active"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.user-strategy"},
+    "schema_version": {"const": 1},
+    "created_by_core_version": {"$ref": "#/$defs/version"},
+    "last_written_by_core_version": {"$ref": "#/$defs/version"},
+    "min_reader_core_version": {"$ref": "#/$defs/version"},
+    "revision": {"type": "integer", "minimum": 0},
+    "profile_id": {"$ref": "#/$defs/id"},
+    "experiments_enabled": {"type": "boolean"},
+    "active": {
+      "type": "object",
+      "propertyNames": {"enum": [
+        "explanation.order",
+        "example.mode",
+        "teaching.mode",
+        "feedback.style",
+        "check.style",
+        "review.presentation"
+      ]},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["value", "experiment_id", "activated_revision"],
+        "properties": {
+          "value": {"type": "string", "minLength": 1, "maxLength": 64},
+          "experiment_id": {"type": "string", "pattern": "^exp-[A-Za-z0-9._-]{1,96}$"},
+          "activated_revision": {"type": "integer", "minimum": 1}
+        }
+      }
+    }
+  },
+  "$defs": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"}
+  }
+}

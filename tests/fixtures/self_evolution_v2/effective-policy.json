@@ -1,0 +1,27 @@
+{
+  "context": "teaching",
+  "core_version": "0.13.0",
+  "policy_fingerprint": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "effective": {
+    "explanation.order": {
+      "value": "example_first",
+      "source": "workspace_explicit",
+      "source_revision": 4
+    }
+  },
+  "ignored": [
+    {
+      "dimension": "explanation.order",
+      "value": "intuition_first",
+      "source": "user_strategy",
+      "reason": "overridden_by_workspace_explicit"
+    }
+  ],
+  "invariants": {
+    "one_active_atom": "enforced",
+    "mastery_requires_evidence": "enforced",
+    "prerequisites_before_activation": "enforced",
+    "source_grounding": "enforced",
+    "privacy": "enforced"
+  }
+}

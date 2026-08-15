@@ -2,11 +2,13 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档状态 | Proposed；仅设计，尚未实现 |
-| 更新时间 | 2026-08-14 |
+| 文档状态 | Implementation in progress；Phase 0 已实现 |
+| 更新时间 | 2026-08-15 |
 | 前置基线 | [自进化 v1](SELF_EVOLUTION_DESIGN.md)、[Session Adaptation](SESSION_ADAPTATION_DESIGN.md) |
 | 适用范围 | 用户跨课程个性化、课程内有边界进化、产品级证据发布闭环 |
 | 核心原则 | 让本地行为通过数据和策略进化，让公共产品通过测试和版本发布进化 |
+
+实现采用的权限决策见 [ADR 0001](adr/0001-self-evolution-v2-boundaries.md)，攻击面、控制和发布安全闸门见[威胁模型](SELF_EVOLUTION_V2_THREAT_MODEL.md)。
 
 ## 1. 结论
 

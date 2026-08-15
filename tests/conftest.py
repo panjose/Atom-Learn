@@ -5,7 +5,11 @@ from pathlib import Path
 import pytest
 
 
-FAST_FILES = {"test_cli_contract.py", "test_documentation.py"}
+FAST_FILES = {
+    "test_cli_contract.py",
+    "test_documentation.py",
+    "test_self_evolution_contracts.py",
+}
 
 
 def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:

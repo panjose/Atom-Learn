@@ -1,0 +1,24 @@
+{
+  "kind": "atomlearn.strategy-experiment",
+  "schema_version": 1,
+  "revision": 1,
+  "id": "exp-example-first-001",
+  "scope": "user",
+  "dimension": "explanation.order",
+  "baseline": "intuition_first",
+  "candidate": "example_first",
+  "contexts": ["teaching"],
+  "status": "monitoring",
+  "strata": {
+    "atom_types": ["concept", "procedure"],
+    "episode_types": ["new_learning"]
+  },
+  "metrics": {
+    "primary": ["first_transfer_score", "delayed_review_score"],
+    "guardrails": ["misconception_recurrence", "blocking_backtrack_rate"]
+  },
+  "minimums": {
+    "distinct_atoms": 5,
+    "delayed_outcomes": 2
+  }
+}

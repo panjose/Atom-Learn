@@ -1,0 +1,85 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/user-profile.schema.json",
+  "title": "AtomLearn user profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "created_by_core_version",
+    "last_written_by_core_version",
+    "min_reader_core_version",
+    "revision",
+    "profile_id",
+    "global_enabled",
+    "policy",
+    "preferences"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.user-profile"},
+    "schema_version": {"const": 1},
+    "created_by_core_version": {"$ref": "#/$defs/version"},
+    "last_written_by_core_version": {"$ref": "#/$defs/version"},
+    "min_reader_core_version": {"$ref": "#/$defs/version"},
+    "revision": {"type": "integer", "minimum": 0},
+    "profile_id": {"$ref": "#/$defs/id"},
+    "global_enabled": {"type": "boolean"},
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "store_raw_messages",
+        "infer_sensitive_traits",
+        "behavioral_min_sessions",
+        "inferred_min_confidence",
+        "conflict_margin"
+      ],
+      "properties": {
+        "store_raw_messages": {"const": false},
+        "infer_sensitive_traits": {"const": false},
+        "behavioral_min_sessions": {"type": "integer", "minimum": 2, "maximum": 20},
+        "inferred_min_confidence": {"type": "number", "minimum": 0.5, "maximum": 1},
+        "conflict_margin": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "preferences": {
+      "type": "object",
+      "propertyNames": {"enum": [
+        "response.detail",
+        "answer.structure",
+        "language.mode",
+        "explanation.order",
+        "example.mode",
+        "interaction.pacing",
+        "teaching.mode",
+        "feedback.style",
+        "notation.level",
+        "challenge.level",
+        "research.orientation",
+        "source.priority"
+      ]},
+      "additionalProperties": {"$ref": "#/$defs/preference"}
+    }
+  },
+  "$defs": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "preference": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "source", "active_value", "updated_revision"],
+      "properties": {
+        "status": {"enum": ["active", "provisional", "contested", "retired", "needs_review", "forbidden"]},
+        "source": {"enum": ["explicit", "inferred", "unconfirmed", "retired"]},
+        "active_value": {"type": ["string", "null"], "maxLength": 64},
+        "updated_revision": {"type": "integer", "minimum": 0},
+        "signal_ids": {
+          "type": "array",
+          "items": {"type": "string", "pattern": "^ups-[0-9]{6,}$"},
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

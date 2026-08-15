@@ -1,0 +1,26 @@
+{
+  "kind": "atomlearn.user-profile",
+  "schema_version": 1,
+  "created_by_core_version": "0.13.0",
+  "last_written_by_core_version": "0.13.0",
+  "min_reader_core_version": "0.13.0",
+  "revision": 3,
+  "profile_id": "default",
+  "global_enabled": true,
+  "policy": {
+    "store_raw_messages": false,
+    "infer_sensitive_traits": false,
+    "behavioral_min_sessions": 2,
+    "inferred_min_confidence": 0.7,
+    "conflict_margin": 0.15
+  },
+  "preferences": {
+    "explanation.order": {
+      "status": "active",
+      "source": "explicit",
+      "active_value": "example_first",
+      "updated_revision": 3,
+      "signal_ids": ["ups-000003"]
+    }
+  }
+}

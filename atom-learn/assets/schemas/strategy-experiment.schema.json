@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/strategy-experiment.schema.json",
+  "title": "AtomLearn strategy experiment",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "revision",
+    "id",
+    "scope",
+    "dimension",
+    "baseline",
+    "candidate",
+    "contexts",
+    "status",
+    "strata",
+    "metrics",
+    "minimums"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.strategy-experiment"},
+    "schema_version": {"const": 1},
+    "revision": {"type": "integer", "minimum": 0},
+    "id": {"type": "string", "pattern": "^exp-[A-Za-z0-9._-]{1,96}$"},
+    "scope": {"enum": ["course", "user"]},
+    "dimension": {"enum": ["explanation.order", "example.mode", "teaching.mode", "feedback.style", "check.style", "review.presentation"]},
+    "baseline": {"type": "string", "minLength": 1, "maxLength": 64},
+    "candidate": {"type": "string", "minLength": 1, "maxLength": 64},
+    "contexts": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["orientation", "teaching", "review", "exam"]}
+    },
+    "status": {"enum": ["candidate", "eligible", "monitoring", "active", "paused", "rejected", "retired", "needs_review"]},
+    "strata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["atom_types", "episode_types"],
+      "properties": {
+        "atom_types": {"type": "array", "items": {"type": "string", "minLength": 1, "maxLength": 32}, "uniqueItems": true},
+        "episode_types": {"type": "array", "items": {"enum": ["new_learning", "remediation", "review"]}, "uniqueItems": true}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["primary", "guardrails"],
+      "properties": {
+        "primary": {"type": "array", "minItems": 1, "items": {"enum": ["first_transfer_score", "mastery_attempts", "delayed_review_score"]}, "uniqueItems": true},
+        "guardrails": {"type": "array", "minItems": 1, "items": {"enum": ["misconception_recurrence", "blocking_backtrack_rate", "mastery_failure_rate"]}, "uniqueItems": true}
+      }
+    },
+    "minimums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["distinct_atoms", "delayed_outcomes"],
+      "properties": {
+        "distinct_atoms": {"type": "integer", "minimum": 5},
+        "delayed_outcomes": {"type": "integer", "minimum": 2}
+      }
+    }
+  }
+}

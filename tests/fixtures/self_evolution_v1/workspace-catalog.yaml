@@ -1,0 +1,70 @@
+fixture_version: 1
+created_from_core_version: 0.12.0
+cases:
+  empty_workspace:
+    course:
+      schema_version: 1
+      revision: 0
+      id: fixture.empty
+    subsystems: []
+  adaptation_workspace:
+    course:
+      schema_version: 1
+      revision: 2
+      id: fixture.adaptation
+    subsystems: [adaptation]
+    adaptation:
+      state:
+        schema_version: 1
+        revision: 1
+        session_count: 1
+        policy:
+          store_raw_messages: false
+          cross_workspace_aggregation: false
+          infer_sensitive_traits: false
+      profile:
+        schema_version: 1
+        adaptation_revision: 1
+        preferences:
+          response.detail:
+            status: active
+            source: explicit
+            active_value: concise
+  evolution_workspace:
+    course:
+      schema_version: 1
+      revision: 4
+      id: fixture.evolution
+    subsystems: [evolution]
+    evolution:
+      policy:
+        schema_version: 1
+        revision: 2
+        mode: proposal_only
+        auto_apply_types: []
+        privacy:
+          store_raw_messages: false
+          cross_workspace_aggregation: false
+      proposal:
+        schema_version: 1
+        id: evo-000001
+        type: teaching_strategy
+        risk: low
+        status: monitoring
+  full_subsystems_workspace:
+    course:
+      schema_version: 1
+      revision: 9
+      id: fixture.full
+    subsystems: [adaptation, evolution, intake, rag, research, exam, lineage]
+    revisions:
+      adaptation: 2
+      evolution: 3
+      intake: 1
+      rag: 4
+      research: 2
+      exam: 2
+      lineage: 1
+    privacy:
+      raw_messages_stored: false
+      cross_workspace_aggregation: false

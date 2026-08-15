@@ -219,6 +219,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [自进化设计](docs/SELF_EVOLUTION_DESIGN.md)
 - [自进化 v2 设计提案](docs/SELF_EVOLUTION_V2_DESIGN.md)
 - [自进化 v2 详细实施方案](docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md)
+- [自进化 v2 威胁模型](docs/SELF_EVOLUTION_V2_THREAT_MODEL.md)
 - [会话自适应设计](docs/SESSION_ADAPTATION_DESIGN.md)
 - [试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)
 - [科研论文阅读设计](docs/RESEARCH_READING_DESIGN.md)

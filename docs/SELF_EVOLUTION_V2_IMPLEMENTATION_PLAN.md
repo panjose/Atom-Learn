@@ -2,10 +2,22 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档状态 | Planned；本次不实施代码 |
-| 更新时间 | 2026-08-14 |
+| 文档状态 | Implementation in progress |
+| 更新时间 | 2026-08-15 |
 | 设计依据 | [自进化 v2 设计](SELF_EVOLUTION_V2_DESIGN.md) |
 | 发布策略 | 默认关闭新能力，逐阶段启用，不一次性替换 v1 |
+
+## 实施状态
+
+| Phase | 状态 |
+| --- | --- |
+| Phase 0：契约、ADR 与威胁模型 | Implemented |
+| Phase 1：版本与迁移底座 | Planned |
+| Phase 2：User Profile 与 Effective Policy | Planned |
+| Phase 3：Strategy Experiments | Planned |
+| Phase 4：Evolution Capsule | Planned |
+| Phase 5：Release Manager | Planned |
+| Phase 6：加固与稳定发布 | Planned |
 
 ## 1. 交付目标
 

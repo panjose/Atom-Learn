@@ -1,0 +1,17 @@
+{
+  "kind": "atomlearn.user-strategy",
+  "schema_version": 1,
+  "created_by_core_version": "0.13.0",
+  "last_written_by_core_version": "0.13.0",
+  "min_reader_core_version": "0.13.0",
+  "revision": 2,
+  "profile_id": "default",
+  "experiments_enabled": true,
+  "active": {
+    "feedback.style": {
+      "value": "direct",
+      "experiment_id": "exp-feedback-direct-001",
+      "activated_revision": 2
+    }
+  }
+}
