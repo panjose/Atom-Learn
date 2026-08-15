@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/release-manifest.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "manifest_version", "version", "channel", "tag", "source", "artifact", "core_manifest_sha256", "core_content_sha256", "gate_report_sha256", "min_manager_version", "schemas", "signature"],
+  "properties": {
+    "kind": {"const": "atomlearn.release-manifest"},
+    "manifest_version": {"const": 1},
+    "version": {"$ref": "#/$defs/version"},
+    "channel": {"enum": ["prerelease", "stable"]},
+    "tag": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "repository", "commit_sha", "artifact_url"],
+      "properties": {
+        "kind": {"const": "github_release"},
+        "repository": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"},
+        "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+        "artifact_url": {"type": "string", "format": "uri", "pattern": "^https://github\\.com/"}
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "format", "sha256", "size"],
+      "properties": {
+        "filename": {"type": "string", "pattern": "^atomlearn-[0-9A-Za-z.+-]+\\.zip$"},
+        "format": {"const": "zip"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "core_manifest_sha256": {"$ref": "#/$defs/hash"},
+    "core_content_sha256": {"$ref": "#/$defs/hash"},
+    "gate_report_sha256": {"$ref": "#/$defs/hash"},
+    "min_manager_version": {"$ref": "#/$defs/version"},
+    "schemas": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_]{1,63}$"},
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["read", "write"],
+        "properties": {
+          "read": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}},
+          "write": {"type": "integer", "minimum": 1}
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["algorithm", "key_id", "value"],
+      "properties": {
+        "algorithm": {"const": "ed25519"},
+        "key_id": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,64}$"},
+        "value": {"type": "string", "pattern": "^[A-Za-z0-9+/]+={0,2}$"}
+      }
+    }
+  },
+  "$defs": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

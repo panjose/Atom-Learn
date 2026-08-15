@@ -16,7 +16,7 @@
 | Phase 2：User Profile 与 Effective Policy | Implemented |
 | Phase 3：Strategy Experiments | Complete |
 | Phase 4：Evolution Capsule | Complete |
-| Phase 5：Release Manager | Planned |
+| Phase 5：Release Manager | Complete |
 | Phase 6：加固与稳定发布 | Planned |
 
 ## 1. 交付目标

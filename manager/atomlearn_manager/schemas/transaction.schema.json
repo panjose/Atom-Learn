@@ -1,0 +1,65 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "id", "target_version", "previous_version", "previous_active", "status", "stage", "manifest_hash", "artifact_hash", "release_manifest_path", "artifact_path", "data_root", "workspaces", "state_files", "pointer_switched", "created_at", "updated_at", "error"],
+  "properties": {
+    "kind": {"const": "atomlearn.manager-transaction"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^txn-[0-9a-f]{32}$"},
+    "target_version": {"$ref": "#/$defs/version"},
+    "previous_version": {"type": ["string", "null"]},
+    "previous_active": {
+      "oneOf": [
+        {"type": "null"},
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "schema_version", "current_version", "previous_version", "manifest_hash", "transaction_id"],
+          "properties": {
+            "kind": {"const": "atomlearn.manager-active"},
+            "schema_version": {"const": 1},
+            "current_version": {"$ref": "#/$defs/version"},
+            "previous_version": {"type": ["string", "null"]},
+            "manifest_hash": {"$ref": "#/$defs/hash"},
+            "transaction_id": {"type": "string", "pattern": "^txn-[0-9a-f]{32}$"}
+          }
+        }
+      ]
+    },
+    "status": {"enum": ["in_progress", "committed", "failed", "recovered", "needs_manual_recovery", "rolled_back"]},
+    "stage": {"enum": ["planned", "downloaded", "verified", "state_copied", "installed", "health_checked", "state_applied", "activated", "committed", "recovered", "rolled_back"]},
+    "manifest_hash": {"$ref": "#/$defs/hash"},
+    "artifact_hash": {"$ref": "#/$defs/hash"},
+    "release_manifest_path": {"type": "string", "minLength": 1},
+    "artifact_path": {"type": "string", "minLength": 1},
+    "data_root": {"type": ["string", "null"]},
+    "workspaces": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+    "state_files": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["namespace", "original", "backup", "migrated", "original_hash", "migrated_hash", "changed", "applied"],
+        "properties": {
+          "namespace": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "original": {"type": "string", "minLength": 1},
+          "backup": {"type": "string", "minLength": 1},
+          "migrated": {"type": "string", "minLength": 1},
+          "original_hash": {"$ref": "#/$defs/hash"},
+          "migrated_hash": {"$ref": "#/$defs/hash"},
+          "changed": {"type": "boolean"},
+          "applied": {"type": "boolean"}
+        }
+      }
+    },
+    "pointer_switched": {"type": "boolean"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "error": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

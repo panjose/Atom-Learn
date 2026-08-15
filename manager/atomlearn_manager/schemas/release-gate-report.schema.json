@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "tag", "commit_sha", "python", "gates"],
+  "properties": {
+    "kind": {"const": "atomlearn.release-gate-report"},
+    "schema_version": {"const": 1},
+    "tag": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "commit_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "python": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["linux", "windows"],
+      "properties": {
+        "linux": {"const": ["3.10", "3.11", "3.12", "3.13"]},
+        "windows": {"const": ["3.10", "3.11", "3.12", "3.13"]}
+      }
+    },
+    "gates": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["full_tests", "skill_validator", "migration_fixtures", "manager_upgrade_tests", "security_archive_tests"],
+      "properties": {
+        "full_tests": {"const": true},
+        "skill_validator": {"const": true},
+        "migration_fixtures": {"const": true},
+        "manager_upgrade_tests": {"const": true},
+        "security_archive_tests": {"const": true}
+      }
+    }
+  }
+}

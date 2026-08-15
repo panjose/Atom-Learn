@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "current_version", "previous_version", "manifest_hash", "transaction_id"],
+  "properties": {
+    "kind": {"const": "atomlearn.manager-active"},
+    "schema_version": {"const": 1},
+    "current_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "previous_version": {"type": ["string", "null"], "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "manifest_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "transaction_id": {"type": "string", "pattern": "^txn-[0-9a-f]{32}$"}
+  }
+}

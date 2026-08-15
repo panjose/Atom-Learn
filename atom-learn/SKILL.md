@@ -354,6 +354,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/FLEXIBLE_PROGRESSION.md](references/FLEXIBLE_PROGRESSION.md) when the learner asks to skip, postpone, fast-track, test out of, or restore an Atom.
 - Read [references/DETAILED_EXPANSION.md](references/DETAILED_EXPANSION.md) when the learner asks for a detailed, step-by-step, decomposed, or deeper explanation of an Atom.
 - Read [references/MIGRATIONS.md](references/MIGRATIONS.md) when inspecting Core versions, schema compatibility, stale state, or update planning.
+- Read [references/RELEASE_MANAGER.md](references/RELEASE_MANAGER.md) only for trusted release installation, recovery, or rollback. The independent manager performs these operations; never run them as part of a learning session.
 
 ## Completion standard
 

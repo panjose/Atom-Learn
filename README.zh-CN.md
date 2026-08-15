@@ -222,6 +222,20 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 
 如果学习者明确选择分享产品级发现，`evolve capsule` 可以构建仅含枚举与分桶数据的本地 Capsule，执行隐私 lint，展示完整预览，并进行一次性、经确认的文件导出。导出绝不等于上传；系统没有 submit 或 telemetry 命令；维护者转换后也必须先建立独立复现测试，才能按常规评审流程修改 Core。详见 [Evolution Capsule](atom-learn/references/EVOLUTION_CAPSULE.md)。
 
+### 签名 Release Manager
+
+Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。它会验证带 Ed25519 签名的不可变 GitHub release、拒绝恶意压缩包、只迁移状态副本、并排安装多个版本、让新 Core 在镜像的用户/工作区状态上运行检查，并且只有健康检查通过后才切换 active 指针。更新失败或中断时旧 Core 会被保留，系统通过带保护条件的 transaction journal 恢复；降级只允许恢复配套的上一版 Core 与对应状态快照。
+
+```powershell
+python -m pip install -e ./manager
+atomlearn-manager --help
+atomlearn-manager update status
+atomlearn-manager update recover
+atomlearn-core version
+```
+
+信任初始化、更新计划、恢复、回滚、离线行为、安全边界与维护者构建流程详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
+
 ## 设计文档
 
 - [产品与技术设计](docs/PRODUCT_DESIGN.md)
@@ -240,6 +254,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 - [弹性进度设计](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 - [详细展开设计](docs/DETAILED_EXPANSION_DESIGN.md)
 - [概念路由设计](docs/CONCEPT_ROUTING_DESIGN.md)
+- [签名 Release Manager 操作说明](atom-learn/references/RELEASE_MANAGER.md)
 
 ## 开发验证
 
@@ -247,7 +262,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py
 ```
 
 快速测试覆盖 CLI/帮助契约、打包、文档、Schema 和确定性辅助逻辑；集成测试覆盖完整的文件系统与子进程工作流。CI 会在 Ubuntu 与 Windows 上使用 Python 3.10、3.11、3.12 和 3.13 运行两层测试。测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

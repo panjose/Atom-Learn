@@ -222,6 +222,20 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 
 If the learner explicitly chooses to share a product-level finding, `evolve capsule` can build a local enum-only, bucketed Capsule, enforce privacy lint, show the complete preview, and perform a one-time confirmed file export. Export never uploads, there is no submit or telemetry command, and maintainer conversion always requires an independent reproduction test before any normal reviewed Core change. See [Evolution Capsule](atom-learn/references/EVOLUTION_CAPSULE.md).
 
+### Signed Release Manager
+
+Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. It verifies an Ed25519-signed immutable GitHub release, rejects hostile archives, migrates only copied state, installs versions side by side, runs the new Core against mirrored user/workspace state, and switches the active pointer only after health checks pass. Failed or interrupted updates retain the old Core and use a guarded transaction journal for recovery; downgrades are limited to the paired previous Core and its matching state snapshot.
+
+```powershell
+python -m pip install -e ./manager
+atomlearn-manager --help
+atomlearn-manager update status
+atomlearn-manager update recover
+atomlearn-core version
+```
+
+See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for trust bootstrap, update planning, recovery, rollback, offline behavior, threat boundaries, and maintainer release construction.
+
 ## Design Documentation
 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
@@ -240,6 +254,7 @@ If the learner explicitly chooses to share a product-level finding, `evolve caps
 - [Flexible Progression Design](docs/FLEXIBLE_PROGRESSION_DESIGN.md)
 - [Detailed Expansion Design](docs/DETAILED_EXPANSION_DESIGN.md)
 - [Concept Routing Design](docs/CONCEPT_ROUTING_DESIGN.md)
+- [Signed Release Manager Operations](atom-learn/references/RELEASE_MANAGER.md)
 
 ## Development Validation
 
@@ -247,7 +262,7 @@ If the learner explicitly chooses to share a product-level finding, `evolve caps
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py
 ```
 
 The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.
