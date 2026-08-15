@@ -1,0 +1,7 @@
+{
+  "kind": "atomlearn.capsule-preview-receipt",
+  "schema_version": 1,
+  "capsule_id": "cap-0123456789abcdef0123456789abcdef",
+  "capsule_hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "previewed_at": "2026-01-01T00:00:00Z"
+}

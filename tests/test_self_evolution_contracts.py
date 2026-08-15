@@ -23,6 +23,10 @@ CONTRACTS = {
     "evolution-capsule": "evolution-capsule.json",
     "core-manifest": "core-manifest.json",
     "profile-binding": "profile-binding.json",
+    "capsule-lint-receipt": "capsule-lint-receipt.json",
+    "capsule-preview-receipt": "capsule-preview-receipt.json",
+    "capsule-triage": "capsule-triage.json",
+    "maintainer-failure-fixture": "maintainer-failure-fixture.json",
 }
 
 

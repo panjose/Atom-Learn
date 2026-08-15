@@ -311,6 +311,7 @@ Never mark an Atom mastered without persisted Evidence. A provisional skip is a 
 5. Obtain the policy-required authority before approval and application.
 6. Monitor with new Evidence. Promote only when all criteria pass.
 7. Roll back only when no learning mutation occurred after application; otherwise create a compensating proposal.
+8. If the user explicitly wants to share a product-level finding, read [references/EVOLUTION_CAPSULE.md](references/EVOLUTION_CAPSULE.md). Build, lint, and show the complete local preview before a one-time, explicitly confirmed file export. Never claim export uploads or submits anything.
 
 Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` from a course workspace.
 
@@ -332,6 +333,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/MASTERY.md](references/MASTERY.md) when creating checks, grading Evidence, or scheduling remediation.
 - Read [references/EVOLUTION.md](references/EVOLUTION.md) for the end-to-end evolution workflow.
 - Read [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md) before approval, application, or rollback.
+- Read [references/EVOLUTION_CAPSULE.md](references/EVOLUTION_CAPSULE.md) before building, linting, previewing, exporting, ingesting, or converting a privacy-minimized product feedback Capsule.
 - Read [references/EVALUATION.md](references/EVALUATION.md) when defining success criteria or monitoring a proposal.
 - Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) when mapping a field, choosing a reading order, reading papers, or identifying evidence-linked gaps.
 - Read [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md) when creating paper import plans or critical notes, or troubleshooting research state.

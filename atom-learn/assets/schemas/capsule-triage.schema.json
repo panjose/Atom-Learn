@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/capsule-triage.schema.json",
+  "title": "AtomLearn maintainer capsule triage record",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "fingerprint", "first_capsule_hash", "duplicate_count", "status", "priority", "route", "failure_type", "affected_feature", "candidate_type", "requires_reproduction_test", "automatic_code_change"],
+  "properties": {
+    "kind": {"const": "atomlearn.capsule-triage"},
+    "schema_version": {"const": 1},
+    "fingerprint": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "first_capsule_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "duplicate_count": {"type": "integer", "minimum": 1},
+    "status": {"enum": ["needs_reproduction", "fixture_ready", "triaged", "closed"]},
+    "priority": {"enum": ["low", "medium", "high"]},
+    "route": {"enum": ["learning_core", "retrieval", "research", "exam", "personalization", "platform"]},
+    "failure_type": {"enum": ["repeated_mastery_failure", "delayed_review_failure", "repeated_blocking_prerequisite", "strategy_underperformance", "retrieval_grounding_gap", "workflow_friction"]},
+    "affected_feature": {"enum": ["teaching", "review", "concept_routing", "atomization", "rag", "research", "exam", "personalization", "migration", "update"]},
+    "candidate_type": {"enum": ["teaching_policy", "review_policy", "routing_policy", "atomization_policy", "retrieval_policy", "workflow_policy", "migration_rule", "core_patch"]},
+    "requires_reproduction_test": {"const": true},
+    "automatic_code_change": {"const": false}
+  }
+}

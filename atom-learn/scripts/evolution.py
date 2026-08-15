@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 
+from platform_state import PlatformStateError
+
 from atomlearn import (
     SCHEMA_VERSION,
     AtomLearnError,
@@ -1192,11 +1194,22 @@ def build_parser() -> argparse.ArgumentParser:
     rollback.add_argument("proposal_id")
     rollback.add_argument("--reason", required=True)
     add_revision_argument(rollback)
+    capsule = sub.add_parser("capsule", help="Build lint preview export or ingest privacy-minimized Capsules", add_help=False)
+    capsule.add_argument("-h", "--help", action="store_true", dest="capsule_help")
+    capsule.add_argument("capsule_args", nargs=argparse.REMAINDER)
     return parser
 
 
 def run(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if args.action == "capsule":
+        from capsule import CapsuleError, run as run_capsule
+
+        try:
+            run_capsule(["--help"] if args.capsule_help else args.capsule_args)
+        except (CapsuleError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise EvolutionError(str(exc)) from exc
+        return
     engine = EvolutionEngine.load(args.workspace)
     if args.action != "validate":
         existing_errors = engine.validate()

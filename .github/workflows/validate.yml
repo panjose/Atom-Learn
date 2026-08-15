@@ -25,10 +25,10 @@ jobs:
       - name: Install package and test dependencies
         run: python -m pip install -e ".[dev]"
       - name: Compile every CLI module
-        run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py
+        run: python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py
       - name: Run fast contract tests
         run: python -m pytest -m fast
       - name: Verify installed short entry point
-        run: atomlearn --help && atomlearn version && atomlearn migrate --help && atomlearn profile --help && atomlearn policy --help && atomlearn strategy --help && atomlearn start --help && atomlearn intake --help && atomlearn research --help && atomlearn exam --help
+        run: atomlearn --help && atomlearn version && atomlearn migrate --help && atomlearn profile --help && atomlearn policy --help && atomlearn strategy --help && atomlearn evolve capsule --help && atomlearn start --help && atomlearn intake --help && atomlearn research --help && atomlearn exam --help
       - name: Run full integration tests
         run: python -m pytest -m integration

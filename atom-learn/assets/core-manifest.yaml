@@ -37,4 +37,7 @@ schemas:
   user_strategy:
     read: [1]
     write: 1
+  evolution_capsule:
+    read: [1]
+    write: 1
 artifact_sha256: sha256:0000000000000000000000000000000000000000000000000000000000000000

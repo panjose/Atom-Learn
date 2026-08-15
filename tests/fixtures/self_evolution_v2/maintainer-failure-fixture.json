@@ -1,0 +1,17 @@
+{
+  "kind": "atomlearn.maintainer-failure-fixture",
+  "schema_version": 1,
+  "source_fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "core_version": "0.13.0",
+  "failure_type": "repeated_mastery_failure",
+  "affected_feature": "teaching",
+  "candidate_type": "teaching_policy",
+  "metrics": {
+    "occurrence_bucket": "3_to_5",
+    "mastery_attempt_delta_bucket": "1_to_2",
+    "delayed_review_bucket": "not_observed"
+  },
+  "status": "needs_reproduction",
+  "requires_reproduction_test": true,
+  "automatic_patch_allowed": false
+}

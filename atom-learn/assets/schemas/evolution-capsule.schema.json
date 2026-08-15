@@ -42,6 +42,7 @@
         "local_paths_included": {"const": false},
         "lint_status": {"const": "passed"}
       }
-    }
+    },
+    "reproduction_fixture_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
   }
 }

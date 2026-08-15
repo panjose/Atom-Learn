@@ -7,6 +7,7 @@
   "schemas": {
     "user_profile": {"read": [1], "write": 1},
     "user_strategy": {"read": [1], "write": 1},
+    "evolution_capsule": {"read": [1], "write": 1},
     "workspace_core": {"read": [1], "write": 1}
   },
   "artifact_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000000"

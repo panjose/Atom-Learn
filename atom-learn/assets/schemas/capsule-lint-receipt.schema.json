@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/capsule-lint-receipt.schema.json",
+  "title": "AtomLearn local capsule privacy-lint receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "capsule_id", "capsule_hash", "checks", "linted_at"],
+  "properties": {
+    "kind": {"const": "atomlearn.capsule-lint-receipt"},
+    "schema_version": {"const": 1},
+    "capsule_id": {"type": "string", "pattern": "^cap-[0-9a-f]{32}$"},
+    "capsule_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "checks": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"enum": ["schema", "no_free_text", "no_content", "no_paths", "no_urls_or_dois", "no_stable_ids", "coarse_time", "minimum_aggregation"]}
+    },
+    "linted_at": {"type": "string", "format": "date-time"}
+  }
+}

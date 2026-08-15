@@ -24,6 +24,7 @@ MODULES = [
     "user_profile",
     "effective_policy",
     "strategy",
+    "capsule",
 ]
 
 

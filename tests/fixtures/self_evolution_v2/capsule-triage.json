@@ -1,0 +1,15 @@
+{
+  "kind": "atomlearn.capsule-triage",
+  "schema_version": 1,
+  "fingerprint": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "first_capsule_hash": "sha256:abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
+  "duplicate_count": 2,
+  "status": "needs_reproduction",
+  "priority": "medium",
+  "route": "learning_core",
+  "failure_type": "repeated_mastery_failure",
+  "affected_feature": "teaching",
+  "candidate_type": "teaching_policy",
+  "requires_reproduction_test": true,
+  "automatic_code_change": false
+}

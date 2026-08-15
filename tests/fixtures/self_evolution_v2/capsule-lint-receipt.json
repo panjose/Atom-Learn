@@ -1,0 +1,8 @@
+{
+  "kind": "atomlearn.capsule-lint-receipt",
+  "schema_version": 1,
+  "capsule_id": "cap-0123456789abcdef0123456789abcdef",
+  "capsule_hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "checks": ["schema", "no_free_text", "no_content", "no_paths", "no_urls_or_dois", "no_stable_ids", "coarse_time", "minimum_aggregation"],
+  "linted_at": "2026-01-01T00:00:00Z"
+}

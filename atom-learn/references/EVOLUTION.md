@@ -145,3 +145,5 @@ For `patch_skill`:
 5. Compare behavior on independent fixtures.
 6. Request maintainer review.
 7. Promote through a new Git commit; never overwrite the stable Skill from a course workspace.
+
+When the user explicitly wants to share a product-level finding, use the separate local [Evolution Capsule](EVOLUTION_CAPSULE.md) workflow. Capsule export is not upload, contains no course content or stable learner identifiers, and cannot authorize or apply a Core patch.
