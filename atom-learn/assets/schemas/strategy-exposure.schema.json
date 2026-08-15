@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/strategy-exposure.schema.json",
+  "title": "AtomLearn immutable strategy exposure",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "id", "experiment_id", "profile_id",
+    "workspace_ref", "workspace_revision", "atom_ref", "episode_ref", "arm", "assigned_value", "chosen_value",
+    "context", "atom_type", "difficulty_bucket", "prior_diagnostic_bucket",
+    "episode_type", "stratum", "policy_fingerprint", "status", "created_at"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.strategy-exposure"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^xps-[a-f0-9]{24}$"},
+    "experiment_id": {"type": "string", "pattern": "^exp-[A-Za-z0-9._-]{1,96}$"},
+    "profile_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "workspace_ref": {"type": "string", "pattern": "^ws-[a-f0-9]{24}$"},
+    "workspace_revision": {"type": "integer", "minimum": 0},
+    "atom_ref": {"type": "string", "pattern": "^atom-[a-f0-9]{24}$"},
+    "episode_ref": {"type": "string", "pattern": "^episode-[a-f0-9]{24}$"},
+    "arm": {"enum": ["baseline", "candidate", "overridden"]},
+    "assigned_value": {"type": "string", "minLength": 1, "maxLength": 64},
+    "chosen_value": {"type": "string", "minLength": 1, "maxLength": 64},
+    "context": {"enum": ["orientation", "teaching", "review", "exam"]},
+    "atom_type": {"type": "string", "minLength": 1, "maxLength": 32},
+    "difficulty_bucket": {"enum": ["introductory", "intermediate", "advanced", "unknown"]},
+    "prior_diagnostic_bucket": {"enum": ["unassessed", "struggling", "developing", "secure"]},
+    "episode_type": {"enum": ["new_learning", "remediation", "review"]},
+    "stratum": {"type": "string", "minLength": 1, "maxLength": 200},
+    "policy_fingerprint": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "status": {"enum": ["shadow", "exposed", "overridden"]},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

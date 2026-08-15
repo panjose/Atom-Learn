@@ -13,11 +13,15 @@
     "dimension",
     "baseline",
     "candidate",
+    "hypothesis",
+    "evidence_refs",
     "contexts",
     "status",
+    "shadow_mode",
     "strata",
     "metrics",
-    "minimums"
+    "minimums",
+    "thresholds"
   ],
   "properties": {
     "kind": {"const": "atomlearn.strategy-experiment"},
@@ -28,6 +32,13 @@
     "dimension": {"enum": ["explanation.order", "example.mode", "teaching.mode", "feedback.style", "check.style", "review.presentation"]},
     "baseline": {"type": "string", "minLength": 1, "maxLength": 64},
     "candidate": {"type": "string", "minLength": 1, "maxLength": 64},
+    "hypothesis": {"type": "string", "minLength": 1, "maxLength": 500},
+    "evidence_refs": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^(?:ev|evt|rv)-[A-Za-z0-9._:-]{1,96}$"}
+    },
     "contexts": {
       "type": "array",
       "minItems": 1,
@@ -35,6 +46,7 @@
       "items": {"enum": ["orientation", "teaching", "review", "exam"]}
     },
     "status": {"enum": ["candidate", "eligible", "monitoring", "active", "paused", "rejected", "retired", "needs_review"]},
+    "shadow_mode": {"type": "boolean"},
     "strata": {
       "type": "object",
       "additionalProperties": false,
@@ -60,6 +72,16 @@
       "properties": {
         "distinct_atoms": {"type": "integer", "minimum": 5},
         "delayed_outcomes": {"type": "integer", "minimum": 2}
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["minimum_quality_delta", "maximum_quality_degradation", "maximum_guardrail_delta"],
+      "properties": {
+        "minimum_quality_delta": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_quality_degradation": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_guardrail_delta": {"type": "number", "minimum": 0, "maximum": 1}
       }
     }
   }

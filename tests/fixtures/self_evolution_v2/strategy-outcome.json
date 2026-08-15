@@ -1,0 +1,17 @@
+{
+  "kind": "atomlearn.strategy-outcome",
+  "schema_version": 1,
+  "id": "out-0123456789abcdef01234567",
+  "exposure_id": "xps-0123456789abcdef01234567",
+  "experiment_id": "exp-example-first-001",
+  "evidence_ref": "ev-000001",
+  "atom_ref": "atom-0123456789abcdef01234567",
+  "evidence_kind": "mastery_check",
+  "result": "mastered",
+  "score": 0.9,
+  "attempts": 1,
+  "delayed": false,
+  "blocking_backtrack": false,
+  "workspace_valid": true,
+  "recorded_at": "2026-01-01T00:10:00Z"
+}

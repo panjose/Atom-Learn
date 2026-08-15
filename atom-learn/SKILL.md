@@ -222,6 +222,17 @@ python <SKILL_DIR>/scripts/atomlearn.py policy explain <workspace> <dimension> -
 
 Use session adaptation only for presentation choices. Never let inferred preferences automatically lower mastery or trigger a skip; only the explicit flexible-progression workflow may bypass a prerequisite provisionally. Never let adaptation change research scope, weaken source grounding, or modify safety rules. Keep course, evolution, and adaptation revisions independent.
 
+### Run strategy experiments
+
+1. Read [references/STRATEGY_EXPERIMENTS.md](references/STRATEGY_EXPERIMENTS.md) before creating, exposing, monitoring, promoting, or pausing a strategy experiment.
+2. Require the separate `strategy enable-experiments` opt-in. Start every candidate in shadow mode and inspect at least one shadow exposure before live assignment.
+3. At the start of each matching Active Atom episode, call `strategy exposure` with a stable opaque episode key. Follow its chosen instruction for that episode; never switch arms mid-episode.
+4. Respect current-turn and stored explicit overrides. `shadow` and `overridden` exposures do not enter comparisons.
+5. Record and assess normal Evidence first, then link it once with `strategy record-outcome`. Never backfill an unexposed historical outcome.
+6. Use `strategy monitor` and accept long-lived `monitoring` when samples or delayed reviews are insufficient. Pause on degradation; promote only with a quality improvement and passing guardrails.
+
+Strategy values may change presentation only. Never let them change mastery, prerequisites, Atom status, skips, retrieval, citations, privacy, research scope, exam truth, or safety. Keep strategy revision independent from user-profile, adaptation, evolution, and course revisions.
+
 ### Map and read a research field
 
 1. Create the base workspace with `init`. Build Knowledge Atoms when the field has concepts or methods the learner may need to repair.
@@ -333,6 +344,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md) when creating session signal payloads or troubleshooting adaptation state.
 - Read [references/USER_PROFILE.md](references/USER_PROFILE.md) before enabling, promoting, disabling, exporting, or resetting cross-course preferences.
 - Read [references/EFFECTIVE_POLICY.md](references/EFFECTIVE_POLICY.md) when merging current-turn, workspace, user, experiment, and Core presentation policy.
+- Read [references/STRATEGY_EXPERIMENTS.md](references/STRATEGY_EXPERIMENTS.md) before running shadow/live presentation experiments, linking outcomes, monitoring, promotion, or pause.
 - Read [references/EXAM_PREPARATION.md](references/EXAM_PREPARATION.md) when the learner supplies past papers, mock exams, sample questions, or a question bank, or asks for common-point, difficulty, or targeted preparation analysis.
 - Read [references/EXAM_SCHEMA.md](references/EXAM_SCHEMA.md) when creating exam import payloads, mapping questions to Atoms, or troubleshooting exam state.
 - Read [references/KNOWLEDGE_LINEAGE.md](references/KNOWLEDGE_LINEAGE.md) when the learner asks for a knowledge map, conceptual structure, main thread, branches, a concept's 来龙去脉, or connections between two concepts.

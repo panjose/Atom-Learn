@@ -14,7 +14,7 @@
 | Phase 0：契约、ADR 与威胁模型 | Implemented |
 | Phase 1：版本与迁移底座 | Implemented |
 | Phase 2：User Profile 与 Effective Policy | Implemented |
-| Phase 3：Strategy Experiments | Planned |
+| Phase 3：Strategy Experiments | Complete |
 | Phase 4：Evolution Capsule | Planned |
 | Phase 5：Release Manager | Planned |
 | Phase 6：加固与稳定发布 | Planned |

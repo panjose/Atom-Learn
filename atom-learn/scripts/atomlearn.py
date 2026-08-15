@@ -2666,6 +2666,9 @@ def build_parser() -> argparse.ArgumentParser:
     policy_parser = sub.add_parser("policy", help="Compute and explain merged teaching policy", add_help=False)
     policy_parser.add_argument("-h", "--help", action="store_true", dest="policy_help")
     policy_parser.add_argument("policy_args", nargs=argparse.REMAINDER)
+    strategy_parser = sub.add_parser("strategy", help="Run opt-in, replayable teaching-strategy experiments", add_help=False)
+    strategy_parser.add_argument("-h", "--help", action="store_true", dest="strategy_help")
+    strategy_parser.add_argument("strategy_args", nargs=argparse.REMAINDER)
     start_parser = sub.add_parser("start", help="Create or resume a course from one request", add_help=False)
     start_parser.add_argument("-h", "--help", action="store_true", dest="start_help")
     start_parser.add_argument("start_args", nargs=argparse.REMAINDER)
@@ -2849,6 +2852,16 @@ def run(args: argparse.Namespace) -> None:
         except (EffectivePolicyError, UserProfileError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
+    if args.command == "strategy":
+        from platform_state import PlatformStateError
+        from strategy import StrategyError, run as run_strategy
+        from user_profile import UserProfileError
+
+        try:
+            run_strategy(["--help"] if args.strategy_help else args.strategy_args)
+        except (StrategyError, UserProfileError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "start":
         from intake import IntakeError
         from rag import RagError
@@ -2977,6 +2990,7 @@ def run(args: argparse.Namespace) -> None:
                 errors.append(f"adaptation: {exc}")
         binding_path = workspace.meta / "profile-binding.yaml"
         if binding_path.is_file():
+            from strategy import StrategyError
             from user_profile import UserProfileEngine, UserProfileError, WorkspaceBinding
 
             try:
@@ -2987,8 +3001,13 @@ def run(args: argparse.Namespace) -> None:
                         errors.append(f"user profile: bound profile does not exist: {binding['profile_id']}")
                     else:
                         errors.extend(f"user profile: {error}" for error in profile.validate())
-            except UserProfileError as exc:
-                errors.append(f"user profile: {exc}")
+                    from strategy import StrategyEngine
+
+                    strategy = StrategyEngine.at_default_root(binding["profile_id"])
+                    if strategy.exists():
+                        errors.extend(f"strategy: {error}" for error in strategy.validate())
+            except (UserProfileError, StrategyError) as exc:
+                errors.append(f"profile or strategy: {exc}")
         exam_root = workspace.meta / "exam"
         if exam_root.is_dir():
             from exam import AtomLearnError as ExamAtomLearnError
@@ -3033,6 +3052,17 @@ def run(args: argparse.Namespace) -> None:
                 key: policy[key]
                 for key in ["context", "core_version", "policy_fingerprint", "effective", "ignored", "invariants"]
             }
+            from strategy import StrategyEngine, StrategyError
+            from user_profile import WorkspaceBinding
+
+            binding = WorkspaceBinding(workspace.root).read()
+            if binding:
+                strategy = StrategyEngine.at_default_root(binding["profile_id"])
+                if strategy.exists():
+                    try:
+                        summary["strategy"] = strategy.status()
+                    except StrategyError as exc:
+                        raise AtomLearnError(str(exc)) from exc
         if (workspace.meta / "exam").is_dir():
             from exam import ExamEngine
 

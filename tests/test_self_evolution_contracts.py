@@ -18,6 +18,8 @@ CONTRACTS = {
     "user-strategy": "user-strategy.json",
     "effective-policy": "effective-policy.json",
     "strategy-experiment": "strategy-experiment.json",
+    "strategy-exposure": "strategy-exposure.json",
+    "strategy-outcome": "strategy-outcome.json",
     "evolution-capsule": "evolution-capsule.json",
     "core-manifest": "core-manifest.json",
     "profile-binding": "profile-binding.json",

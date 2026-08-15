@@ -20,6 +20,25 @@ from user_profile import UserProfileEngine, UserProfileError, WorkspaceBinding, 
 
 
 POLICY_SCHEMA = CORE_ROOT / "assets" / "schemas" / "effective-policy.schema.json"
+STRATEGY_ONLY_VALUES = {
+    "check.style": {"short_transfer", "worked_then_transfer", "error_diagnosis"},
+    "review.presentation": {"retrieval_first", "example_then_recall", "mixed"},
+}
+POLICY_VALUES = {**PREFERENCE_VALUES, **STRATEGY_ONLY_VALUES}
+POLICY_DIMENSION_CONTEXTS = {
+    **DIMENSION_CONTEXTS,
+    "check.style": {"teaching", "review", "exam"},
+    "review.presentation": {"review"},
+}
+POLICY_GUIDANCE = {
+    **GUIDANCE,
+    ("check.style", "short_transfer"): "Use one short transfer check without supplying the worked solution first.",
+    ("check.style", "worked_then_transfer"): "Show one worked example, then ask a closely matched transfer check.",
+    ("check.style", "error_diagnosis"): "Use a plausible incorrect solution and ask the learner to diagnose it.",
+    ("review.presentation", "retrieval_first"): "Begin review with unaided retrieval before showing examples or notes.",
+    ("review.presentation", "example_then_recall"): "Refresh with one compact example before an unaided recall check.",
+    ("review.presentation", "mixed"): "Choose retrieval-first or example-first review from the Atom's observed difficulty.",
+}
 CORE_DEFAULTS = {
     "response.detail": "balanced",
     "answer.structure": "mixed",
@@ -33,6 +52,8 @@ CORE_DEFAULTS = {
     "challenge.level": "standard",
     "research.orientation": "breadth_first",
     "source.priority": "mixed",
+    "check.style": "short_transfer",
+    "review.presentation": "retrieval_first",
 }
 SOURCE_RANK = {
     "core_default": 0,
@@ -67,7 +88,7 @@ class EffectivePolicyError(RuntimeError):
 
 
 def _valid_value(dimension: str, value: Any) -> bool:
-    return dimension in PREFERENCE_VALUES and isinstance(value, str) and value in PREFERENCE_VALUES[dimension]
+    return dimension in POLICY_VALUES and isinstance(value, str) and value in POLICY_VALUES[dimension]
 
 
 def validate_overrides(raw: Any) -> dict[str, str]:
@@ -78,12 +99,12 @@ def validate_overrides(raw: Any) -> dict[str, str]:
     result: dict[str, str] = {}
     for dimension, value in raw.items():
         if not _valid_value(str(dimension), value):
-            if dimension not in PREFERENCE_VALUES:
+            if dimension not in POLICY_VALUES:
                 raise EffectivePolicyError(
                     f"Current-turn override {dimension!r} is not a presentation dimension; protected invariants cannot be overridden"
                 )
             raise EffectivePolicyError(
-                f"Current-turn override {dimension!r} must be one of: {', '.join(sorted(PREFERENCE_VALUES[dimension]))}"
+                f"Current-turn override {dimension!r} must be one of: {', '.join(sorted(POLICY_VALUES[dimension]))}"
             )
         result[str(dimension)] = value
     return result
@@ -155,6 +176,8 @@ def _user_strategy(data_root: Path, profile_id: str | None) -> tuple[list[dict[s
         return [], 0
     state = load_yaml(path)
     revision = int(state.get("revision", 0))
+    if state.get("experiments_enabled") is not True:
+        return [], revision
     active = state.get("active", {})
     if not isinstance(active, dict):
         return [], revision
@@ -214,7 +237,7 @@ def merge_effective_policy(
     ignored: list[dict[str, Any]] = []
     for candidate in candidates:
         dimension = candidate["dimension"]
-        if context not in DIMENSION_CONTEXTS.get(dimension, set()):
+        if context not in POLICY_DIMENSION_CONTEXTS.get(dimension, set()):
             if candidate["source"] != "core_default":
                 ignored.append({**candidate, "reason": "context_not_allowed"})
             continue
@@ -260,7 +283,7 @@ def merge_effective_policy(
 def unique_instructions(effective: dict[str, Any]) -> list[str]:
     result: list[str] = []
     for dimension, decision in sorted(effective.items()):
-        instruction = GUIDANCE.get((dimension, decision["value"]))
+        instruction = POLICY_GUIDANCE.get((dimension, decision["value"]))
         if instruction and instruction not in result:
             result.append(instruction)
     return result
@@ -313,7 +336,7 @@ def effective_for_workspace(
             )
             pending.extend(user_pending)
     course_candidates, _ = _course_strategy(workspace)
-    user_candidates, _ = _user_strategy(root, profile_id)
+    user_candidates, _ = _user_strategy(root, profile_id if user_state else None)
     policy = merge_effective_policy(
         context=context,
         current_turn=current_turn,
@@ -352,7 +375,7 @@ def backward_compatible_guidance(policy: dict[str, Any]) -> dict[str, Any]:
                 "source": source_alias.get(decision["source"], decision["source"]),
             }
         )
-        instruction = GUIDANCE.get((dimension, decision["value"]))
+        instruction = POLICY_GUIDANCE.get((dimension, decision["value"]))
         if instruction and instruction not in active_instructions:
             active_instructions.append(instruction)
     return {
@@ -384,7 +407,7 @@ def build_parser() -> argparse.ArgumentParser:
     effective.add_argument("--data-dir")
     explain = sub.add_parser("explain", help="Explain one policy dimension and overridden candidates")
     explain.add_argument("workspace")
-    explain.add_argument("dimension", choices=sorted(PREFERENCE_VALUES))
+    explain.add_argument("dimension", choices=sorted(POLICY_VALUES))
     explain.add_argument("--context", choices=sorted(ADAPTATION_CONTEXTS), default="general")
     explain.add_argument("--overrides")
     explain.add_argument("--data-dir")

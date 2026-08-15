@@ -3,7 +3,7 @@
 ## Contents
 
 - Principle
-- Two evolution lanes
+- Three evolution lanes
 - When to evolve
 - Workflow
 - Proposal lifecycle
@@ -15,19 +15,23 @@
 
 Treat self-evolution as evidence-grounded proposal generation, validation, and controlled promotion. Never treat it as permission to rewrite production behavior directly.
 
-Keep two independent revisions:
+Keep independent revisions:
 
 - course revision protects learning state;
 - evolution revision protects hypotheses, proposals, policy, and experiments.
+- user-strategy revision protects cross-course exposures, outcomes, and promoted presentation overlays.
 
 Require both revisions to be current before applying a proposal. Route every course mutation through the normal Workspace commit and validation path.
 
-## Two evolution lanes
+## Three evolution lanes
 
-Keep session adaptation separate from bounded course evolution:
+Keep preferences, strategy experiments, and bounded course evolution separate:
 
 - use `adapt` for allowlisted presentation preferences distilled from chat sessions;
-- use `evolve` for teaching-policy experiments, mastery, reviews, dependencies, Atom structure, and Skill candidates.
+- use `strategy` for opt-in, shadow-first, cross-course experiments over low-risk presentation enums;
+- use `evolve` for mastery, reviews, dependencies, Atom structure, course-local teaching proposals, and Skill candidates.
+
+Read [STRATEGY_EXPERIMENTS.md](STRATEGY_EXPERIMENTS.md) for immutable exposure assignment, actual Evidence linkage, conservative monitoring, and Effective Policy promotion. User strategy is lower priority than every explicit preference and cannot alter course truth.
 
 Read [SESSION_ADAPTATION.md](SESSION_ADAPTATION.md) before extracting chat preference signals. Session adaptation has its own revision so frequent low-risk preference updates do not stale pending evolution proposals. It may automatically apply explicit preferences and corroborated cross-session inferences, but it cannot mutate course or evolution state.
 

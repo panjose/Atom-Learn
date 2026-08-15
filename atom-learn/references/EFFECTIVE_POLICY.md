@@ -32,3 +32,5 @@ Every decision includes `value`, `source`, and `source_revision`. The result als
 Only dimensions allowed in the requested context participate. For example, `research.orientation` is excluded from teaching and reported as `context_not_allowed`. Provisional, contested, retired, incompatible, and forbidden profile values never become effective.
 
 `adapt guidance` and root `status --json` expose a backward-compatible summary plus the same Effective Policy. Prefer the `effective_policy` object when implementing new consumers.
+
+Promoted user strategies are read from the versioned strategy namespace only while their experiment is `active`. Live experiment arms are applied per episode from the immutable exposure result, not by prematurely writing a global overlay. See [STRATEGY_EXPERIMENTS.md](STRATEGY_EXPERIMENTS.md).

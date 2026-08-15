@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/strategy-outcome.schema.json",
+  "title": "AtomLearn strategy outcome linked to assessed Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "id", "exposure_id", "experiment_id",
+    "evidence_ref", "atom_ref", "evidence_kind", "result", "score",
+    "attempts", "delayed", "blocking_backtrack", "workspace_valid", "recorded_at"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.strategy-outcome"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^out-[a-f0-9]{24}$"},
+    "exposure_id": {"type": "string", "pattern": "^xps-[a-f0-9]{24}$"},
+    "experiment_id": {"type": "string", "pattern": "^exp-[A-Za-z0-9._-]{1,96}$"},
+    "evidence_ref": {"type": "string", "pattern": "^ev-[A-Za-z0-9._:-]{1,96}$"},
+    "atom_ref": {"type": "string", "pattern": "^atom-[a-f0-9]{24}$"},
+    "evidence_kind": {"type": "string", "minLength": 1, "maxLength": 64},
+    "result": {"enum": ["mastered", "partial", "not_mastered"]},
+    "score": {"type": "number", "minimum": 0, "maximum": 1},
+    "attempts": {"type": "integer", "minimum": 1},
+    "delayed": {"type": "boolean"},
+    "blocking_backtrack": {"type": "boolean"},
+    "workspace_valid": {"type": "boolean"},
+    "recorded_at": {"type": "string", "format": "date-time"}
+  }
+}
