@@ -35,6 +35,7 @@ WORKSPACE_TARGETS = {
     "workspace_research": ".atomlearn/research/state.yaml",
     "workspace_exam": ".atomlearn/exam/state.yaml",
     "workspace_lineage": ".atomlearn/lineage/state.yaml",
+    "workspace_profile_binding": ".atomlearn/profile-binding.yaml",
 }
 USER_TARGETS = {
     "user_profile": ("profiles", "state.yaml"),
@@ -255,7 +256,11 @@ def validate_target(target: StateTarget, manifest: dict[str, Any]) -> list[str]:
     except (MigrationError, PlatformStateError) as exc:
         errors.append(str(exc))
         return errors
-    schema_names = {"user_profile": "user-profile", "user_strategy": "user-strategy"}
+    schema_names = {
+        "user_profile": "user-profile",
+        "user_strategy": "user-strategy",
+        "workspace_profile_binding": "profile-binding",
+    }
     schema_name = schema_names.get(target.namespace)
     if schema_name:
         schema_path = CORE_ROOT / "assets" / "schemas" / f"{schema_name}.schema.json"

@@ -37,7 +37,7 @@ signals:
     turn_refs: [turn-18]
 ```
 
-Top-level fields are exactly `session_id`, `context`, and `signals`. Signal fields are exactly `dimension`, `value`, `direction`, `evidence`, `reason_code`, `confidence`, and `turn_refs`. Unknown fields are rejected.
+Top-level fields are `session_id`, `context`, optional `scope`, and `signals`. `scope` defaults to `workspace`; `user` is accepted only after the workspace is explicitly bound to an enabled global profile. Signal fields are exactly `dimension`, `value`, `direction`, `evidence`, `reason_code`, `confidence`, and `turn_refs`. Unknown fields are rejected.
 
 Constraints:
 
@@ -48,6 +48,8 @@ Constraints:
 - confidence is 0.5-1.0;
 - one signal has at most ten turn references;
 - raw text, message content, quotes, free-text rationale, and sensitive traits have no schema field.
+
+User-scope state lives outside the Skill and workspace in the platform user-data directory. It uses its own profile revision and `.atomlearn/profile-binding.yaml`; see [USER_PROFILE.md](USER_PROFILE.md). One observation is written to exactly one scope.
 
 ## Dimensions and values
 

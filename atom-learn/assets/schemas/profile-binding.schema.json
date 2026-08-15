@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/profile-binding.schema.json",
+  "title": "AtomLearn workspace profile binding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "revision", "profile_id", "enabled"],
+  "properties": {
+    "kind": {"const": "atomlearn.workspace-profile-binding"},
+    "schema_version": {"const": 1},
+    "revision": {"type": "integer", "minimum": 0},
+    "profile_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"},
+    "enabled": {"type": "boolean"}
+  }
+}

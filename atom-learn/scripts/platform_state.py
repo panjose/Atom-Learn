@@ -41,7 +41,7 @@ def _read_mapping(path: Path) -> dict[str, Any]:
     return value
 
 
-def _atomic_text(path: Path, content: str) -> None:
+def atomic_text(path: Path, content: str) -> None:
     import uuid
 
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -54,7 +54,7 @@ def _atomic_text(path: Path, content: str) -> None:
 
 
 def atomic_yaml(path: Path, value: dict[str, Any]) -> None:
-    _atomic_text(path, yaml.safe_dump(value, allow_unicode=True, sort_keys=False, width=100))
+    atomic_text(path, yaml.safe_dump(value, allow_unicode=True, sort_keys=False, width=100))
 
 
 def load_core_manifest() -> dict[str, Any]:

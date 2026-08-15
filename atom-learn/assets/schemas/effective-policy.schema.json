@@ -30,6 +30,7 @@
             "overridden_by_workspace_inferred",
             "overridden_by_user_inferred",
             "overridden_by_course_strategy",
+            "overridden_by_user_strategy",
             "context_not_allowed",
             "inactive_state",
             "incompatible_schema",
@@ -42,7 +43,12 @@
       "type": "object",
       "additionalProperties": {"const": "enforced"},
       "required": ["one_active_atom", "mastery_requires_evidence", "prerequisites_before_activation", "source_grounding", "privacy"]
-    }
+    },
+    "instructions": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "pending": {"type": "array", "items": {"type": "object"}},
+    "workspace_adaptation_revision": {"type": "integer", "minimum": 0},
+    "user_profile_revision": {"type": ["integer", "null"], "minimum": 0},
+    "profile_id": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"}
   },
   "$defs": {
     "source": {"enum": [

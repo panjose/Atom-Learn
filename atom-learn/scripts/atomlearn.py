@@ -2660,6 +2660,12 @@ def build_parser() -> argparse.ArgumentParser:
     migrate_parser = sub.add_parser("migrate", help="Plan and validate deterministic state migrations", add_help=False)
     migrate_parser.add_argument("-h", "--help", action="store_true", dest="migration_help")
     migrate_parser.add_argument("migration_args", nargs=argparse.REMAINDER)
+    profile_parser = sub.add_parser("profile", help="Manage opt-in cross-course learner preferences", add_help=False)
+    profile_parser.add_argument("-h", "--help", action="store_true", dest="profile_help")
+    profile_parser.add_argument("profile_args", nargs=argparse.REMAINDER)
+    policy_parser = sub.add_parser("policy", help="Compute and explain merged teaching policy", add_help=False)
+    policy_parser.add_argument("-h", "--help", action="store_true", dest="policy_help")
+    policy_parser.add_argument("policy_args", nargs=argparse.REMAINDER)
     start_parser = sub.add_parser("start", help="Create or resume a course from one request", add_help=False)
     start_parser.add_argument("-h", "--help", action="store_true", dest="start_help")
     start_parser.add_argument("start_args", nargs=argparse.REMAINDER)
@@ -2824,6 +2830,25 @@ def run(args: argparse.Namespace) -> None:
         except (MigrationError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
+    if args.command == "profile":
+        from platform_state import PlatformStateError
+        from user_profile import UserProfileError, run as run_profile
+
+        try:
+            run_profile(["--help"] if args.profile_help else args.profile_args)
+        except (UserProfileError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
+    if args.command == "policy":
+        from effective_policy import EffectivePolicyError, run as run_policy
+        from platform_state import PlatformStateError
+        from user_profile import UserProfileError
+
+        try:
+            run_policy(["--help"] if args.policy_help else args.policy_args)
+        except (EffectivePolicyError, UserProfileError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "start":
         from intake import IntakeError
         from rag import RagError
@@ -2950,6 +2975,20 @@ def run(args: argparse.Namespace) -> None:
                 errors.extend(f"adaptation: {error}" for error in adaptation_engine.validate())
             except (AdaptationError, AdaptationAtomLearnError) as exc:
                 errors.append(f"adaptation: {exc}")
+        binding_path = workspace.meta / "profile-binding.yaml"
+        if binding_path.is_file():
+            from user_profile import UserProfileEngine, UserProfileError, WorkspaceBinding
+
+            try:
+                binding = WorkspaceBinding(workspace.root).read()
+                if binding:
+                    profile = UserProfileEngine.at_default_root(binding["profile_id"])
+                    if not profile.exists():
+                        errors.append(f"user profile: bound profile does not exist: {binding['profile_id']}")
+                    else:
+                        errors.extend(f"user profile: {error}" for error in profile.validate())
+            except UserProfileError as exc:
+                errors.append(f"user profile: {exc}")
         exam_root = workspace.meta / "exam"
         if exam_root.is_dir():
             from exam import AtomLearnError as ExamAtomLearnError
@@ -2983,16 +3022,17 @@ def run(args: argparse.Namespace) -> None:
         return
     if args.command == "status":
         summary = workspace.status_summary()
-        if (workspace.meta / "adaptation").is_dir():
-            from adaptation import AdaptationEngine
+        if (workspace.meta / "adaptation").is_dir() or (workspace.meta / "profile-binding.yaml").is_file():
+            from effective_policy import backward_compatible_guidance, effective_for_workspace
 
             phase = workspace.current.get("phase")
             context = "orientation" if phase == "orientation" else ("review" if phase == "reviewing" else "teaching")
-            adaptation_engine = AdaptationEngine.load(str(workspace.root))
-            adaptation_errors = adaptation_engine.validate()
-            if adaptation_errors:
-                raise AtomLearnError("Adaptation validation failed:\n- " + "\n- ".join(adaptation_errors))
-            summary["adaptation"] = adaptation_engine.guidance(context)
+            policy = effective_for_workspace(str(workspace.root), context)
+            summary["adaptation"] = backward_compatible_guidance(policy)
+            summary["effective_policy"] = {
+                key: policy[key]
+                for key in ["context", "core_version", "policy_fingerprint", "effective", "ignored", "invariants"]
+            }
         if (workspace.meta / "exam").is_dir():
             from exam import ExamEngine
 

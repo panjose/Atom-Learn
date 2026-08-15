@@ -74,6 +74,8 @@
         "source": {"enum": ["explicit", "inferred", "unconfirmed", "retired"]},
         "active_value": {"type": ["string", "null"], "maxLength": 64},
         "updated_revision": {"type": "integer", "minimum": 0},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+        "session_count": {"type": "integer", "minimum": 0},
         "signal_ids": {
           "type": "array",
           "items": {"type": "string", "pattern": "^ups-[0-9]{6,}$"},

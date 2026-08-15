@@ -868,6 +868,8 @@ def build_parser() -> argparse.ArgumentParser:
     observe = sub.add_parser("observe-session", help="Distill allowlisted preference signals from one session")
     observe.add_argument("workspace")
     observe.add_argument("--input", required=True)
+    observe.add_argument("--expected-profile-revision", type=int)
+    observe.add_argument("--data-dir")
     add_revision(observe)
     retire = sub.add_parser("retire", help="Stop one preference dimension from influencing guidance")
     retire.add_argument("workspace")
@@ -879,6 +881,17 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    observation = read_data(Path(args.input)) if args.action == "observe-session" else None
+    if args.action == "observe-session" and observation.get("scope", "workspace") == "user":
+        from user_profile import UserProfileEngine, UserProfileError
+
+        try:
+            profile, _ = UserProfileEngine.for_workspace(args.workspace, args.data_dir)
+            result = profile.observe_session(observation, args.expected_profile_revision)
+        except UserProfileError as exc:
+            raise AdaptationError(str(exc)) from exc
+        print(json.dumps({"ok": True, **result}, ensure_ascii=False, indent=2))
+        return
     engine = AdaptationEngine.load(args.workspace)
     if args.action == "validate":
         errors = engine.validate()
@@ -894,13 +907,17 @@ def run(argv: list[str] | None = None) -> None:
     elif args.action == "profile":
         print(json.dumps(engine.profile, ensure_ascii=False, indent=2))
     elif args.action == "guidance":
-        print(json.dumps(engine.guidance(args.context), ensure_ascii=False, indent=2))
+        from effective_policy import backward_compatible_guidance, effective_for_workspace
+
+        policy = effective_for_workspace(args.workspace, args.context)
+        print(json.dumps(backward_compatible_guidance(policy), ensure_ascii=False, indent=2))
     elif args.action == "render":
         engine.render()
         print(json.dumps({"ok": True, "view": "PERSONALIZATION.md"}))
     elif args.action == "observe-session":
         engine.expect_revision(args.expected_adaptation_revision)
-        result = engine.observe_session(read_data(Path(args.input)))
+        observation.pop("scope", None)
+        result = engine.observe_session(observation)
         print(json.dumps({"ok": True, "adaptation_revision": engine.revision, "result": result}, ensure_ascii=False, indent=2))
     elif args.action == "retire":
         engine.expect_revision(args.expected_adaptation_revision)

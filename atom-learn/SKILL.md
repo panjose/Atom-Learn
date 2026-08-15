@@ -200,8 +200,8 @@ Keep the prerequisite DAG authoritative for activation and mastery. Semantic edg
 
 ### Adapt across chat sessions
 
-1. Read [references/SESSION_ADAPTATION.md](references/SESSION_ADAPTATION.md) and [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md).
-2. At session start or resume, run `adapt guidance --context <context>`. Apply current-turn explicit requests before stored guidance.
+1. Read [references/SESSION_ADAPTATION.md](references/SESSION_ADAPTATION.md), [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md), and [references/EFFECTIVE_POLICY.md](references/EFFECTIVE_POLICY.md).
+2. At session start or resume, run `adapt guidance --context <context>` or `policy effective`. Apply current-turn explicit requests before stored guidance.
 3. During the conversation, distinguish durable explicit preferences from one-off task instructions. Treat behavioral and outcome patterns as inferences, not facts.
 4. Near the end of a meaningful session, distill at most one observation payload with allowlisted dimensions, enum values, evidence class, reason code, confidence, and opaque turn IDs.
 5. Run `adapt observe-session` once for the session. Never pass raw messages, quotes, free-text summaries, secrets, personal identifiers, or sensitive-trait guesses.
@@ -209,11 +209,15 @@ Keep the prerequisite DAG authoritative for activation and mastery. Semantic edg
 7. Record a correction as newer explicit evidence. Use `adapt retire` when the learner rejects persistence or requests that a dimension stop influencing guidance.
 8. Run `adapt validate`. Show `PERSONALIZATION.md` when the learner asks what has been learned.
 
+Keep adaptation workspace-local unless the learner explicitly asks for cross-course persistence. Then read [references/USER_PROFILE.md](references/USER_PROFILE.md), run `profile enable`, and record future signals with `scope: user`; do not import old workspace signals automatically or write the same observation to both scopes.
+
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py adapt guidance <workspace> --context teaching
 python <SKILL_DIR>/scripts/atomlearn.py adapt observe-session <workspace> --input <session-signals.yaml> --expected-adaptation-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py adapt profile <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py adapt retire <workspace> <dimension> --reason-code user_rejection
+python <SKILL_DIR>/scripts/atomlearn.py profile enable <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py policy explain <workspace> <dimension> --context teaching
 ```
 
 Use session adaptation only for presentation choices. Never let inferred preferences automatically lower mastery or trigger a skip; only the explicit flexible-progression workflow may bypass a prerequisite provisionally. Never let adaptation change research scope, weaken source grounding, or modify safety rules. Keep course, evolution, and adaptation revisions independent.
@@ -327,6 +331,8 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/RAG_SCHEMA.md](references/RAG_SCHEMA.md) when creating source, web-evidence, query, embedding, correction, coverage, or evaluation payloads, or troubleshooting retrieval state.
 - Read [references/SESSION_ADAPTATION.md](references/SESSION_ADAPTATION.md) when learning or applying presentation preferences from chat sessions, handling conflicts, corrections, or retirement, or deciding whether a signal is safe to persist.
 - Read [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md) when creating session signal payloads or troubleshooting adaptation state.
+- Read [references/USER_PROFILE.md](references/USER_PROFILE.md) before enabling, promoting, disabling, exporting, or resetting cross-course preferences.
+- Read [references/EFFECTIVE_POLICY.md](references/EFFECTIVE_POLICY.md) when merging current-turn, workspace, user, experiment, and Core presentation policy.
 - Read [references/EXAM_PREPARATION.md](references/EXAM_PREPARATION.md) when the learner supplies past papers, mock exams, sample questions, or a question bank, or asks for common-point, difficulty, or targeted preparation analysis.
 - Read [references/EXAM_SCHEMA.md](references/EXAM_SCHEMA.md) when creating exam import payloads, mapping questions to Atoms, or troubleshooting exam state.
 - Read [references/KNOWLEDGE_LINEAGE.md](references/KNOWLEDGE_LINEAGE.md) when the learner asks for a knowledge map, conceptual structure, main thread, branches, a concept's 来龙去脉, or connections between two concepts.

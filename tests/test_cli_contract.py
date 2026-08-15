@@ -21,6 +21,8 @@ MODULES = [
     "exam",
     "lineage",
     "migrations",
+    "user_profile",
+    "effective_policy",
 ]
 
 

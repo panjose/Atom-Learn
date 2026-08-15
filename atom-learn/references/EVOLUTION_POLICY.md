@@ -61,7 +61,7 @@ Reject a proposal if normal Workspace validation fails after applying it in memo
 
 ## Privacy
 
-Keep `store_raw_messages: false` and `cross_workspace_aggregation: false` by default.
+Keep course-evolution `store_raw_messages: false` and `cross_workspace_aggregation: false`. The separate User Profile may aggregate only allowlisted enum signals across explicitly bound workspaces after opt-in; it never exposes raw session data to course evolution.
 
 Keep session adaptation's `infer_sensitive_traits: false`. Do not infer identity, health, politics, religion, personality, intelligence, disability, or other sensitive traits from chat behavior. Store enum-only presentation signals with opaque turn references; never copy the message or a free-text summary.
 
@@ -72,4 +72,4 @@ Metrics may store:
 - Atom IDs and titles already present in the workspace;
 - derived signals and proposal rationale.
 
-Do not duplicate question text, full learner answers, source passages, secrets, or personal identifiers into evolution metrics or checkpoints. Cross-workspace learning requires a separate opt-in aggregation design.
+Do not duplicate question text, full learner answers, source passages, secrets, or personal identifiers into evolution metrics or checkpoints. Cross-workspace preferences use the separate opt-in User Profile; cross-workspace outcome experiments remain disabled until the Strategy Experiment workflow is enabled.

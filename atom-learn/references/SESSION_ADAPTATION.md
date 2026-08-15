@@ -20,7 +20,7 @@ Use two independent lanes:
 - session adaptation changes low-risk presentation choices such as detail, pacing, example type, language, feedback style, and research orientation;
 - bounded evolution changes mastery, review schedules, dependencies, Atom structure, or Skill behavior through proposals and approval.
 
-Keep adaptation revision independent from course and evolution revisions. A frequent preference update must not stale a pending structural proposal.
+Keep workspace adaptation revision, optional user-profile revision, course revision, and evolution revision independent. A frequent preference update must not stale a pending structural proposal. Workspace-local storage remains the default; read [USER_PROFILE.md](USER_PROFILE.md) before enabling cross-course scope.
 
 ## Start and resume a session
 
@@ -33,12 +33,14 @@ python <SKILL_DIR>/scripts/atomlearn.py adapt guidance <workspace> --context tea
 
 Use `orientation`, `teaching`, `review`, `research`, `exam`, or `general` context. Root `status --json` automatically includes orientation, teaching, or review guidance after adaptation has been initialized; exam preparation should request `exam` guidance explicitly.
 
-Apply precedence in this order:
+Apply the complete precedence in [EFFECTIVE_POLICY.md](EFFECTIVE_POLICY.md). The most important ordering is:
 
 1. the learner's explicit request in the current turn;
-2. an active explicit stored preference;
-3. an active cross-session inferred preference;
-4. the default AtomLearn protocol.
+2. an active workspace explicit preference;
+3. an active user-global explicit preference;
+4. active workspace then user-global inference;
+5. promoted strategies;
+6. the default AtomLearn protocol.
 
 Never force a stored preference when the current task clearly needs another format. A learner who usually prefers concise answers may still request a detailed proof in the current turn.
 
@@ -59,6 +61,8 @@ Pass only allowlisted dimensions, enum values, confidence, reason codes, and opa
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py adapt observe-session <workspace> --input <session-signals.yaml> --expected-adaptation-revision <revision>
 ```
+
+Use `scope: user` and `--expected-profile-revision` only after `atomlearn profile enable <workspace>`. Do not write the same observation to both scopes.
 
 Use a stable opaque `session_id` once. If the harness retries, read adaptation status first instead of recording the same session again.
 
@@ -124,10 +128,11 @@ If an adapted style appears to improve or harm mastery, store ordinary learner E
 ## Privacy and safety
 
 - Keep `store_raw_messages: false`.
-- Keep `cross_workspace_aggregation: false` unless a future explicit opt-in design is implemented.
+- Keep workspace `cross_workspace_aggregation: false`. Cross-course use exists only through the separate explicitly enabled, enum-only User Profile.
 - Keep `infer_sensitive_traits: false`.
 - Reject unknown payload fields to prevent accidental raw-chat storage.
-- Store only workspace-local preference signals.
+- Store workspace signals locally; store user-scope signals only after profile opt-in.
 - Use opaque session and turn references that contain no message text.
 - Treat profile values as presentation preferences, not facts about identity, ability, or personality.
 - Show the learner the generated `PERSONALIZATION.md` view when they ask what the system has learned.
+- Use `profile show` and `policy explain` when they ask what crosses courses or why a value won.

@@ -20,6 +20,7 @@ CONTRACTS = {
     "strategy-experiment": "strategy-experiment.json",
     "evolution-capsule": "evolution-capsule.json",
     "core-manifest": "core-manifest.json",
+    "profile-binding": "profile-binding.json",
 }
 
 

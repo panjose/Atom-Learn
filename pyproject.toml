@@ -33,6 +33,8 @@ py-modules = [
   "lineage",
   "platform_state",
   "migrations",
+  "user_profile",
+  "effective_policy",
 ]
 
 [tool.pytest.ini_options]

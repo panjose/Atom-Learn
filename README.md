@@ -65,6 +65,8 @@ Every course render writes the five English views plus aligned `*.zh-CN.md` gene
 
 Core `0.13.0` adds a read-only compatibility manifest and deterministic migration planning. `atomlearn migrate status|plan|validate` never applies a migration; checking status does not create the platform user-data directory. See [Core Version and Migrations](atom-learn/references/MIGRATIONS.md).
 
+Cross-course personalization remains off until the learner explicitly runs `atomlearn profile enable <workspace>`. Global profiles contain only allowlisted enum signals, never import old workspace history automatically, and can be disabled, retired, exported, or reset without deleting their audit trail. `atomlearn policy effective|explain` merges current-turn, workspace, global, strategy, and Core layers with per-value provenance. See [User Profiles](atom-learn/references/USER_PROFILE.md) and [Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md).
+
 ## Flexible Course Intake
 
 AtomLearn supports three primary input modes: `sources` for complete textbooks or knowledge bases, `outline` for a syllabus or user-created structure, and `topic` when the user supplies only a field keyword, concept, skill, or name. All three produce the same source-traceable Knowledge Atom DAG, but use different discovery and atomization strategies.
@@ -241,7 +243,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py
 ```
 
 The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.
