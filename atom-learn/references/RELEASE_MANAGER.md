@@ -97,6 +97,8 @@ Network redirects must remain HTTPS. Archive extraction rejects traversal, absol
 
 `atomlearn-release` is a maintainer command. It requires an exact tag/commit gate report, a stable or prerelease channel, and an Ed25519 private key. It creates a deterministic ZIP and a signed manifest without overwriting existing outputs.
 
+The builder also requires the already-built universal `atomlearn-manager` wheel. Its version, filename, byte size, and SHA-256 are included in the same Ed25519-signed manifest, so the bootstrap package published beside the Core ZIP is not an unsigned extra asset.
+
 Stable publication is allowed only after the cross-platform release gates described in [Self-Evolution v2 Implementation Plan](../../docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md) pass. Building an artifact does not publish it.
 
 ## Invariants

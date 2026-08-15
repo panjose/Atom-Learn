@@ -1,4 +1,4 @@
 interface:
   display_name: "AtomLearn"
-  short_description: "Start grounded learning paths with closed-loop RAG"
-  default_prompt: "Use $atom-learn to start a source-grounded learning path from my topic, outline, or sources and guide me one Atom at a time."
+  short_description: "Grounded atomic learning with safe personalization"
+  default_prompt: "Use $atom-learn to start a source-grounded learning path from my topic, outline, or sources, guide me one Atom at a time, and adapt across sessions only when I explicitly opt in."

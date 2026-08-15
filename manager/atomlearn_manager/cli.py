@@ -20,34 +20,34 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--manager-root", help="Absolute isolated manager root")
     sub = parser.add_subparsers(dest="command", required=True)
     init = sub.add_parser("init", help="Initialize an explicit Ed25519 trust root")
-    init.add_argument("--key-id", required=True)
+    init.add_argument("--key-id", required=True, help="Stable identifier for the trusted Ed25519 public key")
     init.add_argument("--public-key", required=True, help="Base64 raw Ed25519 public key")
-    init.add_argument("--repository", default="panjose/Atom-Learn")
+    init.add_argument("--repository", default="panjose/Atom-Learn", help="Only GitHub owner/repository allowed to sign releases")
     sub.add_parser("version", help="Show stable manager and active Core versions")
     update = sub.add_parser("update", help="Check plan apply inspect or recover updates")
     update_sub = update.add_subparsers(dest="update_action", required=True)
     check = update_sub.add_parser("check", help="Read and verify one signed release manifest")
     check.add_argument("--manifest", required=True, help="Local path or HTTPS release-manifest URL")
-    check.add_argument("--channel", choices=["stable", "prerelease"], default="stable")
-    check.add_argument("--offline", action="store_true")
+    check.add_argument("--channel", choices=["stable", "prerelease"], default="stable", help="Required signed release channel")
+    check.add_argument("--offline", action="store_true", help="Skip a remote request and keep the current Core available")
     for action, help_text in [
         ("plan", "Preview artifact disk schema and state-copy impact"),
         ("apply", "Install verify health-check and activate one release"),
     ]:
         command = update_sub.add_parser(action, help=help_text)
-        command.add_argument("version")
-        command.add_argument("--manifest", required=True)
+        command.add_argument("version", help="Target Core semantic version matching the signed manifest")
+        command.add_argument("--manifest", required=True, help="Local path or HTTPS signed release-manifest URL")
         command.add_argument("--artifact", help="Local artifact; omit to download the signed URL")
-        command.add_argument("--channel", choices=["stable", "prerelease"], default="stable")
+        command.add_argument("--channel", choices=["stable", "prerelease"], default="stable", help="Required signed release channel")
         command.add_argument("--data-dir", help="Absolute AtomLearn user-data root to copy and validate")
-        command.add_argument("--workspace", action="append", default=[])
+        command.add_argument("--workspace", action="append", default=[], help="Absolute course workspace; repeat for multiple courses")
         if action == "apply":
-            command.add_argument("--confirmed", action="store_true")
+            command.add_argument("--confirmed", action="store_true", help="Confirm the previously reviewed update plan")
     update_sub.add_parser("status", help="Show active release and unfinished transactions")
     update_sub.add_parser("recover", help="Recover the latest interrupted update transaction")
     rollback_parser = sub.add_parser("rollback", help="Restore the paired previous Core and state copy")
-    rollback_parser.add_argument("version")
-    rollback_parser.add_argument("--confirmed", action="store_true")
+    rollback_parser.add_argument("version", help="Paired previous Core version named by the active pointer")
+    rollback_parser.add_argument("--confirmed", action="store_true", help="Confirm paired Core and state-snapshot rollback")
     return parser
 
 

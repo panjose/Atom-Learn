@@ -10,6 +10,7 @@ FAST_FILES = {
     "test_documentation.py",
     "test_self_evolution_contracts.py",
     "test_manager_contracts.py",
+    "test_release_properties.py",
 }
 
 

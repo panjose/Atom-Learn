@@ -5,6 +5,7 @@ import os
 import subprocess
 import sys
 import uuid
+import copy
 from pathlib import Path
 
 import yaml
@@ -15,6 +16,7 @@ CLI = ROOT / "atom-learn" / "scripts" / "atomlearn.py"
 RUN_ROOT = ROOT / ".test-workspaces"
 PLAN = ROOT / "examples" / "calculus-mini" / "plan.yaml"
 CAPSULE_FIXTURE = ROOT / "tests" / "fixtures" / "self_evolution_v2" / "evolution-capsule.json"
+ATTACK_FIXTURE = ROOT / "tests" / "fixtures" / "security" / "capsule-attacks.json"
 
 
 def invoke(data_root: Path, *args: object, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -186,18 +188,26 @@ def test_build_preview_and_one_time_local_export_keep_identical_hash(tmp_path: P
 def test_privacy_lint_rejects_content_identifiers_and_small_samples(tmp_path: Path) -> None:
     data_root = (tmp_path / "user-data").resolve()
     base = json.loads(CAPSULE_FIXTURE.read_text(encoding="utf-8"))
-    attacks = [
-        ("raw_message", "the learner said a secret"),
-        ("workspace_path", r"C:\\Users\\person\\course"),
-        ("source_url", "https://example.com/private"),
-        ("source_doi", "10.1234/private.1"),
-        ("atom_id", "calculus.private.atom"),
-        ("atom_title", "A unique private title"),
-    ]
-    for index, (key, value) in enumerate(attacks):
-        payload = dict(base)
-        payload[key] = value
-        path = tmp_path / f"attack-{index}.json"
+    attacks = json.loads(ATTACK_FIXTURE.read_text(encoding="utf-8"))["cases"]
+    assert {item["name"] for item in attacks} >= {
+        "raw_free_text",
+        "nested_free_text",
+        "windows_path",
+        "posix_path",
+        "source_url",
+        "source_doi",
+        "email",
+        "uuid",
+        "precise_timestamp",
+        "atom_identifier",
+    }
+    for attack in attacks:
+        payload = copy.deepcopy(base)
+        target = payload
+        for key in attack["path"][:-1]:
+            target = target[key]
+        target[attack["path"][-1]] = attack["value"]
+        path = tmp_path / f"attack-{attack['name']}.json"
         path.write_text(json.dumps(payload), encoding="utf-8")
         result = invoke(data_root, "evolve", "capsule", "lint", path, check=False)
         assert result.returncode == 2

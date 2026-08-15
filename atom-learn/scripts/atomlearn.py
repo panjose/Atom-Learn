@@ -2820,6 +2820,7 @@ def run(args: argparse.Namespace) -> None:
                 "skill_name": manifest["skill_name"],
                 "core_version": manifest["core_version"],
                 "release_channel": manifest["release_channel"],
+                "feature_defaults": manifest["feature_defaults"],
                 "schemas": manifest["schemas"],
             }
         )

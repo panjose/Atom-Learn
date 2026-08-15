@@ -7,12 +7,16 @@ import json
 import os
 import re
 import stat
-import tomllib
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable
 
 import yaml
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 from .common import ManagerError, is_reparse_or_symlink, require_schema, sha256_bytes, sha256_file
 
@@ -27,6 +31,7 @@ REQUIRED_FILES = {
     "README.md",
     "README.zh-CN.md",
     "atom-learn/SKILL.md",
+    "atom-learn/agents/openai.yaml",
     "atom-learn/assets/core-manifest.yaml",
     "atom-learn/scripts/atomlearn.py",
     "release/gate-report.json",

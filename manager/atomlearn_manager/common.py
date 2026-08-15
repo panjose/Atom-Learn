@@ -107,12 +107,16 @@ def canonical_json(value: dict[str, Any]) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
 
 
-def version_tuple(value: str) -> tuple[int, int, int, int, str]:
+def version_tuple(value: str) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]]:
     match = SEMVER.fullmatch(value)
     if not match:
         raise ManagerError(f"Invalid semantic version: {value!r}")
     prerelease = match.group(4)
-    return int(match.group(1)), int(match.group(2)), int(match.group(3)), 1 if prerelease is None else 0, prerelease or ""
+    identifiers = tuple(
+        (0, int(piece)) if piece.isdigit() else (1, piece)
+        for piece in (prerelease.split(".") if prerelease is not None else [])
+    )
+    return int(match.group(1)), int(match.group(2)), int(match.group(3)), 1 if prerelease is None else 0, identifiers
 
 
 def is_reparse_or_symlink(path: Path) -> bool:

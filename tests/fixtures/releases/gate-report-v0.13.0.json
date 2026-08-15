@@ -1,0 +1,21 @@
+{
+  "kind": "atomlearn.release-gate-report",
+  "schema_version": 1,
+  "tag": "v0.13.0",
+  "commit_sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "python": {
+    "linux": ["3.10", "3.11", "3.12", "3.13"],
+    "windows": ["3.10", "3.11", "3.12", "3.13"]
+  },
+  "gates": {
+    "full_tests": true,
+    "skill_validator": true,
+    "migration_fixtures": true,
+    "manager_upgrade_tests": true,
+    "security_archive_tests": true,
+    "property_tests": true,
+    "fault_injection": true,
+    "privacy_attacks": true,
+    "replay_compatibility": true
+  }
+}

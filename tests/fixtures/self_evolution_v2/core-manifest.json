@@ -4,6 +4,12 @@
   "skill_name": "atom-learn",
   "core_version": "0.13.0",
   "release_channel": "development",
+  "feature_defaults": {
+    "global_personalization": false,
+    "strategy_experiments": false,
+    "capsule_export": false,
+    "release_manager": false
+  },
   "schemas": {
     "user_profile": {"read": [1], "write": 1},
     "user_strategy": {"read": [1], "write": 1},

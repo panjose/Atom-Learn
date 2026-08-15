@@ -38,6 +38,12 @@ def test_core_manifest_matches_package_and_declares_all_v2_namespaces() -> None:
     manifest = load_core_manifest()
     assert manifest["core_version"] == "0.13.0" == core_version()
     assert manifest["release_channel"] == "development"
+    assert manifest["feature_defaults"] == {
+        "global_personalization": False,
+        "strategy_experiments": False,
+        "capsule_export": False,
+        "release_manager": False,
+    }
     assert {"workspace_core", "user_profile", "user_strategy"} <= set(manifest["schemas"])
     assert manifest["artifact_sha256"].startswith("sha256:")
 

@@ -256,6 +256,15 @@ def merge_effective_policy(
             if candidate["source"] == "core_default":
                 continue
             ignored.append({**candidate, "reason": reason})
+    ignored.sort(
+        key=lambda item: (
+            item["dimension"],
+            SOURCE_RANK[item["source"]],
+            item["source_revision"],
+            item["value"],
+            item["reason"],
+        )
+    )
     canonical = json.dumps(
         {"context": context, "core_version": core_version(), "effective": effective, "ignored": ignored},
         sort_keys=True,

@@ -40,6 +40,18 @@ class SimulatedInterruption(ManagerError):
     """Test-only process-boundary simulation that deliberately skips auto-recovery."""
 
 
+INTERRUPTIBLE_STAGES = (
+    "planned",
+    "downloaded",
+    "verified",
+    "state_copied",
+    "installed",
+    "health_checked",
+    "state_applied",
+    "activated",
+)
+
+
 def _manifest_hash(manifest: dict[str, Any]) -> str:
     return sha256_bytes(canonical_json(manifest))
 
@@ -350,6 +362,7 @@ def apply_update(
         }
         save_transaction(root, transaction)
         try:
+            _maybe_interrupt("planned")
             _download_artifact(manifest, artifact_source, staged_artifact)
             transaction["stage"] = "downloaded"
             save_transaction(root, transaction)

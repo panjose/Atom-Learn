@@ -77,6 +77,12 @@ def validate_release_manifest(
         raise ManagerError("Mutable branch or decorated artifact URLs are forbidden")
     if channel == "stable" and "-" in version:
         raise ManagerError("Stable channel cannot contain a prerelease version")
+    manager_artifact = manifest["manager_artifact"]
+    expected_manager_prefix = f"atomlearn_manager-{manager_artifact['version']}-"
+    if not manager_artifact["filename"].startswith(expected_manager_prefix):
+        raise ManagerError("Manager wheel filename and signed manager version disagree")
+    if version_tuple(manager_artifact["version"]) < version_tuple(manifest["min_manager_version"]):
+        raise ManagerError("Signed Manager wheel is older than the Core minimum manager version")
     signature = manifest["signature"]
     encoded_key = trust["keys"].get(signature["key_id"])
     if encoded_key is None:

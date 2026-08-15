@@ -236,6 +236,8 @@ atomlearn-core version
 
 See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for trust bootstrap, update planning, recovery, rollback, offline behavior, threat boundaries, and maintainer release construction.
 
+All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.13.0 Release Notes](docs/releases/v0.13.0.md), and [Changelog](CHANGELOG.md).
+
 ## Design Documentation
 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
@@ -255,6 +257,8 @@ See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for trust
 - [Detailed Expansion Design](docs/DETAILED_EXPANSION_DESIGN.md)
 - [Concept Routing Design](docs/CONCEPT_ROUTING_DESIGN.md)
 - [Signed Release Manager Operations](atom-learn/references/RELEASE_MANAGER.md)
+- [Self-Evolution v2 Operations and Recovery](docs/SELF_EVOLUTION_V2_OPERATIONS.md)
+- [0.13.0 Release Notes](docs/releases/v0.13.0.md)
 
 ## Development Validation
 
@@ -262,7 +266,7 @@ See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for trust
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

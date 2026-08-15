@@ -7,6 +7,7 @@ import stat
 import subprocess
 import sys
 import uuid
+import warnings
 import zipfile
 from pathlib import Path
 
@@ -111,6 +112,10 @@ def gate_report(path: Path, version: str, commit: str) -> Path:
             "migration_fixtures": True,
             "manager_upgrade_tests": True,
             "security_archive_tests": True,
+            "property_tests": True,
+            "fault_injection": True,
+            "privacy_attacks": True,
+            "replay_compatibility": True,
         },
     }
     path.write_text(json.dumps(value), encoding="utf-8")
@@ -127,8 +132,10 @@ def synthetic_source(
     source = tmp_path / f"source-{version}-{uuid.uuid4().hex}"
     scripts = source / "atom-learn" / "scripts"
     assets = source / "atom-learn" / "assets"
+    agents = source / "atom-learn" / "agents"
     scripts.mkdir(parents=True)
     assets.mkdir(parents=True)
+    agents.mkdir(parents=True)
     (source / "pyproject.toml").write_text(
         f'[project]\nname = "atom-learn"\nversion = "{version}"\nrequires-python = ">=3.10"\n',
         encoding="utf-8",
@@ -139,12 +146,23 @@ def synthetic_source(
         "---\nname: atom-learn\ndescription: Synthetic signed manager test Core.\n---\n\n# Test\n",
         encoding="utf-8",
     )
+    (agents / "openai.yaml").write_text(
+        "interface:\n  display_name: AtomLearn\n  short_description: Synthetic manager test\n"
+        "  default_prompt: Use $atom-learn for the signed manager test.\n",
+        encoding="utf-8",
+    )
     core = {
         "kind": "atomlearn.core-manifest",
         "manifest_version": 1,
         "skill_name": "atom-learn",
         "core_version": version,
         "release_channel": "development",
+        "feature_defaults": {
+            "global_personalization": False,
+            "strategy_experiments": False,
+            "capsule_export": False,
+            "release_manager": False,
+        },
         "schemas": {
             "workspace_core": {"read": [schema_version], "write": schema_version},
             "user_profile": {"read": [schema_version], "write": schema_version},
@@ -185,6 +203,9 @@ def build(
 ) -> dict:
     commit = commit_char * 40
     output_dir = tmp_path / f"release-{version}-{uuid.uuid4().hex}"
+    manager_wheel = tmp_path / f"manager-wheel-{uuid.uuid4().hex}" / "atomlearn_manager-0.1.0-py3-none-any.whl"
+    manager_wheel.parent.mkdir(parents=True)
+    manager_wheel.write_bytes(b"synthetic signed manager wheel")
     result = release(
         source,
         "--output-dir",
@@ -203,6 +224,8 @@ def build(
         private_key,
         "--gate-report",
         gate_report(tmp_path / f"gate-{version}-{uuid.uuid4().hex}.json", version, commit),
+        "--manager-artifact",
+        manager_wheel,
     )
     return parsed(result)
 
@@ -235,6 +258,9 @@ def test_signed_side_by_side_upgrade_and_paired_rollback(tmp_path: Path) -> None
     manager_root = init_manager(tmp_path, public_key)
     old = build(tmp_path, synthetic_source(tmp_path, "0.12.0"), "0.12.0", private_key, commit_char="a")
     current = build(tmp_path, ROOT, "0.13.0", private_key, commit_char="b")
+    current_manifest = json.loads(Path(current["manifest"]).read_text(encoding="utf-8"))
+    assert current_manifest["manager_artifact"]["version"] == "0.1.0"
+    assert current_manifest["manager_artifact"]["sha256"] == current["manager_artifact_sha256"]
 
     check = parsed(manager(manager_root, "update", "check", "--manifest", old["manifest"]))
     assert check["available"] is True
@@ -372,12 +398,14 @@ def test_signature_hash_channel_and_hostile_archives_fail_closed(tmp_path: Path)
     ]
     for name, entries in attacks:
         path = tmp_path / name
-        with zipfile.ZipFile(path, "w") as archive:
-            for member, content, attributes in entries:
-                item = zipfile.ZipInfo(member)
-                item.create_system = 3
-                item.external_attr = attributes
-                archive.writestr(item, content)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", UserWarning)
+            with zipfile.ZipFile(path, "w") as archive:
+                for member, content, attributes in entries:
+                    item = zipfile.ZipInfo(member)
+                    item.create_system = 3
+                    item.external_attr = attributes
+                    archive.writestr(item, content)
         with pytest.raises(ManagerError):
             inspect_archive(path, "1.0.0")
 
@@ -459,3 +487,84 @@ def test_missing_migration_and_disk_failure_do_not_install_or_switch(tmp_path: P
     assert disk.returncode == 2
     assert "Insufficient disk space" in disk.stderr
     assert parsed(manager(root, "update", "status"))["active"]["current_version"] == "0.12.0"
+
+
+def test_every_update_persistence_stage_recovers_to_the_old_core(tmp_path: Path) -> None:
+    private_key, public_key = signing_material(tmp_path)
+    old = build(tmp_path, synthetic_source(tmp_path, "0.12.0"), "0.12.0", private_key, commit_char="3")
+    target = build(tmp_path, synthetic_source(tmp_path, "0.13.0"), "0.13.0", private_key, commit_char="4")
+    stages = [
+        "planned",
+        "downloaded",
+        "verified",
+        "state_copied",
+        "installed",
+        "health_checked",
+        "state_applied",
+        "activated",
+    ]
+    manager_source = (MANAGER_PACKAGE / "atomlearn_manager" / "manager.py").read_text(encoding="utf-8")
+    assert all(f'_maybe_interrupt("{stage}")' in manager_source for stage in stages)
+    for stage in stages:
+        stage_root = init_manager(tmp_path / stage, public_key)
+        parsed(apply(stage_root, old, "0.12.0"))
+        interrupted = apply(stage_root, target, "0.13.0", check=False, env=environment(fail_after=stage))
+        assert interrupted.returncode == 2
+        status = parsed(manager(stage_root, "update", "status"))
+        assert status["recovery_required"] is True
+        assert status["active"]["current_version"] == ("0.13.0" if stage == "activated" else "0.12.0")
+        recovered = parsed(manager(stage_root, "update", "recover"))
+        assert recovered["recovered"] is True
+        assert recovered["active"]["current_version"] == "0.12.0"
+        assert parsed(launch(stage_root, "version"))["core_version"] == "0.12.0"
+
+
+def test_two_supported_core_upgrade_paths_reach_the_current_signed_core(tmp_path: Path) -> None:
+    private_key, public_key = signing_material(tmp_path)
+    catalog = yaml.safe_load(
+        (ROOT / "tests" / "fixtures" / "migrations" / "supported-upgrade-paths.yaml").read_text(encoding="utf-8")
+    )
+    target_version = catalog["target_core_version"]
+    target = build(tmp_path, ROOT, target_version, private_key, commit_char="7")
+    assert catalog["schema_edges"] == []
+    assert "schema version 1" in catalog["schema_edge_reason"]
+    for index, path in enumerate(catalog["upgrade_paths"], start=1):
+        old_version = path["from_core_version"]
+        old = build(
+            tmp_path,
+            synthetic_source(tmp_path, old_version),
+            old_version,
+            private_key,
+            commit_char=str(index + 7),
+        )
+        root = init_manager(tmp_path / f"upgrade-{old_version}", public_key)
+        parsed(apply(root, old, old_version))
+        upgraded = parsed(apply(root, target, target_version))
+        assert upgraded["active"]["previous_version"] == old_version
+        assert parsed(launch(root, "version"))["core_version"] == target_version
+
+
+def test_trusted_migration_failure_never_mutates_live_state(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sys.path.insert(0, str(MANAGER_PACKAGE))
+    from atomlearn_manager import statecopy
+
+    data_root = (tmp_path / "data").resolve()
+    profile = data_root / "profiles" / "default" / "state.yaml"
+    profile.parent.mkdir(parents=True)
+    profile.write_text(
+        yaml.safe_dump({"schema_version": 1, "revision": 2, "value": "unchanged"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    before = profile.read_bytes()
+
+    def fail_migration(value: dict) -> dict:
+        raise RuntimeError("injected trusted migration failure")
+
+    monkeypatch.setitem(statecopy.MIGRATIONS, ("user_profile", 1), fail_migration)
+    manifest = {
+        "version": "0.13.0",
+        "schemas": {"user_profile": {"read": [2], "write": 2}},
+    }
+    with pytest.raises(RuntimeError, match="injected trusted migration failure"):
+        statecopy.snapshot_and_migrate(tmp_path / "transaction", data_root, [], manifest)
+    assert profile.read_bytes() == before

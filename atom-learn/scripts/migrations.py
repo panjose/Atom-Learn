@@ -100,7 +100,7 @@ class MigrationRegistry:
 
     def migrate_document(self, namespace: str, value: dict[str, Any], to_version: int) -> dict[str, Any]:
         current = value.get("schema_version")
-        if not isinstance(current, int) or isinstance(current, bool):
+        if not isinstance(current, int) or isinstance(current, bool) or current < 1:
             raise MigrationError(f"{namespace} state has no valid schema_version")
         result = copy.deepcopy(value)
         for step in self.path(namespace, current, to_version):

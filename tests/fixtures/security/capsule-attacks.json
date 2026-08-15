@@ -1,0 +1,16 @@
+{
+  "cases": [
+    {"name": "raw_free_text", "path": ["raw_message"], "value": "the learner said a unique secret"},
+    {"name": "nested_free_text", "path": ["candidate", "summary"], "value": "private narrative"},
+    {"name": "windows_path", "path": ["workspace_path"], "value": "C:\\Users\\private-person\\course"},
+    {"name": "posix_path", "path": ["workspace_path"], "value": "/home/private-person/course"},
+    {"name": "source_url", "path": ["source_url"], "value": "https://example.com/private"},
+    {"name": "source_doi", "path": ["source_doi"], "value": "10.1234/private.1"},
+    {"name": "email", "path": ["account"], "value": "learner@example.com"},
+    {"name": "uuid", "path": ["stable_user_id"], "value": "123e4567-e89b-42d3-a456-426614174000"},
+    {"name": "precise_timestamp", "path": ["observed_at"], "value": "2026-08-15T12:34:56Z"},
+    {"name": "atom_identifier", "path": ["atom_id"], "value": "calculus.private.atom"},
+    {"name": "content_flag", "path": ["privacy", "raw_messages_included"], "value": true},
+    {"name": "stable_identifier_flag", "path": ["privacy", "stable_user_id_included"], "value": true}
+  ]
+}

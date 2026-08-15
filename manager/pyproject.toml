@@ -8,6 +8,7 @@ dependencies = [
   "jsonschema>=4.23",
   "platformdirs>=3.0",
   "cryptography>=42.0",
+  "tomli>=2.0; python_version < '3.11'",
 ]
 
 [project.scripts]

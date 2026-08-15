@@ -167,7 +167,7 @@ def plan_state(data_root: Path | None, workspaces: list[Path], manifest: dict[st
 
 def migrate_value(namespace: str, value: dict[str, Any], target_version: int) -> dict[str, Any]:
     current = value.get("schema_version")
-    if not isinstance(current, int):
+    if not isinstance(current, int) or isinstance(current, bool) or current < 1:
         raise ManagerError(f"{namespace} has no valid schema version")
     result = copy.deepcopy(value)
     for function in _migration_path(namespace, current, target_version):

@@ -2,13 +2,24 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "manifest_version", "skill_name", "core_version", "release_channel", "schemas", "artifact_sha256"],
+  "required": ["kind", "manifest_version", "skill_name", "core_version", "release_channel", "feature_defaults", "schemas", "artifact_sha256"],
   "properties": {
     "kind": {"const": "atomlearn.core-manifest"},
     "manifest_version": {"const": 1},
     "skill_name": {"const": "atom-learn"},
     "core_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
     "release_channel": {"enum": ["development", "prerelease", "stable"]},
+    "feature_defaults": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["global_personalization", "strategy_experiments", "capsule_export", "release_manager"],
+      "properties": {
+        "global_personalization": {"const": false},
+        "strategy_experiments": {"const": false},
+        "capsule_export": {"const": false},
+        "release_manager": {"const": false}
+      }
+    },
     "schemas": {
       "type": "object",
       "minProperties": 1,

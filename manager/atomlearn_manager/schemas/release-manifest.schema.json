@@ -3,7 +3,7 @@
   "$id": "https://atomlearn.dev/schemas/release-manifest.schema.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "manifest_version", "version", "channel", "tag", "source", "artifact", "core_manifest_sha256", "core_content_sha256", "gate_report_sha256", "min_manager_version", "schemas", "signature"],
+  "required": ["kind", "manifest_version", "version", "channel", "tag", "source", "artifact", "manager_artifact", "core_manifest_sha256", "core_content_sha256", "gate_report_sha256", "min_manager_version", "schemas", "signature"],
   "properties": {
     "kind": {"const": "atomlearn.release-manifest"},
     "manifest_version": {"const": 1},
@@ -28,6 +28,18 @@
       "properties": {
         "filename": {"type": "string", "pattern": "^atomlearn-[0-9A-Za-z.+-]+\\.zip$"},
         "format": {"const": "zip"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "size": {"type": "integer", "minimum": 1}
+      }
+    },
+    "manager_artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "filename", "format", "sha256", "size"],
+      "properties": {
+        "version": {"$ref": "#/$defs/version"},
+        "filename": {"type": "string", "pattern": "^atomlearn_manager-[0-9A-Za-z.+-]+-py3-none-any\\.whl$"},
+        "format": {"const": "wheel"},
         "sha256": {"$ref": "#/$defs/hash"},
         "size": {"type": "integer", "minimum": 1}
       }

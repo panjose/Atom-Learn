@@ -1,0 +1,101 @@
+name: Release signed AtomLearn Core
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: atomlearn-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release-gates:
+    name: Release gates / ${{ matrix.os }} / Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install Core Manager and release-test dependencies
+        run: python -m pip install -e ".[dev]" -e ./manager
+      - name: Validate Skill Core and default-off rollout contract
+        run: python release/gate.py validate-skill
+      - name: Run fast property and contract tests
+        run: python -m pytest -m fast
+      - name: Run complete integration fault privacy replay and compatibility tests
+        run: python -m pytest -m integration
+      - name: Verify installed command surfaces
+        run: atomlearn --help && atomlearn version && atomlearn-manager --help && atomlearn-core --help && atomlearn-release --help
+
+  publish:
+    name: Build sign and publish immutable release assets
+    needs: release-gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    env:
+      PYTHONUTF8: "1"
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_PRIVATE_KEY: ${{ secrets.ATOMLEARN_RELEASE_PRIVATE_KEY }}
+      RELEASE_KEY_ID: ${{ vars.ATOMLEARN_RELEASE_KEY_ID }}
+      ATOMLEARN_RELEASE_GATES_PASSED: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+      - name: Require exact tag and configured signing identity
+        shell: bash
+        run: |
+          test "$(git tag --points-at HEAD --list '${{ github.ref_name }}')" = "${{ github.ref_name }}"
+          test -n "$RELEASE_PRIVATE_KEY"
+          test -n "$RELEASE_KEY_ID"
+      - name: Install isolated release tooling
+        run: python -m pip install -e ./manager build
+      - name: Attest completed matrix
+        run: python release/gate.py write --tag "${{ github.ref_name }}" --commit-sha "${{ github.sha }}" --output "dist/gate-report.json"
+      - name: Materialize ephemeral signing key
+        shell: bash
+        run: printf '%s' "$RELEASE_PRIVATE_KEY" > "$RUNNER_TEMP/atomlearn-release-key.txt"
+      - name: Build Manager wheel then deterministic signed Core identity
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          export SOURCE_DATE_EPOCH="$(git show -s --format=%ct HEAD)"
+          python -m build manager --wheel --outdir dist
+          MANAGER_WHEEL="$(find dist -maxdepth 1 -type f -name 'atomlearn_manager-*-py3-none-any.whl' -print -quit)"
+          test -n "$MANAGER_WHEEL"
+          python -m atomlearn_manager.builder . \
+            --output-dir dist \
+            --tag "$GITHUB_REF_NAME" \
+            --commit-sha "$GITHUB_SHA" \
+            --artifact-url "https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/atomlearn-${VERSION}.zip" \
+            --repository "$GITHUB_REPOSITORY" \
+            --channel stable \
+            --key-id "$RELEASE_KEY_ID" \
+            --private-key "$RUNNER_TEMP/atomlearn-release-key.txt" \
+            --gate-report dist/gate-report.json \
+            --manager-artifact "$MANAGER_WHEEL"
+      - name: Publish exact immutable tag assets
+        shell: bash
+        run: gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --generate-notes --title "AtomLearn $GITHUB_REF_NAME"

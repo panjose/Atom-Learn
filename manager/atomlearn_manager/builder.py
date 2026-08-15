@@ -7,7 +7,6 @@ import base64
 import json
 import os
 import sys
-import tomllib
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,11 @@ from urllib.parse import urlparse
 import yaml
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 from . import MANAGER_VERSION
 from .common import ManagerError, atomic_text, is_reparse_or_symlink, require_schema, sha256_bytes, sha256_file
@@ -69,6 +73,7 @@ def build_release(
     key_id: str,
     private_key_path: Path,
     gate_report_path: Path,
+    manager_artifact_path: Path,
     channel: str,
     repository: str,
 ) -> dict[str, Any]:
@@ -90,6 +95,15 @@ def build_release(
     require_schema(gate, "release-gate-report")
     if gate["tag"] != tag or gate["commit_sha"] != commit_sha:
         raise ManagerError("Release gate report tag/commit does not match the requested release")
+    manager_artifact_path = manager_artifact_path.resolve()
+    expected_manager_prefix = f"atomlearn_manager-{MANAGER_VERSION}-"
+    if (
+        not manager_artifact_path.is_file()
+        or is_reparse_or_symlink(manager_artifact_path)
+        or not manager_artifact_path.name.startswith(expected_manager_prefix)
+        or not manager_artifact_path.name.endswith("-py3-none-any.whl")
+    ):
+        raise ManagerError("Manager artifact must be the expected regular universal wheel")
     gate_bytes = json.dumps(gate, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     by_name["release/gate-report.json"] = gate_bytes
     core_path = "atom-learn/assets/core-manifest.yaml"
@@ -139,6 +153,13 @@ def build_release(
             "sha256": artifact_hash,
             "size": artifact_path.stat().st_size,
         },
+        "manager_artifact": {
+            "version": MANAGER_VERSION,
+            "filename": manager_artifact_path.name,
+            "format": "wheel",
+            "sha256": sha256_file(manager_artifact_path),
+            "size": manager_artifact_path.stat().st_size,
+        },
         "core_manifest_sha256": sha256_bytes(by_name[core_path]),
         "core_content_sha256": tree_hash,
         "gate_report_sha256": sha256_bytes(gate_bytes),
@@ -154,21 +175,23 @@ def build_release(
         "artifact_sha256": artifact_hash,
         "manifest": str(manifest_path),
         "core_content_sha256": tree_hash,
+        "manager_artifact_sha256": manifest["manager_artifact"]["sha256"],
     }
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Build a deterministic signed AtomLearn release artifact")
-    parser.add_argument("source")
-    parser.add_argument("--output-dir", required=True)
-    parser.add_argument("--tag", required=True)
-    parser.add_argument("--commit-sha", required=True)
-    parser.add_argument("--artifact-url", required=True)
-    parser.add_argument("--repository", default="panjose/Atom-Learn")
-    parser.add_argument("--channel", choices=["prerelease", "stable"], required=True)
-    parser.add_argument("--key-id", required=True)
-    parser.add_argument("--private-key", required=True)
-    parser.add_argument("--gate-report", required=True)
+    parser.add_argument("source", help="Repository source root containing the versioned Core package")
+    parser.add_argument("--output-dir", required=True, help="New artifact destination directory")
+    parser.add_argument("--tag", required=True, help="Immutable v<version> Git tag")
+    parser.add_argument("--commit-sha", required=True, help="Exact lowercase 40-character release commit")
+    parser.add_argument("--artifact-url", required=True, help="Exact tagged GitHub URL for the future Core ZIP asset")
+    parser.add_argument("--repository", default="panjose/Atom-Learn", help="Trusted GitHub owner/repository identity")
+    parser.add_argument("--channel", choices=["prerelease", "stable"], required=True, help="Signed release channel")
+    parser.add_argument("--key-id", required=True, help="Trusted Ed25519 signing-key identifier")
+    parser.add_argument("--private-key", required=True, help="Unencrypted Ed25519 PEM or raw base64 private-key file")
+    parser.add_argument("--gate-report", required=True, help="Schema-valid CI gate report for this exact tag and commit")
+    parser.add_argument("--manager-artifact", required=True, help="Built atomlearn-manager universal wheel")
     return parser
 
 
@@ -183,6 +206,7 @@ def run(argv: list[str] | None = None) -> None:
         key_id=args.key_id,
         private_key_path=Path(args.private_key),
         gate_report_path=Path(args.gate_report),
+        manager_artifact_path=Path(args.manager_artifact),
         channel=args.channel,
         repository=args.repository,
     )

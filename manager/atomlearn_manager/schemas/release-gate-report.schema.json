@@ -20,13 +20,17 @@
     "gates": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["full_tests", "skill_validator", "migration_fixtures", "manager_upgrade_tests", "security_archive_tests"],
+      "required": ["full_tests", "skill_validator", "migration_fixtures", "manager_upgrade_tests", "security_archive_tests", "property_tests", "fault_injection", "privacy_attacks", "replay_compatibility"],
       "properties": {
         "full_tests": {"const": true},
         "skill_validator": {"const": true},
         "migration_fixtures": {"const": true},
         "manager_upgrade_tests": {"const": true},
-        "security_archive_tests": {"const": true}
+        "security_archive_tests": {"const": true},
+        "property_tests": {"const": true},
+        "fault_injection": {"const": true},
+        "privacy_attacks": {"const": true},
+        "replay_compatibility": {"const": true}
       }
     }
   }
