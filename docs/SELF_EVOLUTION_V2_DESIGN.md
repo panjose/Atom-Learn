@@ -2,7 +2,7 @@
 
 | 项目 | 内容 |
 | --- | --- |
-| 文档状态 | Implementation in progress；Phase 0 已实现 |
+| 文档状态 | Implementation in progress；Phase 0–1 已实现 |
 | 更新时间 | 2026-08-15 |
 | 前置基线 | [自进化 v1](SELF_EVOLUTION_DESIGN.md)、[Session Adaptation](SESSION_ADAPTATION_DESIGN.md) |
 | 适用范围 | 用户跨课程个性化、课程内有边界进化、产品级证据发布闭环 |

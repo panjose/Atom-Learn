@@ -2656,6 +2656,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage AtomLearn course state")
     sub = parser.add_subparsers(dest="command", required=True)
 
+    sub.add_parser("version", help="Show Core version and schema compatibility manifest")
+    migrate_parser = sub.add_parser("migrate", help="Plan and validate deterministic state migrations", add_help=False)
+    migrate_parser.add_argument("-h", "--help", action="store_true", dest="migration_help")
+    migrate_parser.add_argument("migration_args", nargs=argparse.REMAINDER)
     start_parser = sub.add_parser("start", help="Create or resume a course from one request", add_help=False)
     start_parser.add_argument("-h", "--help", action="store_true", dest="start_help")
     start_parser.add_argument("start_args", nargs=argparse.REMAINDER)
@@ -2797,6 +2801,29 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def run(args: argparse.Namespace) -> None:
+    if args.command == "version":
+        from platform_state import load_core_manifest
+
+        manifest = load_core_manifest()
+        emit(
+            {
+                "ok": True,
+                "skill_name": manifest["skill_name"],
+                "core_version": manifest["core_version"],
+                "release_channel": manifest["release_channel"],
+                "schemas": manifest["schemas"],
+            }
+        )
+        return
+    if args.command == "migrate":
+        from migrations import MigrationError, run as run_migrations
+        from platform_state import PlatformStateError
+
+        try:
+            run_migrations(["--help"] if args.migration_help else args.migration_args)
+        except (MigrationError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "start":
         from intake import IntakeError
         from rag import RagError

@@ -12,7 +12,7 @@
 | Phase | 状态 |
 | --- | --- |
 | Phase 0：契约、ADR 与威胁模型 | Implemented |
-| Phase 1：版本与迁移底座 | Planned |
+| Phase 1：版本与迁移底座 | Implemented |
 | Phase 2：User Profile 与 Effective Policy | Planned |
 | Phase 3：Strategy Experiments | Planned |
 | Phase 4：Evolution Capsule | Planned |

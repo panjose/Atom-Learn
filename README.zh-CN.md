@@ -53,6 +53,8 @@ atomlearn --help
 ## 快速验证
 
 ```powershell
+atomlearn version
+atomlearn migrate status
 atomlearn init courses/calculus --course-id calculus --title "Calculus" --goal "Understand derivatives"
 atomlearn import-plan courses/calculus --input examples/calculus-mini/plan.yaml --expected-revision 0
 atomlearn validate courses/calculus
@@ -60,6 +62,8 @@ atomlearn status courses/calculus --json
 ```
 
 每次课程渲染都会写出五份英文视图和对齐的 `*.zh-CN.md` 中文生成视图，包括 `LEARNING_MAP.zh-CN.md`、`CURRENT.zh-CN.md` 与 `PROGRESS.zh-CN.md`。Atom 标题和学习者内容保持原样；导航标签、状态和操作文字会本地化。完整命令流程和教学行为见 [SKILL.md](atom-learn/SKILL.md)，结构化输入格式见 [SCHEMA.md](atom-learn/references/SCHEMA.md)。运行时课程状态存放在学习者选择的课程工作区，而不是 Skill 安装目录。
+
+Core `0.13.0` 新增只读兼容性 manifest 和确定性迁移规划。`atomlearn migrate status|plan|validate` 不会应用迁移；仅查看状态也不会创建平台用户数据目录。详见 [Core 版本与迁移](atom-learn/references/MIGRATIONS.md)。
 
 ## 灵活课程输入
 
@@ -237,7 +241,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py
 ```
 
 快速测试覆盖 CLI/帮助契约、打包、文档、Schema 和确定性辅助逻辑；集成测试覆盖完整的文件系统与子进程工作流。CI 会在 Ubuntu 与 Windows 上使用 Python 3.10、3.11、3.12 和 3.13 运行两层测试。测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

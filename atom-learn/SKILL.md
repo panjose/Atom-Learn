@@ -23,6 +23,8 @@ When the repository is installed, the equivalent short entry point is `atomlearn
 
 Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, including learning, evolution, and research views, as generated. Core course rendering maintains both English files and aligned `*.zh-CN.md` Chinese views; use the learner's language without translating their Atom titles or content. Do not edit generated views to mutate state.
 
+Inspect Core and state compatibility with `atomlearn version` and `atomlearn migrate status|plan|validate`. Read [references/MIGRATIONS.md](references/MIGRATIONS.md) before troubleshooting schema compatibility. Keep the Core directory read-only during learning; migration application belongs to the trusted release workflow, never a course session.
+
 ## Choose a workflow
 
 ### Start from any input
@@ -331,6 +333,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/LINEAGE_SCHEMA.md](references/LINEAGE_SCHEMA.md) when creating semantic annotations, relations, or curated threads, or troubleshooting lineage state.
 - Read [references/FLEXIBLE_PROGRESSION.md](references/FLEXIBLE_PROGRESSION.md) when the learner asks to skip, postpone, fast-track, test out of, or restore an Atom.
 - Read [references/DETAILED_EXPANSION.md](references/DETAILED_EXPANSION.md) when the learner asks for a detailed, step-by-step, decomposed, or deeper explanation of an Atom.
+- Read [references/MIGRATIONS.md](references/MIGRATIONS.md) when inspecting Core versions, schema compatibility, stale state, or update planning.
 
 ## Completion standard
 

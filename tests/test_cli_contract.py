@@ -11,7 +11,17 @@ SCRIPTS = ROOT / "atom-learn" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
 
-MODULES = ["atomlearn", "intake", "rag", "adaptation", "evolution", "research", "exam", "lineage"]
+MODULES = [
+    "atomlearn",
+    "intake",
+    "rag",
+    "adaptation",
+    "evolution",
+    "research",
+    "exam",
+    "lineage",
+    "migrations",
+]
 
 
 def subparser_action(parser: argparse.ArgumentParser) -> argparse._SubParsersAction:
@@ -31,6 +41,7 @@ def local_module(module_name: str):
     spec = importlib.util.spec_from_file_location(f"_atomlearn_cli_{module_name}", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 
@@ -50,6 +61,13 @@ def test_short_console_entry_point_and_supported_python_range_are_declared() -> 
     project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'atomlearn = "atomlearn:main"' in project
     assert 'requires-python = ">=3.10"' in project
+
+
+def test_package_version_matches_core_manifest() -> None:
+    project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    manifest = (ROOT / "atom-learn" / "assets" / "core-manifest.yaml").read_text(encoding="utf-8")
+    assert 'version = "0.13.0"' in project
+    assert "core_version: 0.13.0" in manifest
 
 
 def test_core_renderer_produces_chinese_view_labels() -> None:

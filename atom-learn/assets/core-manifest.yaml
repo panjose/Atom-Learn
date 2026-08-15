@@ -1,0 +1,37 @@
+kind: atomlearn.core-manifest
+manifest_version: 1
+skill_name: atom-learn
+core_version: 0.13.0
+release_channel: development
+schemas:
+  workspace_core:
+    read: [1]
+    write: 1
+  workspace_adaptation:
+    read: [1]
+    write: 1
+  workspace_evolution:
+    read: [1]
+    write: 1
+  workspace_intake:
+    read: [1]
+    write: 1
+  workspace_rag:
+    read: [1]
+    write: 1
+  workspace_research:
+    read: [1]
+    write: 1
+  workspace_exam:
+    read: [1]
+    write: 1
+  workspace_lineage:
+    read: [1]
+    write: 1
+  user_profile:
+    read: [1]
+    write: 1
+  user_strategy:
+    read: [1]
+    write: 1
+artifact_sha256: sha256:0000000000000000000000000000000000000000000000000000000000000000
