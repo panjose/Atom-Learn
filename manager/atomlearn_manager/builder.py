@@ -22,8 +22,17 @@ except ModuleNotFoundError:  # Python 3.10
     import tomli as tomllib
 
 from . import MANAGER_VERSION
-from .common import ManagerError, atomic_text, is_reparse_or_symlink, require_schema, sha256_bytes, sha256_file
-from .manifest import sign_manifest
+from .common import (
+    ManagerError,
+    atomic_text,
+    is_reparse_or_symlink,
+    read_mapping,
+    require_schema,
+    sha256_bytes,
+    sha256_file,
+)
+from .manifest import key_fingerprint, sign_manifest, validate_trust_bundle
+from .runtime import inspect_runtime_bundle
 from .verify import ZERO_HASH, content_tree_hash
 
 
@@ -74,6 +83,8 @@ def build_release(
     private_key_path: Path,
     gate_report_path: Path,
     manager_artifact_path: Path,
+    runtime_bundle_paths: list[Path],
+    trust_bundle_path: Path,
     channel: str,
     repository: str,
 ) -> dict[str, Any]:
@@ -108,6 +119,61 @@ def build_release(
         or not manager_artifact_path.name.endswith("-py3-none-any.whl")
     ):
         raise ManagerError("Manager artifact must be the expected regular universal wheel")
+    if not trust_bundle_path.is_file() or is_reparse_or_symlink(trust_bundle_path):
+        raise ManagerError("Release trust bundle must be a regular local file")
+    trust_bundle = read_mapping(trust_bundle_path)
+    require_schema(trust_bundle, "trust-bundle")
+    validate_trust_bundle(trust_bundle)
+    if trust_bundle["repository"] != repository:
+        raise ManagerError("Release trust bundle repository does not match the release repository")
+    signing_key = _private_key(private_key_path)
+    signing_public = base64.b64encode(
+        signing_key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    ).decode("ascii")
+    signing_records = [item for item in trust_bundle["keys"] if item["key_id"] == key_id]
+    if len(signing_records) != 1 or signing_records[0]["status"] != "active":
+        raise ManagerError("Release signing key must be exactly one active trust-bundle key")
+    signing_record = signing_records[0]
+    if (
+        signing_record["public_key"] != signing_public
+        or signing_record["fingerprint"] != key_fingerprint(signing_public)
+    ):
+        raise ManagerError("Release private key does not match the active trust-bundle identity")
+    runtime_bundles = []
+    runtime_ids: set[str] = set()
+    for runtime_path in runtime_bundle_paths:
+        runtime_path = runtime_path.resolve()
+        inspected_runtime = inspect_runtime_bundle(runtime_path)
+        recipe = inspected_runtime["recipe"]
+        if recipe["core_version"] != version:
+            raise ManagerError("Runtime bundle Core version does not match the release")
+        if recipe["id"] in runtime_ids:
+            raise ManagerError(f"Duplicate runtime bundle id: {recipe['id']}")
+        runtime_ids.add(recipe["id"])
+        runtime_bundles.append(
+            {
+                "id": recipe["id"],
+                "platform": recipe["platform"],
+                "architecture": recipe["architecture"],
+                "python_minor": recipe["python_minor"],
+                "filename": runtime_path.name,
+                "url": f"https://github.com/{repository}/releases/download/{tag}/{runtime_path.name}",
+                "sha256": sha256_file(runtime_path),
+                "size": runtime_path.stat().st_size,
+                "recipe_sha256": inspected_runtime["recipe_sha256"],
+                "core_wheel": recipe["core_wheel"],
+            }
+        )
+    required_matrix = {
+        (system, "amd64", python_minor)
+        for system in ["linux", "windows"]
+        for python_minor in ["3.10", "3.11", "3.12", "3.13"]
+    }
+    actual_matrix = {(item["platform"], item["architecture"], item["python_minor"]) for item in runtime_bundles}
+    if channel == "stable" and actual_matrix != required_matrix:
+        missing = sorted(required_matrix - actual_matrix)
+        extra = sorted(actual_matrix - required_matrix)
+        raise ManagerError(f"Stable release runtime matrix mismatch; missing={missing}, extra={extra}")
     by_name["release/gate-report.json"] = gate_bytes
     core_path = "atom-learn/assets/core-manifest.yaml"
     core = yaml.safe_load(by_name[core_path].decode("utf-8"))
@@ -119,6 +185,9 @@ def build_release(
     tree_hash = content_tree_hash(by_name.items())
     core["artifact_sha256"] = tree_hash
     by_name[core_path] = yaml.safe_dump(core, allow_unicode=True, sort_keys=False, width=100).encode("utf-8")
+    capability_ledger = yaml.safe_load(by_name[core["capability_ledger"]].decode("utf-8"))
+    if not isinstance(capability_ledger, dict) or not isinstance(capability_ledger.get("required_smoke"), list):
+        raise ManagerError("Capability ledger must declare the release smoke matrix")
     filename = f"atomlearn-{version}.zip"
     parsed = urlparse(artifact_url)
     expected_path = f"/{repository}/releases/download/{tag}/{filename}"
@@ -140,7 +209,7 @@ def build_release(
     artifact_hash = sha256_file(artifact_path)
     unsigned = {
         "kind": "atomlearn.release-manifest",
-        "manifest_version": 1,
+        "manifest_version": 2,
         "version": version,
         "channel": channel,
         "tag": tag,
@@ -168,8 +237,22 @@ def build_release(
         "gate_report_sha256": sha256_bytes(gate_bytes),
         "min_manager_version": MANAGER_VERSION,
         "schemas": core["schemas"],
+        "skill_protocol": {
+            "version": core["skill_protocol_version"],
+            "entrypoint": "atom-learn/SKILL.md",
+            "entrypoint_sha256": sha256_bytes(by_name["atom-learn/SKILL.md"]),
+            "bridge_min": 1,
+            "bridge_max": 1,
+        },
+        "runtime_bundles": sorted(runtime_bundles, key=lambda item: item["id"]),
+        "capabilities": {
+            "ledger_sha256": sha256_bytes(by_name[core["capability_ledger"]]),
+            "required_smoke": capability_ledger["required_smoke"],
+        },
+        "smoke_fixture_sha256": sha256_bytes(by_name[core["smoke_fixtures"]]),
+        "trust": {"bundle_version": trust_bundle["bundle_version"], "key_id": key_id},
     }
-    manifest = sign_manifest(unsigned, key_id, _private_key(private_key_path))
+    manifest = sign_manifest(unsigned, key_id, signing_key)
     atomic_text(manifest_path, json.dumps(manifest, ensure_ascii=False, indent=2) + "\n")
     return {
         "ok": True,
@@ -179,6 +262,8 @@ def build_release(
         "manifest": str(manifest_path),
         "core_content_sha256": tree_hash,
         "manager_artifact_sha256": manifest["manager_artifact"]["sha256"],
+        "runtime_bundles": [item["filename"] for item in manifest["runtime_bundles"]],
+        "runtime_bundle_paths": [str(path.resolve()) for path in runtime_bundle_paths],
     }
 
 
@@ -195,6 +280,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--private-key", required=True, help="Unencrypted Ed25519 PEM or raw base64 private-key file")
     parser.add_argument("--gate-report", required=True, help="Schema-valid CI gate report for this exact tag and commit")
     parser.add_argument("--manager-artifact", required=True, help="Built atomlearn-manager universal wheel")
+    parser.add_argument(
+        "--trust-bundle", required=True,
+        help="Local public trust bundle containing the active key matching --private-key",
+    )
+    parser.add_argument(
+        "--runtime-bundle", action="append", required=True,
+        help="Signed-input runtime bundle; repeat for every supported OS/Python target",
+    )
     return parser
 
 
@@ -210,6 +303,8 @@ def run(argv: list[str] | None = None) -> None:
         private_key_path=Path(args.private_key),
         gate_report_path=Path(args.gate_report),
         manager_artifact_path=Path(args.manager_artifact),
+        runtime_bundle_paths=[Path(path) for path in args.runtime_bundle],
+        trust_bundle_path=Path(args.trust_bundle),
         channel=args.channel,
         repository=args.repository,
     )

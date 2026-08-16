@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "id", "core_version", "platform",
+    "architecture", "python_minor", "core_wheel", "wheels"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.runtime-bundle"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9._-]{3,128}$"},
+    "core_version": {"$ref": "#/$defs/version"},
+    "platform": {"enum": ["linux", "windows"]},
+    "architecture": {"enum": ["amd64", "arm64"]},
+    "python_minor": {"type": "string", "pattern": "^3\\.(10|11|12|13)$"},
+    "core_wheel": {"$ref": "#/$defs/wheel"},
+    "wheels": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/wheel"}
+    }
+  },
+  "$defs": {
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "wheel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["filename", "sha256", "size"],
+      "properties": {
+        "filename": {"type": "string", "pattern": "^[A-Za-z0-9_.+-]+\\.whl$"},
+        "sha256": {"$ref": "#/$defs/hash"},
+        "size": {"type": "integer", "minimum": 1}
+      }
+    }
+  }
+}

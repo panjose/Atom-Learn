@@ -92,9 +92,9 @@ Arbitrary downgrade and release purging are intentionally absent. See [Signed Re
 
 ## Stable release procedure
 
-Stable publication requires an exact `v<package-version>` tag. Configure the repository secret `ATOMLEARN_RELEASE_PRIVATE_KEY` with an Ed25519 PEM or raw base64 private key, and the repository variable `ATOMLEARN_RELEASE_KEY_ID` with the matching trusted key ID. Keep the private key outside source control and distribute the public trust root separately.
+Stable publication requires an exact `v<package-version>` tag. Configure the repository secret `ATOMLEARN_RELEASE_PRIVATE_KEY` with an Ed25519 PEM or raw base64 private key, and the repository variable `ATOMLEARN_RELEASE_KEY_ID` with the matching trusted key ID. Keep the private key outside source control. Publish `release/atomlearn-trust-bundle.json` for bootstrap convenience, but distribute or verify its fingerprint through an independent channel before describing the trust root as pinned.
 
-The tag workflow runs fast and integration suites on Windows and Linux with Python 3.10–3.13. It also runs property, migration, upgrade, fault-injection, privacy-attack, replay, backward-compatibility, CLI, documentation, and Skill/Core contract gates. Only after every matrix cell passes does it create the gate report, Manager wheel, deterministic Core ZIP, and immutable GitHub Release assets. The Manager wheel's identity and hash are covered by the same signed release manifest.
+The tag workflow runs fast and integration suites on Windows and Linux with Python 3.10–3.13. Every matrix cell also builds a complete binary wheelhouse and deterministic target runtime bundle. Only after property, migration, upgrade, fault-injection, privacy-attack, replay, backward-compatibility, CLI, documentation, Skill/Core contract, and runtime gates all pass does the publish job create manifest v2, the Manager wheel, deterministic Core ZIP, public trust bundle, and all eight immutable runtime assets. Manager identity, Skill protocol, capability smoke fixtures, trust-bundle version, runtime recipes, and asset hashes are covered by the signed manifest.
 
 The workflow refuses branch publication. The release builder refuses tag/package/Core disagreement, a prerelease stable version, a mutable asset URL, a mismatched commit gate report, an existing output, or a missing signing identity.
 

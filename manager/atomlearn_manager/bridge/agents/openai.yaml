@@ -1,0 +1,4 @@
+interface:
+  display_name: AtomLearn
+  short_description: Resolve the active signed atomic-learning Core
+  default_prompt: Use $atom-learn to resolve and follow the active signed AtomLearn Core.

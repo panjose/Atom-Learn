@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "schema_version", "id", "target_version", "previous_version", "previous_active", "status", "stage", "manifest_hash", "artifact_hash", "release_manifest_path", "artifact_path", "data_root", "workspaces", "state_files", "pointer_switched", "created_at", "updated_at", "error"],
+  "required": ["kind", "schema_version", "id", "target_version", "previous_version", "previous_active", "status", "stage", "manifest_hash", "artifact_hash", "release_manifest_path", "artifact_path", "runtime_id", "runtime_bundle_path", "data_root", "workspaces", "state_files", "pointer_switched", "created_at", "updated_at", "error"],
   "properties": {
     "kind": {"const": "atomlearn.manager-transaction"},
     "schema_version": {"const": 1},
@@ -22,17 +22,25 @@
             "current_version": {"$ref": "#/$defs/version"},
             "previous_version": {"type": ["string", "null"]},
             "manifest_hash": {"$ref": "#/$defs/hash"},
-            "transaction_id": {"type": "string", "pattern": "^txn-[0-9a-f]{32}$"}
-          }
+            "transaction_id": {"type": "string", "pattern": "^txn-[0-9a-f]{32}$"},
+            "runtime_id": {"type": "string", "pattern": "^[a-z0-9._-]{3,128}$"},
+            "skill_protocol_version": {"type": "integer", "minimum": 1}
+          },
+          "allOf": [
+            {"if": {"required": ["runtime_id"]}, "then": {"required": ["skill_protocol_version"]}},
+            {"if": {"required": ["skill_protocol_version"]}, "then": {"required": ["runtime_id"]}}
+          ]
         }
       ]
     },
     "status": {"enum": ["in_progress", "committed", "failed", "recovered", "needs_manual_recovery", "rolled_back"]},
-    "stage": {"enum": ["planned", "downloaded", "verified", "state_copied", "installed", "health_checked", "state_applied", "activated", "committed", "recovered", "rolled_back"]},
+    "stage": {"enum": ["planned", "downloaded", "verified", "state_copied", "installed", "runtime_installed", "health_checked", "state_applied", "activated", "committed", "recovered", "rolled_back"]},
     "manifest_hash": {"$ref": "#/$defs/hash"},
     "artifact_hash": {"$ref": "#/$defs/hash"},
     "release_manifest_path": {"type": "string", "minLength": 1},
     "artifact_path": {"type": "string", "minLength": 1},
+    "runtime_id": {"type": ["string", "null"], "pattern": "^[a-z0-9._-]{3,128}$"},
+    "runtime_bundle_path": {"type": ["string", "null"]},
     "data_root": {"type": ["string", "null"]},
     "workspaces": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
     "state_files": {

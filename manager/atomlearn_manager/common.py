@@ -60,7 +60,15 @@ def manager_root(override: str | Path | None = None, *, create: bool = False) ->
         raise ManagerError(f"Manager root must be absolute: {candidate}")
     result = candidate.resolve(strict=False)
     if create:
-        for child in [result, result / "releases", result / "staging", result / "transactions", result / "manifests"]:
+        for child in [
+            result,
+            result / "releases",
+            result / "runtimes",
+            result / "wheelhouses",
+            result / "staging",
+            result / "transactions",
+            result / "manifests",
+        ]:
             child.mkdir(parents=True, exist_ok=True)
     return result
 

@@ -1,6 +1,7 @@
 kind: atomlearn.capability-ledger
 schema_version: 1
 core_version: 0.13.0
+required_smoke: [core, bridge, documents, rag, exam, research]
 capabilities:
   - id: learning.atomic_state_machine
     title: Single-Active-Atom learning state machine and mastery Evidence guards
@@ -150,7 +151,7 @@ capabilities:
       - Current promotion logic lacks calibrated uncertainty intervals and minimum detectable effect checks.
 
   - id: release.signed_side_by_side_v1
-    title: Signed immutable side-by-side Core update recovery and paired rollback
+    title: Legacy manifest v1 signed side-by-side update compatibility
     status: experimental
     default_mode: opt_in
     public_claim: true
@@ -165,8 +166,7 @@ capabilities:
         symbol: "test_signed_side_by_side_upgrade_and_paired_rollback"
     documentation: [README.md, README.zh-CN.md, atom-learn/references/RELEASE_MANAGER.md]
     limitations:
-      - The v1 manager does not yet update the installed Codex bridge Skill or build a per-release runtime.
-      - Authenticated private GitHub Release transport is not implemented in v1.
+      - Legacy manifest v1 releases remain verifiable for recovery and rollback but do not declare a bridge protocol or isolated runtime.
 
   - id: documents.shared_ir_v1
     title: Shared layout-preserving Document IR for RAG exam and research ingestion
@@ -206,15 +206,40 @@ capabilities:
 
   - id: release.bridge_runtime_v2
     title: Trusted bridge Skill manifest v2 signed wheelhouse and isolated runtime
-    status: planned
-    default_mode: unavailable
-    public_claim: false
-    interfaces: []
-    implementation: []
-    verification: []
-    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    status: implemented
+    default_mode: opt_in
+    public_claim: true
+    interfaces:
+      - atomlearn-manager init
+      - atomlearn-manager trust
+      - atomlearn-manager codex
+      - atomlearn-manager update
+      - atomlearn-core
+      - atomlearn-runtime-bundle
+    implementation:
+      - path: manager/atomlearn_manager/codex.py
+        symbol: "def resolve_core_skill"
+      - path: manager/atomlearn_manager/runtime.py
+        symbol: "def install_runtime"
+      - path: manager/atomlearn_manager/transport.py
+        symbol: "def open_release_asset"
+      - path: manager/atomlearn_manager/manifest.py
+        symbol: "def rotate_trust"
+    verification:
+      - path: tests/test_manager.py
+        symbol: "test_signed_side_by_side_upgrade_and_paired_rollback"
+      - path: tests/test_manager.py
+        symbol: "test_every_update_persistence_stage_recovers_to_the_old_core"
+      - path: tests/test_manager_contracts.py
+        symbol: "test_release_manifest_network_failures_are_typed_and_never_assert"
+    documentation:
+      - README.md
+      - README.zh-CN.md
+      - atom-learn/references/RELEASE_MANAGER.md
+      - docs/V0_14_REMEDIATION_DESIGN.md
     limitations:
-      - This is a v0.14 implementation target, not a current capability.
+      - The published convenience trust bundle is strongly trusted only when its fingerprint is verified through an independent channel.
+      - The stable CI runtime matrix currently targets amd64 Windows and Linux; the bundle schema also models arm64 for future release gates.
 
   - id: review.adaptive_memory_v1
     title: Per-Atom adaptive memory state and workload-aware daily scheduling

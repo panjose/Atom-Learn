@@ -170,6 +170,18 @@ def verify_release(manifest: dict[str, Any], artifact: Path) -> dict[str, Any]:
         raise ManagerError("Package, Core manifest, and release manifest versions/channels disagree")
     if core["schemas"] != manifest["schemas"]:
         raise ManagerError("Core and release schema compatibility declarations disagree")
+    if manifest.get("manifest_version") == 2:
+        protocol = manifest["skill_protocol"]
+        if core["skill_protocol_version"] != protocol["version"]:
+            raise ManagerError("Core and release Skill protocol versions disagree")
+        if sha256_bytes(files[protocol["entrypoint"]]) != protocol["entrypoint_sha256"]:
+            raise ManagerError("Signed Skill entry point hash does not match the Core artifact")
+        ledger_path = core["capability_ledger"]
+        fixture_path = core["smoke_fixtures"]
+        if ledger_path not in files or sha256_bytes(files[ledger_path]) != manifest["capabilities"]["ledger_sha256"]:
+            raise ManagerError("Signed capability ledger is missing or inconsistent")
+        if fixture_path not in files or sha256_bytes(files[fixture_path]) != manifest["smoke_fixture_sha256"]:
+            raise ManagerError("Signed smoke fixture bundle is missing or inconsistent")
     tree_hash = content_tree_hash(inspected["files"])
     if tree_hash != manifest["core_content_sha256"] or core["artifact_sha256"] != tree_hash:
         raise ManagerError("Normalized Core content hash is inconsistent")

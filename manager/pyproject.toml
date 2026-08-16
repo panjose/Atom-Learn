@@ -1,6 +1,6 @@
 [project]
 name = "atomlearn-manager"
-version = "0.1.0"
+version = "0.2.0"
 description = "Stable signed release manager for side-by-side AtomLearn Core installations"
 requires-python = ">=3.10"
 dependencies = [
@@ -15,10 +15,11 @@ dependencies = [
 atomlearn-manager = "atomlearn_manager.cli:main"
 atomlearn-release = "atomlearn_manager.builder:main"
 atomlearn-core = "atomlearn_manager.launcher:main"
+atomlearn-runtime-bundle = "atomlearn_manager.runtime:main"
 
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
-atomlearn_manager = ["schemas/*.json"]
+atomlearn_manager = ["schemas/*.json", "bridge/SKILL.md", "bridge/agents/openai.yaml"]

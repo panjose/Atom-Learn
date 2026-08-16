@@ -226,17 +226,19 @@ If the learner explicitly chooses to share a product-level finding, `evolve caps
 
 ### Signed Release Manager
 
-Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. It verifies an Ed25519-signed immutable GitHub release, rejects hostile archives, migrates only copied state, installs versions side by side, runs the new Core against mirrored user/workspace state, and switches the active pointer only after health checks pass. Failed or interrupted updates retain the old Core and use a guarded transaction journal for recovery; downgrades are limited to the paired previous Core and its matching state snapshot.
+Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. Manifest v2 binds the signed Core, fixed Codex bridge protocol, capability smoke contract, complete offline wheelhouse recipe, and one isolated runtime for each supported OS/Python target. The launcher always uses the active release's runtime; activation occurs only after copied-state migration and capability-aware smoke tests pass. Failed or interrupted updates retain the old Core and its runtime, while rollback remains limited to the paired previous release and matching state snapshot.
 
 ```powershell
 python -m pip install -e ./manager
-atomlearn-manager --help
+atomlearn-manager init --trust-bundle release/atomlearn-trust-bundle.json --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager codex install
+atomlearn-manager codex status
 atomlearn-manager update status
 atomlearn-manager update recover
 atomlearn-core version
 ```
 
-See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for trust bootstrap, update planning, recovery, rollback, offline behavior, threat boundaries, and maintainer release construction.
+Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for fingerprint verification, key rotation, bridge repair, update planning, runtime construction, recovery, rollback, and transport boundaries.
 
 All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.13.0 Release Notes](docs/releases/v0.13.0.md), and [Changelog](CHANGELOG.md).
 

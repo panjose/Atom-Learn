@@ -226,17 +226,19 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 
 ### 签名 Release Manager
 
-Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。它会验证带 Ed25519 签名的不可变 GitHub release、拒绝恶意压缩包、只迁移状态副本、并排安装多个版本、让新 Core 在镜像的用户/工作区状态上运行检查，并且只有健康检查通过后才切换 active 指针。更新失败或中断时旧 Core 会被保留，系统通过带保护条件的 transaction journal 恢复；降级只允许恢复配套的上一版 Core 与对应状态快照。
+Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Manifest v2 把签名 Core、固定 Codex bridge 协议、能力 smoke 契约、完整离线 wheelhouse 配方，以及每个受支持 OS/Python 目标的隔离 runtime 绑定为同一发行身份。launcher 始终使用 active release 自己的 runtime；只有状态副本迁移和能力感知 smoke 测试全部通过后才会激活。更新失败或中断时旧 Core 与其 runtime 都会保留；回滚仍只允许配套的上一版 release 与对应状态快照。
 
 ```powershell
 python -m pip install -e ./manager
-atomlearn-manager --help
+atomlearn-manager init --trust-bundle release/atomlearn-trust-bundle.json --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager codex install
+atomlearn-manager codex status
 atomlearn-manager update status
 atomlearn-manager update recover
 atomlearn-core version
 ```
 
-信任初始化、更新计划、恢复、回滚、离线行为、安全边界与维护者构建流程详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
+公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。指纹核验、密钥轮换、bridge 修复、更新计划、runtime 构建、恢复、回滚和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
 
 所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.13.0 Release Notes](docs/releases/v0.13.0.md)和[Changelog](CHANGELOG.md)。
 

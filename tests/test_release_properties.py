@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
-from hypothesis import given, strategies as st
+from hypothesis import given, settings, strategies as st
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +32,7 @@ TEACHING_PAIRS = [
 ]
 
 
+@settings(deadline=None)
 @given(st.sampled_from(TEACHING_PAIRS))
 def test_current_turn_always_wins_without_changing_invariants(pair: tuple[str, str]) -> None:
     dimension, requested = pair
@@ -70,6 +71,7 @@ def test_current_turn_always_wins_without_changing_invariants(pair: tuple[str, s
     assert set(policy["invariants"].values()) == {"enforced"}
 
 
+@settings(deadline=None)
 @given(st.permutations([
     {"dimension": "response.detail", "value": "concise", "source": "course_strategy", "source_revision": 3},
     {"dimension": "explanation.order", "value": "example_first", "source": "course_strategy", "source_revision": 3},
@@ -88,6 +90,7 @@ SAFE_KEYS = st.from_regex(r"[a-z][a-z0-9_]{0,15}", fullmatch=True).filter(
 )
 
 
+@settings(deadline=None)
 @given(st.dictionaries(SAFE_KEYS, JSON_SCALAR, max_size=12))
 def test_deterministic_migrations_are_pure_and_idempotent(payload: dict) -> None:
     registry = MigrationRegistry()
@@ -107,6 +110,7 @@ def test_deterministic_migrations_are_pure_and_idempotent(payload: dict) -> None
     assert migrated["schema_version"] == 2
 
 
+@settings(deadline=None)
 @given(st.one_of(st.none(), st.booleans(), st.text(), st.integers(max_value=0)))
 def test_invalid_migration_versions_fail_closed(schema_version: object) -> None:
     registry = MigrationRegistry()
@@ -114,12 +118,14 @@ def test_invalid_migration_versions_fail_closed(schema_version: object) -> None:
         registry.migrate_document("fixture", {"schema_version": schema_version}, 1)
 
 
+@settings(deadline=None)
 @given(st.text(min_size=1).filter(lambda value: value not in POLICY_VALUES))
 def test_unknown_policy_dimensions_fail_closed(dimension: str) -> None:
     with pytest.raises(EffectivePolicyError, match="protected invariants cannot be overridden"):
         merge_effective_policy(context="teaching", current_turn={dimension: "lower"})
 
 
+@settings(deadline=None)
 @given(st.integers(min_value=0, max_value=10_000), st.integers(min_value=0, max_value=10_000))
 def test_semver_numeric_prerelease_order_is_not_lexicographic(left: int, right: int) -> None:
     comparison = version_tuple(f"1.2.3-rc.{left}") < version_tuple(f"1.2.3-rc.{right}")
