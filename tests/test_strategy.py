@@ -210,7 +210,7 @@ def test_opt_in_shadow_replay_override_and_real_outcome_linkage(tmp_path: Path) 
             "kind": "mastery_check",
             "prompt": "Explain and distinguish the limit idea.",
             "response_summary": "Correct transfer response.",
-            "scores": {"explain": 0.9, "discriminate": 0.9},
+            "scores": {"explain": 0.9, "discriminate": 0.9, "presentation_fluency": 0.0},
             "feedback": "Correct.",
             "rationale": "Both required dimensions passed.",
         },
@@ -241,6 +241,7 @@ def test_opt_in_shadow_replay_override_and_real_outcome_linkage(tmp_path: Path) 
             second["strategy_revision"],
         )
     )
+    assert linked["outcome"]["score"] == 0.9
     duplicate = invoke(
         data_root,
         "strategy",

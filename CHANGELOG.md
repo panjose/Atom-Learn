@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - v0.14 remediation
+
+- Phase 0 makes Manager transport failures typed and assertion-free, makes the uploaded and embedded release gate report byte-identical canonical JSON, and adds a release-gated capability/implementation ledger.
+- RAG evaluation now reports metrics without claiming pass when thresholds are absent, rejects partial threshold sets, and strategy outcomes ignore non-required Evidence dimensions.
+
 ## 0.13.0 - release-ready
 
 - Delivered self-evolution v2 Phases 0–6 with default-off cross-course personalization, conservative strategy experiments, privacy-linted local Capsules, deterministic migrations, and a signed side-by-side Release Manager.

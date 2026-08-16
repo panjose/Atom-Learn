@@ -7,7 +7,10 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+from urllib.error import HTTPError
 
+import pytest
+import yaml
 from jsonschema import Draft202012Validator
 
 
@@ -23,6 +26,24 @@ def test_manager_schemas_are_strict_and_valid() -> None:
         schema = json.loads(path.read_text(encoding="utf-8"))
         Draft202012Validator.check_schema(schema)
         assert schema["additionalProperties"] is False
+
+
+def test_capability_ledger_is_strict_versioned_and_truthful() -> None:
+    schema = json.loads(
+        (ROOT / "atom-learn" / "assets" / "schemas" / "capability-ledger.schema.json").read_text(encoding="utf-8")
+    )
+    ledger = yaml.safe_load((ROOT / "atom-learn" / "assets" / "capabilities.yaml").read_text(encoding="utf-8"))
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(ledger)
+    assert ledger["core_version"] == "0.13.0"
+    identifiers = [item["id"] for item in ledger["capabilities"]]
+    assert len(identifiers) == len(set(identifiers))
+    for capability in ledger["capabilities"]:
+        if capability["status"] == "planned":
+            assert capability["default_mode"] == "unavailable"
+            assert capability["public_claim"] is False
+            assert capability["implementation"] == []
+            assert capability["verification"] == []
 
 
 def test_manager_is_a_separate_distribution_and_console_surface() -> None:
@@ -90,6 +111,7 @@ def test_release_gate_fixture_attests_every_phase6_boundary() -> None:
 
 
 def test_release_gate_report_requires_attested_ci_and_never_overwrites(tmp_path: Path) -> None:
+    report_path = (tmp_path / "gate.json").resolve()
     command = [
         sys.executable,
         str(ROOT / "release" / "gate.py"),
@@ -99,7 +121,7 @@ def test_release_gate_report_requires_attested_ci_and_never_overwrites(tmp_path:
         "--commit-sha",
         "b" * 40,
         "--output",
-        str((tmp_path / "gate.json").resolve()),
+        str(report_path),
     ]
     environment = {**os.environ, "PYTHONUTF8": "1"}
     blocked = subprocess.run(command, cwd=ROOT, env=environment, text=True, capture_output=True, check=False)
@@ -109,9 +131,65 @@ def test_release_gate_report_requires_attested_ci_and_never_overwrites(tmp_path:
     created = subprocess.run(command, cwd=ROOT, env=environment, text=True, capture_output=True, check=False)
     assert created.returncode == 0, created.stderr
     assert json.loads(created.stdout)["commit_sha"] == "b" * 40
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report_path.read_bytes() == json.dumps(
+        report, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
     overwrite = subprocess.run(command, cwd=ROOT, env=environment, text=True, capture_output=True, check=False)
     assert overwrite.returncode == 2
     assert "File exists" in overwrite.stderr
+
+
+def test_release_manifest_network_failures_are_typed_and_never_assert(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from atomlearn_manager import manager as manager_module
+    from atomlearn_manager.common import ManagerError
+
+    def denied(*args: object, **kwargs: object) -> None:
+        raise HTTPError("https://github.com/private/release.json", 404, "Not Found", {}, None)
+
+    monkeypatch.setattr(manager_module, "urlopen", denied)
+    with pytest.raises(ManagerError) as caught:
+        manager_module._manifest_from_source("https://github.com/private/release.json")
+    payload = caught.value.as_dict()
+    assert payload == {
+        "ok": False,
+        "error": {
+            "code": "release_manifest_http_error",
+            "message": "Release manifest request failed with HTTP 404; the release may be private, unavailable, or inaccessible",
+            "retryable": False,
+            "details": {"host": "github.com", "status": 404},
+        },
+    }
+
+    monkeypatch.setattr(manager_module, "load_trust", lambda root: {})
+    monkeypatch.setattr(manager_module, "_manifest_from_source", lambda source: (None, "offline"))
+    with pytest.raises(ManagerError, match="required to plan") as missing:
+        manager_module.plan_update(tmp_path, "0.13.0", "https://github.com/private/release.json", None, None, [], "stable")
+    assert missing.value.code == "release_manifest_required"
+    assert "assert manifest is not None" not in (MANAGER_ROOT / "atomlearn_manager" / "manager.py").read_text(encoding="utf-8")
+
+
+def test_manager_cli_serializes_stable_error_envelopes(tmp_path: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "atomlearn_manager.cli",
+            "--manager-root",
+            str((tmp_path / "missing-manager").resolve()),
+            "version",
+        ],
+        cwd=ROOT,
+        env={**os.environ, "PYTHONUTF8": "1", "PYTHONPATH": str(MANAGER_ROOT)},
+        text=True,
+        encoding="utf-8",
+        capture_output=True,
+        check=False,
+    )
+    assert result.returncode == 2
+    error = json.loads(result.stderr)
+    assert error["ok"] is False
+    assert error["error"]["code"] == "manager_error"
 
 
 def test_tag_release_workflow_is_signed_gated_and_immutable() -> None:

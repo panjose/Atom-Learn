@@ -25,6 +25,30 @@ SEMVER = re.compile(r"^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-([0-
 class ManagerError(RuntimeError):
     """A safe release-manager error that must leave the active Core usable."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        code: str = "manager_error",
+        retryable: bool = False,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+        self.details = details or {}
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "ok": False,
+            "error": {
+                "code": self.code,
+                "message": str(self),
+                "retryable": self.retryable,
+                "details": self.details,
+            },
+        }
+
 
 def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()

@@ -161,7 +161,7 @@ queries:
 claims:
   - id: answer-claim-1
     cited_chunk_ids: [calculus.r1.c00007]
-    supporting_chunk_ids: [calculus.r1.c00007]
+    supported_chunk_ids: [calculus.r1.c00007]
     abstained: false
 thresholds:
   recall_at_k: 0.9
@@ -171,7 +171,7 @@ thresholds:
   unsupported_claim_rate: 0.05
 ```
 
-`rag evaluate` reports mean recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate. Retrieval labels and support labels are active chunk IDs. Thresholds are optional values from 0 through 1 and produce a deterministic `pass`/`fail` quality gate with per-case diagnostics.
+`rag evaluate` reports mean recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate. Retrieval labels and support labels are active chunk IDs. With no thresholds the result is `quality_gate: report_only`. To request a deterministic `pass`/`fail` gate, provide all five threshold values from 0 through 1; partial sets are rejected.
 
 ## Commands
 

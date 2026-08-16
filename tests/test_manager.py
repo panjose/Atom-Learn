@@ -118,7 +118,7 @@ def gate_report(path: Path, version: str, commit: str) -> Path:
             "replay_compatibility": True,
         },
     }
-    path.write_text(json.dumps(value), encoding="utf-8")
+    path.write_bytes(json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8"))
     return path
 
 
@@ -206,6 +206,7 @@ def build(
     manager_wheel = tmp_path / f"manager-wheel-{uuid.uuid4().hex}" / "atomlearn_manager-0.1.0-py3-none-any.whl"
     manager_wheel.parent.mkdir(parents=True)
     manager_wheel.write_bytes(b"synthetic signed manager wheel")
+    report = gate_report(tmp_path / f"gate-{version}-{uuid.uuid4().hex}.json", version, commit)
     result = release(
         source,
         "--output-dir",
@@ -223,11 +224,13 @@ def build(
         "--private-key",
         private_key,
         "--gate-report",
-        gate_report(tmp_path / f"gate-{version}-{uuid.uuid4().hex}.json", version, commit),
+        report,
         "--manager-artifact",
         manager_wheel,
     )
-    return parsed(result)
+    built = parsed(result)
+    built["gate_report"] = str(report)
+    return built
 
 
 def init_manager(tmp_path: Path, public_key: str) -> Path:
@@ -261,6 +264,9 @@ def test_signed_side_by_side_upgrade_and_paired_rollback(tmp_path: Path) -> None
     current_manifest = json.loads(Path(current["manifest"]).read_text(encoding="utf-8"))
     assert current_manifest["manager_artifact"]["version"] == "0.1.0"
     assert current_manifest["manager_artifact"]["sha256"] == current["manager_artifact_sha256"]
+    with zipfile.ZipFile(current["artifact"]) as archive:
+        embedded_gate = archive.read("atomlearn-0.13.0/release/gate-report.json")
+    assert embedded_gate == Path(current["gate_report"]).read_bytes()
 
     check = parsed(manager(manager_root, "update", "check", "--manifest", old["manifest"]))
     assert check["available"] is True

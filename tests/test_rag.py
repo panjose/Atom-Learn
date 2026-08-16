@@ -609,3 +609,15 @@ def test_rag_evaluation_reports_retrieval_and_grounding_metrics() -> None:
         "citation_correctness": 0.5,
         "unsupported_claim_rate": 0.5,
     }
+    report_only_payload = yaml.safe_load(benchmark.read_text(encoding="utf-8"))
+    report_only_payload.pop("thresholds")
+    report_only = payload(path, "benchmark-report-only.yaml", report_only_payload)
+    reported = output(invoke("rag", "evaluate", path, "--input", report_only))
+    assert reported["quality_gate"] == "report_only"
+    assert reported["threshold_results"] == {}
+
+    incomplete_payload = {**report_only_payload, "thresholds": {"recall_at_k": 0.0}}
+    incomplete = payload(path, "benchmark-incomplete-thresholds.yaml", incomplete_payload)
+    rejected = invoke("rag", "evaluate", path, "--input", incomplete, check=False)
+    assert rejected.returncode == 2
+    assert "requires every threshold" in rejected.stderr

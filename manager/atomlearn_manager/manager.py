@@ -11,7 +11,8 @@ import sys
 import uuid
 from pathlib import Path
 from typing import Any
-from urllib.error import URLError
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 from . import MANAGER_VERSION
@@ -89,8 +90,22 @@ def _manifest_from_source(source: str, *, offline: bool = False) -> tuple[dict[s
                 if not response.geturl().startswith("https://"):
                     raise ManagerError("Release manifest redirect must remain on HTTPS")
                 content = response.read(2 * 1024 * 1024 + 1)
+        except HTTPError as exc:
+            host = urlparse(source).hostname or "unknown"
+            raise ManagerError(
+                f"Release manifest request failed with HTTP {exc.code}; the release may be private, unavailable, or inaccessible",
+                code="release_manifest_http_error",
+                retryable=500 <= int(exc.code) < 600,
+                details={"host": host, "status": int(exc.code)},
+            ) from exc
         except (OSError, URLError) as exc:
-            return None, f"offline: {exc}"
+            host = urlparse(source).hostname or "unknown"
+            raise ManagerError(
+                "Release manifest is temporarily unavailable; the active Core is unchanged",
+                code="release_manifest_unavailable",
+                retryable=True,
+                details={"host": host},
+            ) from exc
         if len(content) > 2 * 1024 * 1024:
             raise ManagerError("Remote release manifest exceeds the size limit")
         try:
@@ -114,7 +129,7 @@ def check_release(root: Path, manifest_source: str, channel: str, *, offline: bo
             "offline": True,
             "current_version": active["current_version"] if active else None,
             "available": False,
-            "reason": source,
+            "reason": "offline_requested",
         }
     validate_release_manifest(manifest, trust, requested_channel=channel)
     current = active["current_version"] if active else None
@@ -149,7 +164,11 @@ def plan_update(
 ) -> dict[str, Any]:
     trust = load_trust(root)
     manifest, _ = _manifest_from_source(manifest_source)
-    assert manifest is not None
+    if manifest is None:  # defensive: only explicit check mode may operate without a manifest
+        raise ManagerError(
+            "A verified release manifest is required to plan an update",
+            code="release_manifest_required",
+        )
     validate_release_manifest(manifest, trust, requested_channel=channel)
     if manifest["version"] != version:
         raise ManagerError("Requested update version does not match the signed manifest")
@@ -325,7 +344,11 @@ def apply_update(
     with FileLock(root / ".manager.lock"):
         trust = load_trust(root)
         manifest, manifest_origin = _manifest_from_source(manifest_source)
-        assert manifest is not None
+        if manifest is None:  # defensive: apply never has an offline mode
+            raise ManagerError(
+                "A verified release manifest is required to apply an update",
+                code="release_manifest_required",
+            )
         validate_release_manifest(manifest, trust, requested_channel=channel)
         if manifest["version"] != version:
             raise ManagerError("Requested update version does not match the signed manifest")

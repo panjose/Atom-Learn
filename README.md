@@ -11,7 +11,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 
 - Start from complete textbooks or knowledge bases, a user outline, or only a topic name
 - Index local sources and correct coverage gaps with harness Web Search
-- Fuse BM25, default local embeddings, and optional provider embeddings, then deterministically rerank
+- Fuse BM25, a default local multilingual hash projection, and optional learned provider embeddings, then deterministically rerank
 - Require explicit evidence verdicts and stable source locators before sparse-input planning
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Map roots, learning spines, branches, hubs, derivations, historical development, contrasts, applications, and each concept's lineage
@@ -30,6 +30,8 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Adapt response style, pacing, examples, feedback, and research orientation from privacy-safe session signals
 - Analyze learning evidence and propose bounded, approval-gated course evolution
 - Generate learning, research, personalization, and evolution views from canonical YAML state
+
+The release source of truth is the machine-readable [capability ledger](atom-learn/assets/capabilities.yaml). It separates implemented, experimental, and planned work, binds implemented claims to code and tests, and prevents planned v0.14 work from being marketed as already available.
 
 ## Installation
 
@@ -102,7 +104,7 @@ python atom-learn/scripts/atomlearn.py rag correct courses/calculus --input rag-
 python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag-evaluation.yaml
 ```
 
-`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Outline and topic intake cannot become planning-ready until every mandatory anchor has explicit support for the current intake revision. See [Retrieval and Corrective Web Search](atom-learn/references/RAG.md) and [RAG Design](docs/RAG_DESIGN.md).
+`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Without all five thresholds it returns `quality_gate: report_only`; a pass/fail decision is never inferred from permissive defaults. Outline and topic intake cannot become planning-ready until every mandatory anchor has explicit support for the current intake revision. See [Retrieval and Corrective Web Search](atom-learn/references/RAG.md) and [RAG Design](docs/RAG_DESIGN.md).
 
 Research-field discovery uses the same gate with revision-bound anchors for the research question, surveys, method families, evaluations/datasets, and critique/replication evidence. Use `rag requirements --context research` when building a paper-oriented field map.
 

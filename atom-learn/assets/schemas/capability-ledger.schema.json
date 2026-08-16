@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/capability-ledger.schema.json",
+  "title": "AtomLearn capability and implementation ledger",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "core_version", "capabilities"],
+  "properties": {
+    "kind": {"const": "atomlearn.capability-ledger"},
+    "schema_version": {"const": 1},
+    "core_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "capabilities": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id", "title", "status", "default_mode", "public_claim",
+          "interfaces", "implementation", "verification", "documentation", "limitations"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,95}$"},
+          "title": {"type": "string", "minLength": 3, "maxLength": 160},
+          "status": {"enum": ["implemented", "experimental", "planned"]},
+          "default_mode": {"enum": ["enabled", "opt_in", "unavailable"]},
+          "public_claim": {"type": "boolean"},
+          "interfaces": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1, "maxLength": 200}
+          },
+          "implementation": {"$ref": "#/$defs/evidenceList"},
+          "verification": {"$ref": "#/$defs/evidenceList"},
+          "documentation": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {"type": "string", "pattern": "^[^\\\\]*$"}
+          },
+          "limitations": {
+            "type": "array",
+            "minItems": 1,
+            "items": {"type": "string", "minLength": 3, "maxLength": 500}
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidenceList": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path"],
+        "properties": {
+          "path": {"type": "string", "pattern": "^[^\\\\]*$"},
+          "symbol": {"type": "string", "minLength": 1, "maxLength": 200}
+        }
+      }
+    }
+  }
+}

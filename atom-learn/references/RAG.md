@@ -181,7 +181,7 @@ Maintain a labeled benchmark and run:
 python <SKILL_DIR>/scripts/atomlearn.py rag evaluate <workspace> --input <rag-evaluation.yaml>
 ```
 
-The evaluator reports mean `recall_at_k`, MRR, nDCG@k, citation correctness, and unsupported-claim rate, plus per-query and per-claim diagnostics. Thresholds produce a deterministic quality gate. Use active chunk IDs as retrieval relevance and claim-support labels; rerun or regenerate the benchmark when source revisions change. Start from `assets/templates/rag-evaluation.yaml`.
+The evaluator reports mean `recall_at_k`, MRR, nDCG@k, citation correctness, and unsupported-claim rate, plus per-query and per-claim diagnostics. With no thresholds it returns `quality_gate: report_only`. A deterministic pass/fail gate requires all five thresholds; partial threshold sets are rejected so omitted dimensions cannot inherit permissive defaults. Use active chunk IDs as retrieval relevance and claim-support labels; rerun or regenerate the benchmark when source revisions change. Start from `assets/templates/rag-evaluation.yaml`.
 
 ## Use default and optional provider embeddings
 

@@ -109,8 +109,12 @@ def main() -> int:
     try:
         run()
         return 0
-    except (ManagerError, OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
-        print(f"error: {exc}", file=sys.stderr)
+    except ManagerError as exc:
+        print(json.dumps(exc.as_dict(), ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
+        return 2
+    except (OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
+        wrapped = ManagerError(str(exc), code="manager_input_error")
+        print(json.dumps(wrapped.as_dict(), ensure_ascii=False, separators=(",", ":")), file=sys.stderr)
         return 2
 
 

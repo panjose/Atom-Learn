@@ -68,7 +68,7 @@ When `start` returns `web_search_required`, execute its bounded harness tasks an
 7. Rerun `rag correct` with that evidence and explicit harness verdicts. Pass only when every mandatory anchor is `supported` by evidence in that requirement's current candidate set.
 8. Preserve source IDs and locators in the course plan and learner-facing citations. Abstain when the corrective loop cannot establish support.
 
-The default local multilingual embedding needs no provider. Use optional learned provider embeddings through `rag attach-embeddings` and a compatible `query_embedding`; never make a hosted vector provider mandatory. Maintain a labeled set and use `rag evaluate` for recall@k, MRR, nDCG, citation correctness, and unsupported claims. For large-corpus global questions, ingest hierarchical summaries or use a graph index as a deliberate extension, not the default.
+The default local multilingual hash projection needs no provider and is not learned semantic understanding. Use optional learned provider embeddings through `rag attach-embeddings` and a compatible `query_embedding`; never make a hosted vector provider mandatory. Maintain a labeled set and use `rag evaluate` for recall@k, MRR, nDCG, citation correctness, and unsupported claims. Treat evaluation without all five thresholds as `report_only`, never as a pass. For large-corpus global questions, ingest hierarchical summaries or use a graph index as a deliberate extension, not the default.
 
 ### Create a course
 

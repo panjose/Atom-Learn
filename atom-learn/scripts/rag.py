@@ -1357,25 +1357,45 @@ class RagEngine:
         if not isinstance(thresholds, dict):
             raise RagError("evaluation thresholds must be a mapping")
 
+        threshold_names = {
+            "recall_at_k",
+            "mrr",
+            "ndcg_at_k",
+            "citation_correctness",
+            "unsupported_claim_rate",
+        }
+        unknown_thresholds = sorted(set(thresholds) - threshold_names)
+        if unknown_thresholds:
+            raise RagError("evaluation contains unknown thresholds: " + ", ".join(unknown_thresholds))
+
         def threshold(name: str, default: float) -> float:
             value = thresholds.get(name, default)
             if isinstance(value, bool) or not isinstance(value, (int, float)) or not 0 <= float(value) <= 1:
                 raise RagError(f"evaluation threshold {name} must be between 0 and 1")
             return float(value)
 
-        comparisons = {
-            "recall_at_k": metrics["recall_at_k"] >= threshold("recall_at_k", 0.0),
-            "mrr": metrics["mrr"] >= threshold("mrr", 0.0),
-            "ndcg_at_k": metrics["ndcg_at_k"] >= threshold("ndcg_at_k", 0.0),
-            "citation_correctness": metrics["citation_correctness"] >= threshold("citation_correctness", 0.0),
-            "unsupported_claim_rate": metrics["unsupported_claim_rate"] <= threshold(
-                "unsupported_claim_rate", 1.0
-            ),
-        }
+        comparisons = {}
+        if thresholds:
+            required_thresholds = sorted(threshold_names - set(thresholds))
+            if required_thresholds:
+                raise RagError(
+                    "evaluation pass/fail requires every threshold; missing: " + ", ".join(required_thresholds)
+                )
+            comparisons = {
+                "recall_at_k": metrics["recall_at_k"] >= threshold("recall_at_k", 0.0),
+                "mrr": metrics["mrr"] >= threshold("mrr", 0.0),
+                "ndcg_at_k": metrics["ndcg_at_k"] >= threshold("ndcg_at_k", 0.0),
+                "citation_correctness": metrics["citation_correctness"] >= threshold("citation_correctness", 0.0),
+                "unsupported_claim_rate": metrics["unsupported_claim_rate"] <= threshold(
+                    "unsupported_claim_rate", 1.0
+                ),
+            }
         return {
             "rag_revision": self.revision,
             "metrics": metrics,
-            "quality_gate": "pass" if all(comparisons.values()) else "fail",
+            "quality_gate": (
+                "report_only" if not thresholds else ("pass" if all(comparisons.values()) else "fail")
+            ),
             "threshold_results": comparisons,
             "query_results": query_results,
             "claim_results": claim_results,

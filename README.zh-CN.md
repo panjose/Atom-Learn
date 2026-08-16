@@ -11,7 +11,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 - 支持从完整教材或知识库、用户大纲，或仅一个主题名词开始
 - 为本地资料建立索引，并用 harness Web Search 补齐覆盖缺口
-- 融合 BM25、默认本地 embedding 和可选供应商 embedding，再进行确定性重排
+- 融合 BM25、默认本地多语言哈希投影和可选的学习型供应商 embedding，再进行确定性重排
 - 在稀疏输入进入课程规划前，要求显式证据判定和稳定来源定位
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
 - 梳理知识根节点、学习主干、分支、枢纽、推导、历史演进、对比、应用及单点来龙去脉
@@ -30,6 +30,8 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 从隐私安全的 session 信号中适配回答风格、节奏、示例、反馈和科研取向
 - 分析学习证据，并生成有边界、需审批的课程进化提案
 - 从规范化 YAML 状态生成学习、科研、个性化和进化视图
+
+发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。它明确区分已实现、实验性与规划中能力，把已实现声明绑定到代码和测试，并阻止尚未完成的 v0.14 工作被宣传为当前可用。
 
 ## 安装
 
@@ -102,7 +104,7 @@ python atom-learn/scripts/atomlearn.py rag correct courses/calculus --input rag-
 python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag-evaluation.yaml
 ```
 
-`rag correct` 会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率。只有当前 intake revision 的所有强制锚点都得到显式支持，大纲和主题 intake 才能进入可规划状态。详见[检索与纠错式 Web Search](atom-learn/references/RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
+`rag correct` 会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率；如果没有完整提供五项阈值，它会返回 `quality_gate: report_only`，绝不会用宽松默认值推断通过。只有当前 intake revision 的所有强制锚点都得到显式支持，大纲和主题 intake 才能进入可规划状态。详见[检索与纠错式 Web Search](atom-learn/references/RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
 
 科研领域发现使用同一质量门禁，并为研究问题、综述、方法谱系、评测/数据集以及批评/复现证据生成绑定 research revision 的锚点。构建论文导向的领域地图时使用 `rag requirements --context research`。
 

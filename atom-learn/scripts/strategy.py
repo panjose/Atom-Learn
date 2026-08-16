@@ -564,9 +564,21 @@ class StrategyEngine:
                 raise StrategyError(f"Evidence {evidence_id} is already linked to a strategy exposure")
             if any(item["exposure_id"] == exposure_id for item in outcomes):
                 raise StrategyError(f"Exposure {exposure_id} already has an outcome")
-            scores = [float(value) for value in evidence.get("scores", {}).values() if isinstance(value, (int, float))]
-            if not scores:
-                raise StrategyError("Evidence has no numeric scores")
+            required_dimensions = workspace.atoms[atom_id].get("mastery", {}).get("required_dimensions", [])
+            if not isinstance(required_dimensions, list) or not required_dimensions:
+                raise StrategyError("Exposed Atom has no required mastery dimensions")
+            evidence_scores = evidence.get("scores", {})
+            missing_dimensions = [dimension for dimension in required_dimensions if dimension not in evidence_scores]
+            if missing_dimensions:
+                raise StrategyError(
+                    "Evidence is missing required outcome dimensions: " + ", ".join(missing_dimensions)
+                )
+            scores = []
+            for dimension in required_dimensions:
+                value = evidence_scores[dimension]
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise StrategyError(f"Evidence outcome dimension {dimension} is not numeric")
+                scores.append(float(value))
             assessed_at = str(evidence.get("assessed_at") or evidence.get("created_at") or "")
             backtracked = False
             for event in workspace_events:

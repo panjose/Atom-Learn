@@ -1,0 +1,229 @@
+kind: atomlearn.capability-ledger
+schema_version: 1
+core_version: 0.13.0
+capabilities:
+  - id: learning.atomic_state_machine
+    title: Single-Active-Atom learning state machine and mastery Evidence guards
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    interfaces: [activate, record-evidence, assess, status, validate]
+    implementation:
+      - path: atom-learn/scripts/atomlearn.py
+        symbol: "def record_evidence"
+      - path: atom-learn/scripts/atomlearn.py
+        symbol: "def assess"
+    verification:
+      - path: tests/test_atomlearn_cli.py
+        symbol: "test_evidence_can_be_recorded_only_for_the_active_atom"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md]
+    limitations:
+      - Open-response score semantics are supplied by the harness and are not independently verified by Core v1.
+
+  - id: learning.atomic_expansion_and_concept_routing
+    title: Ordered child-Atom expansion and relation-aware concept routing
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    interfaces: [expand, route-concept]
+    implementation:
+      - path: atom-learn/scripts/atomlearn.py
+        symbol: "def expand_atom"
+      - path: atom-learn/scripts/atomlearn.py
+        symbol: "def apply_concept_route"
+    verification:
+      - path: tests/test_detailed_expansion.py
+        symbol: "test_detailed_request_becomes_ordered_children_then_parent_integration"
+      - path: tests/test_concept_routing.py
+        symbol: "test_required_prerequisite_is_inserted_then_resumes_parent"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md]
+    limitations:
+      - The harness still proposes the semantic decomposition or relationship classification before Core validates the mutation.
+
+  - id: rag.corrective_hybrid_v1
+    title: Auditable hybrid retrieval and candidate-bound corrective Web Search loop
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    interfaces: [rag ingest, rag search, rag coverage, rag correct, rag evaluate]
+    implementation:
+      - path: atom-learn/scripts/rag.py
+        symbol: "def search"
+      - path: atom-learn/scripts/rag.py
+        symbol: "def coverage"
+    verification:
+      - path: tests/test_rag.py
+        symbol: "test_correct_command_emits_web_tasks_then_closes_the_loop"
+      - path: tests/test_rag.py
+        symbol: "test_rag_evaluation_reports_retrieval_and_grounding_metrics"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/RAG.md]
+    limitations:
+      - The default dense-like signal is a deterministic multilingual hash projection, not a learned semantic embedding.
+      - Active chunks are scanned in-process; no approximate vector index is implemented in this release.
+
+  - id: rag.provider_embedding_adapter
+    title: Provider-neutral attachment of externally generated learned embeddings
+    status: implemented
+    default_mode: opt_in
+    public_claim: true
+    interfaces: [rag attach-embeddings, rag search]
+    implementation:
+      - path: atom-learn/scripts/rag.py
+        symbol: "def attach_embeddings"
+    verification:
+      - path: tests/test_rag.py
+        symbol: "test_provider_embeddings_join_hybrid_retrieval"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/RAG.md]
+    limitations:
+      - AtomLearn does not silently download a model or send source content to an embedding provider.
+
+  - id: exam.reviewable_heuristics_v1
+    title: Reviewable question splitting mapping difficulty estimation and targeted queues
+    status: experimental
+    default_mode: opt_in
+    public_claim: true
+    interfaces: [exam process, exam review-mappings, exam analyze, exam plan]
+    implementation:
+      - path: atom-learn/scripts/exam.py
+        symbol: "def process_documents"
+    verification:
+      - path: tests/test_exam.py
+        symbol: "test_exam_process_splits_questions_links_marking_and_proposes_reviewable_atom_mappings"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/EXAM_PREPARATION.md]
+    limitations:
+      - Text heuristics estimate structural complexity; empirical difficulty requires official anchors or learner performance data.
+      - Source-to-exam import does not yet use a shared layout-preserving Document IR.
+
+  - id: research.guided_corpus_v1
+    title: Guided paper graph metadata reconciliation critical notes and auditable synthesis
+    status: experimental
+    default_mode: opt_in
+    public_claim: true
+    interfaces: [research import, research reconcile-metadata, research fetch-metadata, research synthesize]
+    implementation:
+      - path: atom-learn/scripts/research.py
+        symbol: "def fetch_metadata"
+      - path: atom-learn/scripts/research.py
+        symbol: "def synthesize"
+    verification:
+      - path: tests/test_research.py
+        symbol: "test_research_metadata_reconciliation_verifies_records_and_acquires_internal_citations"
+      - path: tests/test_research.py
+        symbol: "test_research_synthesis_surfaces_claims_contradictions_and_gaps"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/RESEARCH_READING.md]
+    limitations:
+      - Metadata fetching starts from known DOI records; active query discovery and citation snowballing are not yet closed-loop.
+      - Cross-paper theme grouping remains primarily token-overlap based.
+
+  - id: personalization.session_adaptation_v1
+    title: Privacy-safe session and opt-in cross-course presentation adaptation
+    status: implemented
+    default_mode: opt_in
+    public_claim: true
+    interfaces: [adapt observe-session, adapt guidance, profile enable, policy effective]
+    implementation:
+      - path: atom-learn/scripts/adaptation.py
+        symbol: "def observe_session"
+      - path: atom-learn/scripts/user_profile.py
+        symbol: "def observe_session"
+    verification:
+      - path: tests/test_adaptation.py
+        symbol: "test_raw_chat_sensitive_dimensions_and_stale_revisions_are_rejected"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md]
+    limitations:
+      - Adaptation changes presentation only and cannot weaken mastery, grounding, prerequisites, or safety.
+
+  - id: evolution.strategy_experiments_v1
+    title: Opt-in shadow-first deterministic teaching-strategy experiments
+    status: experimental
+    default_mode: opt_in
+    public_claim: true
+    interfaces: [strategy enable-experiments, strategy exposure, strategy record-outcome, strategy monitor]
+    implementation:
+      - path: atom-learn/scripts/strategy.py
+        symbol: "def record_outcome"
+    verification:
+      - path: tests/test_strategy.py
+        symbol: "test_opt_in_shadow_replay_override_and_real_outcome_linkage"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/STRATEGY_EXPERIMENTS.md]
+    limitations:
+      - Current promotion logic lacks calibrated uncertainty intervals and minimum detectable effect checks.
+
+  - id: release.signed_side_by_side_v1
+    title: Signed immutable side-by-side Core update recovery and paired rollback
+    status: experimental
+    default_mode: opt_in
+    public_claim: true
+    interfaces: [atomlearn-manager update, atomlearn-manager rollback, atomlearn-core]
+    implementation:
+      - path: manager/atomlearn_manager/manager.py
+        symbol: "def apply_update"
+      - path: manager/atomlearn_manager/builder.py
+        symbol: "def build_release"
+    verification:
+      - path: tests/test_manager.py
+        symbol: "test_signed_side_by_side_upgrade_and_paired_rollback"
+    documentation: [README.md, README.zh-CN.md, atom-learn/references/RELEASE_MANAGER.md]
+    limitations:
+      - The v1 manager does not yet update the installed Codex bridge Skill or build a per-release runtime.
+      - Authenticated private GitHub Release transport is not implemented in v1.
+
+  - id: documents.shared_ir_v1
+    title: Shared layout-preserving Document IR for RAG exam and research ingestion
+    status: planned
+    default_mode: unavailable
+    public_claim: false
+    interfaces: []
+    implementation: []
+    verification: []
+    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    limitations:
+      - This is a v0.14 implementation target, not a current capability.
+
+  - id: rag.learned_local_scale_v1
+    title: Learned local multilingual embeddings HNSW and cross-encoder reranking
+    status: planned
+    default_mode: unavailable
+    public_claim: false
+    interfaces: []
+    implementation: []
+    verification: []
+    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    limitations:
+      - This is a v0.14 implementation target, not a current capability.
+
+  - id: mastery.calibrated_evidence_v2
+    title: Typed deterministic and calibrated open-response Evidence scoring
+    status: planned
+    default_mode: unavailable
+    public_claim: false
+    interfaces: []
+    implementation: []
+    verification: []
+    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    limitations:
+      - This is a v0.14 implementation target, not a current capability.
+
+  - id: release.bridge_runtime_v2
+    title: Trusted bridge Skill manifest v2 signed wheelhouse and isolated runtime
+    status: planned
+    default_mode: unavailable
+    public_claim: false
+    interfaces: []
+    implementation: []
+    verification: []
+    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    limitations:
+      - This is a v0.14 implementation target, not a current capability.
+
+  - id: review.adaptive_memory_v1
+    title: Per-Atom adaptive memory state and workload-aware daily scheduling
+    status: planned
+    default_mode: unavailable
+    public_claim: false
+    interfaces: []
+    implementation: []
+    verification: []
+    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    limitations:
+      - This is a v0.14 implementation target, not a current capability.

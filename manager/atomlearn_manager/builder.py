@@ -89,12 +89,16 @@ def build_release(
         raise ManagerError("Git tag, package version, and Core version must match")
     if channel == "stable" and "-" in version:
         raise ManagerError("Stable artifacts cannot use prerelease versions")
-    gate = json.loads(gate_report_path.read_text(encoding="utf-8"))
+    gate_bytes = gate_report_path.read_bytes()
+    gate = json.loads(gate_bytes.decode("utf-8"))
     if not isinstance(gate, dict):
         raise ManagerError("Release gate report must be a JSON object")
     require_schema(gate, "release-gate-report")
     if gate["tag"] != tag or gate["commit_sha"] != commit_sha:
         raise ManagerError("Release gate report tag/commit does not match the requested release")
+    expected_gate_bytes = json.dumps(gate, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    if gate_bytes != expected_gate_bytes:
+        raise ManagerError("Release gate report must use the canonical JSON bytes emitted by release/gate.py")
     manager_artifact_path = manager_artifact_path.resolve()
     expected_manager_prefix = f"atomlearn_manager-{MANAGER_VERSION}-"
     if (
@@ -104,7 +108,6 @@ def build_release(
         or not manager_artifact_path.name.endswith("-py3-none-any.whl")
     ):
         raise ManagerError("Manager artifact must be the expected regular universal wheel")
-    gate_bytes = json.dumps(gate, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
     by_name["release/gate-report.json"] = gate_bytes
     core_path = "atom-learn/assets/core-manifest.yaml"
     core = yaml.safe_load(by_name[core_path].decode("utf-8"))

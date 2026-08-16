@@ -25,6 +25,8 @@ SKILL = ROOT / "atom-learn" / "SKILL.md"
 CORE_MANIFEST = ROOT / "atom-learn" / "assets" / "core-manifest.yaml"
 CORE_SCHEMA = ROOT / "atom-learn" / "assets" / "schemas" / "core-manifest.schema.json"
 GATE_SCHEMA = ROOT / "manager" / "atomlearn_manager" / "schemas" / "release-gate-report.schema.json"
+CAPABILITY_LEDGER = ROOT / "atom-learn" / "assets" / "capabilities.yaml"
+CAPABILITY_SCHEMA = ROOT / "atom-learn" / "assets" / "schemas" / "capability-ledger.schema.json"
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 REQUIRED_GATES = (
@@ -60,6 +62,53 @@ def _validate(value: dict[str, Any], schema_path: Path, label: str) -> None:
             for error in errors[:10]
         )
         raise GateError(f"{label} validation failed: {details}")
+
+
+def _canonical_json(value: dict[str, Any]) -> bytes:
+    return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _validate_capability_ledger(core_version: str) -> dict[str, int]:
+    ledger = yaml.safe_load(CAPABILITY_LEDGER.read_text(encoding="utf-8"))
+    if not isinstance(ledger, dict):
+        raise GateError("Capability ledger must be a mapping")
+    _validate(ledger, CAPABILITY_SCHEMA, "Capability ledger")
+    if ledger["core_version"] != core_version:
+        raise GateError("Capability ledger and Core manifest versions disagree")
+    identifiers: set[str] = set()
+    counts = {"implemented": 0, "experimental": 0, "planned": 0}
+    for capability in ledger["capabilities"]:
+        identifier = capability["id"]
+        if identifier in identifiers:
+            raise GateError(f"Capability ledger contains a duplicate id: {identifier}")
+        identifiers.add(identifier)
+        status = capability["status"]
+        counts[status] += 1
+        if status == "planned":
+            if capability["default_mode"] != "unavailable" or capability["public_claim"]:
+                raise GateError(f"Planned capability {identifier} must be unavailable and excluded from public claims")
+            if capability["implementation"] or capability["verification"]:
+                raise GateError(f"Planned capability {identifier} cannot cite completed implementation or verification")
+        else:
+            if not capability["implementation"] or not capability["verification"]:
+                raise GateError(f"{status.title()} capability {identifier} needs implementation and verification evidence")
+        for evidence in capability["implementation"] + capability["verification"]:
+            path = (ROOT / evidence["path"]).resolve()
+            try:
+                path.relative_to(ROOT.resolve())
+            except ValueError as exc:
+                raise GateError(f"Capability {identifier} evidence escapes the repository: {evidence['path']}") from exc
+            if not path.is_file():
+                raise GateError(f"Capability {identifier} evidence is missing: {evidence['path']}")
+            symbol = evidence.get("symbol")
+            if symbol and symbol not in path.read_text(encoding="utf-8"):
+                raise GateError(f"Capability {identifier} evidence symbol is missing: {symbol}")
+        for documentation in capability["documentation"]:
+            if not (ROOT / documentation).is_file():
+                raise GateError(f"Capability {identifier} documentation is missing: {documentation}")
+        if capability["public_claim"] and not {"README.md", "README.zh-CN.md"} <= set(capability["documentation"]):
+            raise GateError(f"Public capability {identifier} must be documented in both READMEs")
+    return counts
 
 
 def repository_version() -> str:
@@ -98,6 +147,7 @@ def validate_skill() -> dict[str, Any]:
         raise GateError("Package and Core manifest versions disagree")
     if any(manifest["feature_defaults"].values()):
         raise GateError("Self-evolution v2 features must remain default-off in this release line")
+    capability_counts = _validate_capability_ledger(manifest["core_version"])
     migration_fixture = yaml.safe_load(
         (ROOT / "tests" / "fixtures" / "migrations" / "supported-upgrade-paths.yaml").read_text(encoding="utf-8")
     )
@@ -136,6 +186,7 @@ def validate_skill() -> dict[str, Any]:
         "skill_lines": len(lines),
         "core_version": manifest["core_version"],
         "feature_defaults": manifest["feature_defaults"],
+        "capabilities": capability_counts,
     }
 
 
@@ -160,9 +211,8 @@ def write_report(tag: str, commit_sha: str, output: Path) -> dict[str, Any]:
     }
     _validate(report, GATE_SCHEMA, "Release gate report")
     output.parent.mkdir(parents=True, exist_ok=True)
-    with output.open("x", encoding="utf-8", newline="\n") as handle:
-        json.dump(report, handle, ensure_ascii=False, indent=2)
-        handle.write("\n")
+    with output.open("xb") as handle:
+        handle.write(_canonical_json(report))
     return report
 
 

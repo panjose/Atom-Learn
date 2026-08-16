@@ -89,13 +89,13 @@ If a process stops after activation, do not start another update. Run `update st
 
 ## Offline and failure behavior
 
-`update check --offline` performs no network request and reports the current Core as still usable. A manifest fetch failure is also reported as offline without changing active state. Apply fails closed on a truncated download, insufficient disk, unsafe ZIP member, bad signature/hash, missing migration, failed Core health check, state race, or pointer race.
+`update check --offline` performs no network request and reports the current Core as still usable. A real manifest request failure exits with a JSON error envelope containing stable `code`, `retryable`, and bounded `details` fields; HTTP 401/403/404 and offline transport failures never reach an internal assertion and never change active state. Apply also fails closed on a truncated download, insufficient disk, unsafe ZIP member, bad signature/hash, missing migration, failed Core health check, state race, or pointer race.
 
 Network redirects must remain HTTPS. Archive extraction rejects traversal, absolute or Windows-unsafe names, reparse/symlink entries, duplicate and case-colliding names, file/directory prefix collisions, encryption, excessive size, and suspicious compression ratios. Extraction is manual; `extractall` is never used.
 
 ## Building a release
 
-`atomlearn-release` is a maintainer command. It requires an exact tag/commit gate report, a stable or prerelease channel, and an Ed25519 private key. It creates a deterministic ZIP and a signed manifest without overwriting existing outputs.
+`atomlearn-release` is a maintainer command. It requires the exact canonical JSON bytes emitted by `release/gate.py` for the tag/commit, a stable or prerelease channel, and an Ed25519 private key. The same gate-report bytes are uploaded and embedded in the ZIP. It creates a deterministic ZIP and a signed manifest without overwriting existing outputs.
 
 The builder also requires the already-built universal `atomlearn-manager` wheel. Its version, filename, byte size, and SHA-256 are included in the same Ed25519-signed manifest, so the bootstrap package published beside the Core ZIP is not an unsigned extra asset.
 
