@@ -19,7 +19,7 @@ capabilities:
         symbol: "test_evidence_can_be_recorded_only_for_the_active_atom"
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md]
     limitations:
-      - Open-response score semantics are supplied by the harness and are not independently verified by Core v1.
+      - Core can authenticate its deterministic scorers; external and human reviewer identity remains asserted provenance subject to the Evidence v2 registry gates.
 
   - id: learning.atomic_expansion_and_concept_routing
     title: Ordered child-Atom expansion and relation-aware concept routing
@@ -194,15 +194,43 @@ capabilities:
 
   - id: mastery.calibrated_evidence_v2
     title: Typed deterministic and calibrated open-response Evidence scoring
-    status: planned
-    default_mode: unavailable
-    public_claim: false
-    interfaces: []
-    implementation: []
-    verification: []
-    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    interfaces:
+      - atomlearn measure registry
+      - atomlearn measure grade
+      - atomlearn measure validate-bank
+      - atomlearn measure calibrate
+      - atomlearn measure validate-protocol
+      - atomlearn migrate-evidence
+    implementation:
+      - path: atom-learn/scripts/measurement.py
+        symbol: "def evidence_measurement"
+      - path: atom-learn/scripts/measurement.py
+        symbol: "def grade_deterministic"
+      - path: atom-learn/scripts/measurement.py
+        symbol: "def calibrate"
+      - path: atom-learn/assets/benchmarks/calibration-open-v1.report.json
+        symbol: '"qualified": true'
+      - path: atom-learn/scripts/strategy.py
+        symbol: "if evidence.get(\"strategy_eligible\") is not True"
+    verification:
+      - path: tests/test_measurement.py
+        symbol: "test_free_model_scores_cannot_master_and_legacy_migration_preserves_results"
+      - path: tests/test_measurement.py
+        symbol: "test_open_response_calibration_report_is_reproducible_and_stratified"
+      - path: tests/test_strategy.py
+        symbol: "qualified for strategy use"
+    documentation:
+      - README.md
+      - README.zh-CN.md
+      - atom-learn/SKILL.md
+      - atom-learn/references/MEASUREMENT.md
+      - docs/V0_14_REMEDIATION_DESIGN.md
     limitations:
-      - This is a v0.14 implementation target, not a current capability.
+      - Core cannot authenticate an asserted human reviewer or external provider identity; such provenance remains an auditable harness boundary.
+      - Bundled anchored-model profiles are reproducible fixtures, not blanket calibration claims for arbitrary models or prompts.
 
   - id: release.bridge_runtime_v2
     title: Trusted bridge Skill manifest v2 signed wheelhouse and isolated runtime

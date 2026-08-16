@@ -987,6 +987,49 @@ class Workspace:
                         require_number(score, f"{item_id}.scores.{dimension}", 0, 1)
                     except AtomLearnError as exc:
                         errors.append(str(exc))
+            evidence_version = item.get("evidence_schema_version")
+            if evidence_version is None:
+                continue
+            if evidence_version != 2:
+                errors.append(f"{item_id}.evidence_schema_version is unsupported")
+                continue
+            from measurement import MeasurementError, validate_evidence_item
+
+            try:
+                validate_evidence_item(item)
+            except MeasurementError as exc:
+                errors.append(f"{item_id}: {exc}")
+                continue
+            if item.get("measurement_kind") not in {
+                "immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"
+            }:
+                errors.append(f"{item_id}.measurement_kind is invalid")
+            assessment = item.get("assessment")
+            required_assessment = {
+                "method", "grader_id", "rubric_version", "calibration_set_version", "independent", "answer_hash"
+            }
+            if not isinstance(assessment, dict) or set(assessment) != required_assessment:
+                errors.append(f"{item_id}.assessment fields are invalid")
+            elif assessment.get("method") not in {
+                "deterministic", "anchored_model", "dual_blind", "human", "legacy_model"
+            }:
+                errors.append(f"{item_id}.assessment.method is invalid")
+            required_scores = item.get("required_dimension_scores")
+            if not isinstance(required_scores, dict) or not required_scores:
+                errors.append(f"{item_id}.required_dimension_scores must be a non-empty mapping")
+            else:
+                for dimension, score in required_scores.items():
+                    if not isinstance(scores, dict) or dimension not in scores or scores.get(dimension) != score:
+                        errors.append(f"{item_id}.required_dimension_scores.{dimension} must mirror scores")
+                    try:
+                        require_number(score, f"{item_id}.required_dimension_scores.{dimension}", 0, 1)
+                    except AtomLearnError as exc:
+                        errors.append(str(exc))
+            if item.get("quality_tier") not in {"A", "B", "C", "legacy"}:
+                errors.append(f"{item_id}.quality_tier is invalid")
+            for field in ["mastery_eligible", "strategy_eligible", "provenance_incomplete"]:
+                if not isinstance(item.get(field), bool):
+                    errors.append(f"{item_id}.{field} must be boolean")
 
     def _validate_reviews(self, errors: list[str]) -> None:
         ids: set[str] = set()
@@ -1438,6 +1481,10 @@ class Workspace:
             for atom in self.atoms.values()
             if atom.get("status") in {"skipped", "deferred"}
         ]
+        evidence_quality: dict[str, int] = defaultdict(int)
+        for item in self.evidence.get("items", []):
+            if isinstance(item, dict):
+                evidence_quality[item.get("quality_tier", "unmigrated_legacy")] += 1
         return {
             "valid": not validation_errors,
             "validation_errors": validation_errors,
@@ -1453,6 +1500,7 @@ class Workspace:
             "counts": dict(sorted(counts.items())),
             "open_questions": open_questions,
             "due_reviews": due_reviews,
+            "evidence_quality": dict(sorted(evidence_quality.items())),
             "active_flexibility_decisions": flexibility,
             "detailed_expansions": self.active_expansions(),
             "optional_branches": [
@@ -2097,13 +2145,12 @@ class Workspace:
         kind = payload.get("kind", "mastery_check")
         if kind not in EVIDENCE_KINDS:
             raise AtomLearnError(f"Invalid Evidence kind: {kind!r}")
-        scores = payload.get("scores")
-        if not isinstance(scores, dict) or not scores:
-            raise AtomLearnError("evidence.scores must be a non-empty mapping")
-        normalized_scores = {
-            str(dimension): require_number(score, f"score {dimension}", 0, 1)
-            for dimension, score in scores.items()
-        }
+        from measurement import MeasurementError, evidence_measurement
+
+        try:
+            measurement = evidence_measurement(payload, self.atoms[atom_id]["mastery"]["required_dimensions"], kind)
+        except MeasurementError as exc:
+            raise AtomLearnError(str(exc)) from exc
         evidence_id = next_record_id("ev", self.evidence["items"])
         item = {
             "id": evidence_id,
@@ -2111,11 +2158,11 @@ class Workspace:
             "kind": kind,
             "prompt": require_string(payload.get("prompt"), "evidence.prompt"),
             "response_summary": require_string(payload.get("response_summary"), "evidence.response_summary"),
-            "scores": normalized_scores,
             "feedback": require_string(payload.get("feedback"), "evidence.feedback"),
             "rationale": require_string(payload.get("rationale"), "evidence.rationale"),
             "result": "pending",
             "created_at": iso(),
+            **measurement,
         }
         self.evidence["items"].append(item)
         self.atoms[atom_id].setdefault("evidence_ids", []).append(evidence_id)
@@ -2135,20 +2182,28 @@ class Workspace:
             raise AtomLearnError(f"Evidence {evidence_id} was already assessed")
         mastery = atom["mastery"]
         required = mastery["required_dimensions"]
-        missing = [dimension for dimension in required if dimension not in evidence["scores"]]
+        dimension_scores = evidence.get("required_dimension_scores", evidence.get("scores", {}))
+        missing = [dimension for dimension in required if dimension not in dimension_scores]
         if missing:
             raise AtomLearnError(f"Evidence is missing required dimensions: {', '.join(missing)}")
-        required_scores = [float(evidence["scores"][dimension]) for dimension in required]
+        required_scores = [float(dimension_scores[dimension]) for dimension in required]
         average = sum(required_scores) / len(required_scores)
         minimum = min(required_scores)
-        if average >= float(mastery.get("pass_threshold", 0.8)) and minimum >= float(mastery.get("minimum_dimension_score", 0.6)):
+        passed_rubric = (
+            average >= float(mastery.get("pass_threshold", 0.8))
+            and minimum >= float(mastery.get("minimum_dimension_score", 0.6))
+        )
+        mastery_eligible = evidence.get("mastery_eligible", True)
+        if passed_rubric and mastery_eligible:
             result = "mastered"
-        elif average >= 0.5:
+        elif average >= 0.5 or passed_rubric:
             result = "partial"
         else:
             result = "not_mastered"
         evidence["result"] = result
         evidence["assessed_at"] = iso(at)
+        if passed_rubric and not mastery_eligible:
+            evidence["eligibility_block"] = "scorer_not_qualified_for_mastery"
         atom["attempts"] = int(atom.get("attempts", 0)) + 1
         atom["confidence"] = round(average, 3)
         atom["last_reviewed_at"] = iso(at)
@@ -2164,10 +2219,31 @@ class Workspace:
             self._advance_expansion_after_mastery(atom_id, at or now_utc())
         else:
             atom["status"] = "active"
-            weakest = min(required, key=lambda dimension: evidence["scores"][dimension])
+            weakest = min(required, key=lambda dimension: dimension_scores[dimension])
             self.current["phase"] = "teaching"
-            self.current["next_action"] = f"Remediate the weakest mastery dimension: {weakest}."
+            self.current["next_action"] = (
+                "Obtain qualified independent Evidence before mastery."
+                if passed_rubric and not mastery_eligible
+                else f"Remediate the weakest mastery dimension: {weakest}."
+            )
         return result
+
+    def migrate_legacy_evidence(self) -> dict[str, Any]:
+        from measurement import MeasurementError, migrate_legacy_item
+
+        migrated = []
+        for index, item in enumerate(self.evidence.get("items", [])):
+            if not isinstance(item, dict) or item.get("evidence_schema_version") == 2:
+                continue
+            atom = self.atoms.get(item.get("atom_id"), {})
+            required = atom.get("mastery", {}).get("required_dimensions", DEFAULT_DIMENSIONS)
+            try:
+                upgraded = migrate_legacy_item(item, required)
+            except MeasurementError as exc:
+                raise AtomLearnError(f"Cannot migrate legacy Evidence {item.get('id')}: {exc}") from exc
+            self.evidence["items"][index] = upgraded
+            migrated.append(item.get("id"))
+        return {"migrated_count": len(migrated), "evidence_ids": migrated, "strategy_eligible": False}
 
     def _complete_due_review(self, atom_id: str, evidence_id: str) -> None:
         due = [
@@ -2669,6 +2745,9 @@ def build_parser() -> argparse.ArgumentParser:
     strategy_parser = sub.add_parser("strategy", help="Run opt-in, replayable teaching-strategy experiments", add_help=False)
     strategy_parser.add_argument("-h", "--help", action="store_true", dest="strategy_help")
     strategy_parser.add_argument("strategy_args", nargs=argparse.REMAINDER)
+    measure_parser = sub.add_parser("measure", help="Grade and calibrate versioned learning measurements", add_help=False)
+    measure_parser.add_argument("-h", "--help", action="store_true", dest="measure_help")
+    measure_parser.add_argument("measure_args", nargs=argparse.REMAINDER)
     start_parser = sub.add_parser("start", help="Create or resume a course from one request", add_help=False)
     start_parser.add_argument("-h", "--help", action="store_true", dest="start_help")
     start_parser.add_argument("start_args", nargs=argparse.REMAINDER)
@@ -2752,6 +2831,13 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_parser.add_argument("workspace")
     evidence_parser.add_argument("--input", required=True)
     mutation_args(evidence_parser)
+
+    migrate_evidence_parser = sub.add_parser(
+        "migrate-evidence", help="Add explicit legacy provenance and exclusion metadata without changing scores or results"
+    )
+    migrate_evidence_parser.add_argument("workspace")
+    migrate_evidence_parser.add_argument("--confirmed", action="store_true")
+    mutation_args(migrate_evidence_parser)
 
     assess_parser = sub.add_parser("assess", help="Assess pending Evidence and update Atom mastery")
     assess_parser.add_argument("workspace")
@@ -2861,6 +2947,14 @@ def run(args: argparse.Namespace) -> None:
         try:
             run_strategy(["--help"] if args.strategy_help else args.strategy_args)
         except (StrategyError, UserProfileError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
+    if args.command == "measure":
+        from measurement import MeasurementError, run as run_measurement
+
+        try:
+            run_measurement(["--help"] if args.measure_help else args.measure_args)
+        except (MeasurementError, OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
     if args.command == "start":
@@ -3189,6 +3283,16 @@ def run(args: argparse.Namespace) -> None:
         evidence_id = workspace.record_evidence(read_data(Path(args.input)))
         workspace.commit("evidence.recorded", "Recorded learner performance", {"evidence_id": evidence_id})
         emit({"ok": True, "revision": workspace.revision, "evidence_id": evidence_id})
+    elif args.command == "migrate-evidence":
+        if not args.confirmed:
+            raise AtomLearnError("Legacy Evidence migration requires --confirmed")
+        result = workspace.migrate_legacy_evidence()
+        workspace.commit(
+            "evidence.legacy_migrated",
+            "Added explicit legacy scorer provenance without changing historical scores or results",
+            result,
+        )
+        emit({"ok": True, "revision": workspace.revision, **result})
     elif args.command == "assess":
         at = parse_time(args.now)
         result = workspace.assess(args.atom_id, args.evidence_id, at)

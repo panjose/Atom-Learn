@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/learning-benchmark.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "protocol_version", "layers", "required_learning_measures", "privacy", "claim_rules"],
+  "properties": {
+    "kind": {"const": "atomlearn.learning-benchmark-protocol"},
+    "schema_version": {"const": 1},
+    "protocol_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"},
+    "layers": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"enum": ["engineering", "calibration", "learning_effect"]}},
+    "required_learning_measures": {"type": "array", "minItems": 3, "uniqueItems": true, "items": {"enum": ["immediate_mastery", "delayed_retention_7d", "delayed_retention_30d", "near_transfer", "far_transfer"]}},
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["opt_in", "data_minimization", "withdrawable", "raw_answers_local_by_default"],
+      "properties": {
+        "opt_in": {"const": true},
+        "data_minimization": {"const": true},
+        "withdrawable": {"const": true},
+        "raw_answers_local_by_default": {"const": true}
+      }
+    },
+    "claim_rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engineering_is_not_learning_gain", "calibration_is_not_learning_gain", "learning_gain_requires_control"],
+      "properties": {
+        "engineering_is_not_learning_gain": {"const": true},
+        "calibration_is_not_learning_gain": {"const": true},
+        "learning_gain_requires_control": {"const": true}
+      }
+    }
+  }
+}

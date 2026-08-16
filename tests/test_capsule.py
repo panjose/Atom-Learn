@@ -71,6 +71,17 @@ def capsule_workspace(tmp_path: Path) -> tuple[Path, Path, str]:
             {
                 "atom_id": "calculus.limit.approach",
                 "kind": "mastery_check",
+                "measurement_kind": "immediate_mastery",
+                "measurement_item_id": "calculus.limit.approach.fixture-v2",
+                "episode_id": f"episode-capsule-{index}",
+                "assessment": {
+                    "method": "human",
+                    "grader_id": "atomlearn/human-adjudication-v1",
+                    "rubric_version": "human-v1",
+                    "calibration_set_version": None,
+                    "independent": True,
+                    "answer_hash": "sha256:" + "e" * 64,
+                },
                 "prompt": "A local prompt that must never enter the Capsule.",
                 "response_summary": "A private response summary.",
                 "scores": {"explain": 0.4, "discriminate": 0.4},

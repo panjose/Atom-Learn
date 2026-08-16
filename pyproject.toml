@@ -37,6 +37,7 @@ py-modules = [
   "effective_policy",
   "strategy",
   "capsule",
+  "measurement",
 ]
 
 [tool.pytest.ini_options]

@@ -149,6 +149,17 @@ def master_active(path: Path, revision: int) -> tuple[int, str]:
         {
             "atom_id": atom["id"],
             "kind": "mastery_check",
+            "measurement_kind": "immediate_mastery",
+            "measurement_item_id": f"{atom['id']}.fixture-v2",
+            "episode_id": f"episode-{uuid.uuid4().hex}",
+            "assessment": {
+                "method": "human",
+                "grader_id": "atomlearn/human-adjudication-v1",
+                "rubric_version": "human-v1",
+                "calibration_set_version": None,
+                "independent": True,
+                "answer_hash": "sha256:" + "c" * 64,
+            },
             "prompt": "Demonstrate the current Atom without relying on later branch material.",
             "response_summary": "The learner demonstrated the declared objective independently.",
             "scores": {dimension: 0.9 for dimension in dimensions},

@@ -82,6 +82,17 @@ def evidence(path: Path, atom_id: str, revision: int, score: float) -> tuple[int
         {
             "atom_id": atom_id,
             "kind": "mastery_check",
+            "measurement_kind": "immediate_mastery",
+            "measurement_item_id": f"{atom_id}.fixture-v2",
+            "episode_id": f"episode-{uuid.uuid4().hex}",
+            "assessment": {
+                "method": "human",
+                "grader_id": "atomlearn/human-adjudication-v1",
+                "rubric_version": "human-v1",
+                "calibration_set_version": None,
+                "independent": True,
+                "answer_hash": "sha256:" + "d" * 64,
+            },
             "prompt": "Explain and apply the current concept.",
             "response_summary": "The learner produced an observable response.",
             "scores": {"explain": score, "apply": score, "discriminate": score},

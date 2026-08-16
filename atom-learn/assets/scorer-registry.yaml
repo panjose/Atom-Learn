@@ -1,0 +1,74 @@
+kind: atomlearn.scorer-registry
+schema_version: 1
+registry_version: scorer-v1
+scorers:
+  - id: atomlearn/exact-choice-v1
+    method: deterministic
+    implementation: exact_choice
+    rubric_versions: [exact-v1]
+    calibration_sets: []
+    max_quality_tier: A
+    mastery_eligible: true
+    strategy_eligible: true
+    limitations:
+      - Valid only for normalized exact, boolean, or multiple-choice answers declared in the item.
+  - id: atomlearn/numeric-unit-v1
+    method: deterministic
+    implementation: numeric_unit
+    rubric_versions: [numeric-v1]
+    calibration_sets: []
+    max_quality_tier: A
+    mastery_eligible: true
+    strategy_eligible: true
+    limitations:
+      - Checks declared numeric tolerance and unit aliases but does not prove a derivation is valid.
+  - id: atomlearn/fixture-anchored-v1
+    method: anchored_model
+    implementation: external_anchored
+    rubric_versions: [open-v1]
+    calibration_sets: [calibration-open-v1]
+    max_quality_tier: B
+    mastery_eligible: true
+    strategy_eligible: true
+    limitations:
+      - This registered profile exists for reproducible calibration fixtures and is not a claim about an arbitrary model.
+  - id: atomlearn/unregistered-model-v1
+    method: anchored_model
+    implementation: external_anchored
+    rubric_versions: [unregistered-v1]
+    calibration_sets: []
+    max_quality_tier: C
+    mastery_eligible: false
+    strategy_eligible: false
+    limitations:
+      - Free model scores may provide feedback but cannot independently trigger mastery or strategy promotion.
+  - id: atomlearn/dual-blind-v1
+    method: dual_blind
+    implementation: external_dual
+    rubric_versions: [dual-v1]
+    calibration_sets: [calibration-dual-v1]
+    max_quality_tier: B
+    mastery_eligible: true
+    strategy_eligible: true
+    limitations:
+      - Both reviews must be context-isolated and independent; repeated calls to one shared model are not dual blind.
+  - id: atomlearn/human-adjudication-v1
+    method: human
+    implementation: human_adjudication
+    rubric_versions: [human-v1]
+    calibration_sets: []
+    max_quality_tier: B
+    mastery_eligible: true
+    strategy_eligible: true
+    limitations:
+      - Core records asserted human provenance but cannot authenticate the reviewer identity.
+  - id: atomlearn/legacy-unverified-v1
+    method: legacy_model
+    implementation: legacy
+    rubric_versions: [legacy-v1]
+    calibration_sets: []
+    max_quality_tier: legacy
+    mastery_eligible: true
+    strategy_eligible: false
+    limitations:
+      - Preserves historical mastery compatibility without qualifying the Evidence for new strategy outcomes.

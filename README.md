@@ -69,7 +69,22 @@ Core `0.13.0` adds a read-only compatibility manifest and deterministic migratio
 
 Cross-course personalization remains off until the learner explicitly runs `atomlearn profile enable <workspace>`. Global profiles contain only allowlisted enum signals, never import old workspace history automatically, and can be disabled, retired, exported, or reset without deleting their audit trail. `atomlearn policy effective|explain` merges current-turn, workspace, global, strategy, and Core layers with per-value provenance. See [User Profiles](atom-learn/references/USER_PROFILE.md) and [Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md).
 
-Teaching-strategy experiments require a second, independent opt-in through `atomlearn strategy enable-experiments`. Candidates are shadowed before live use, assignments are deterministic per Atom episode, explicit preferences exclude an exposure from comparison, and only assessed Evidence can become an outcome. Promotion requires comparable strata, delayed reviews, quality improvement, and passing guardrails; pause removes the overlay without rewriting learning history. See [Strategy Experiments](atom-learn/references/STRATEGY_EXPERIMENTS.md).
+Teaching-strategy experiments require a second, independent opt-in through `atomlearn strategy enable-experiments`. Candidates are shadowed before live use, assignments are deterministic per Atom episode, explicit preferences exclude an exposure from comparison, and only qualified assessed Evidence can become an outcome. Promotion requires comparable strata, delayed reviews, quality improvement, and passing guardrails; pause removes the overlay without rewriting learning history. See [Strategy Experiments](atom-learn/references/STRATEGY_EXPERIMENTS.md).
+
+## Evidence v2 and Learning Measurement
+
+Evidence v2 no longer treats a model-supplied number as proof of mastery. Each new record carries measurement-item and episode identity, scorer/rubric/calibration provenance, independence, a local answer hash, the Active Atom's derived required-dimension scores, quality tier, and separate mastery/strategy eligibility. Core deterministic exact-choice and numeric/unit graders can produce tier A Evidence; registered calibrated, independent dual, or declared human assessment can qualify at tier B. Unregistered, uncalibrated, non-independent, and newly submitted legacy scores remain feedback-only and cannot independently master an Atom or enter a strategy outcome.
+
+Immediate mastery, delayed retention, near transfer, and far transfer use one versioned item-bank contract. Retention and transfer items must be held out and context-isolated. Open-response scorer releases are checked against versioned human-reference calibration sets with reproducible MAE, bias, agreement, abstention, human-review, version-drift, confusion, and stratified reports. The separate benchmark protocol forbids treating engineering or calibration success as a learning-gain claim; that requires a consented controlled study with delayed and transfer measurements. See [Evidence v2 and Learning Measurement](atom-learn/references/MEASUREMENT.md).
+
+```powershell
+atomlearn measure registry
+atomlearn measure grade --input deterministic-grade.yaml
+atomlearn measure validate-bank --input measurement-bank.yaml
+atomlearn measure calibrate --input calibration-set.yaml --output calibration-report.json
+atomlearn measure validate-protocol
+atomlearn migrate-evidence courses/calculus --confirmed --expected-revision 7
+```
 
 ## Flexible Course Intake
 
@@ -270,7 +285,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

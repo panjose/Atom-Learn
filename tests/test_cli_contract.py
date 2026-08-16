@@ -25,6 +25,7 @@ MODULES = [
     "effective_policy",
     "strategy",
     "capsule",
+    "measurement",
 ]
 
 

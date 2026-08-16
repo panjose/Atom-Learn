@@ -202,12 +202,66 @@ def test_opt_in_shadow_replay_override_and_real_outcome_linkage(tmp_path: Path) 
     )
     assert first["exposure"]["status"] == second["exposure"]["status"] == "exposed"
 
+    legacy_evidence = write_yaml(
+        workspace,
+        "legacy-strategy-evidence.yaml",
+        {
+            "atom_id": "calculus.limit.approach",
+            "kind": "mastery_check",
+            "prompt": "An unqualified model-scored response.",
+            "response_summary": "A score was supplied without scorer provenance.",
+            "scores": {"explain": 0.9, "discriminate": 0.9},
+            "feedback": "Unqualified feedback.",
+            "rationale": "Regression fixture for the strategy Evidence gate.",
+        },
+    )
+    legacy_recorded = output(
+        invoke(data_root, "record-evidence", workspace, "--input", legacy_evidence, "--expected-revision", 2)
+    )
+    output(
+        invoke(
+            data_root,
+            "assess",
+            workspace,
+            "calculus.limit.approach",
+            "--evidence-id",
+            legacy_recorded["evidence_id"],
+            "--expected-revision",
+            legacy_recorded["revision"],
+        )
+    )
+    rejected_legacy = invoke(
+        data_root,
+        "strategy",
+        "record-outcome",
+        workspace,
+        first["exposure"]["id"],
+        "--evidence-id",
+        legacy_recorded["evidence_id"],
+        "--expected-strategy-revision",
+        second["strategy_revision"],
+        check=False,
+    )
+    assert rejected_legacy.returncode == 2
+    assert "qualified for strategy use" in rejected_legacy.stderr
+
     evidence = write_yaml(
         workspace,
         "strategy-evidence.yaml",
         {
             "atom_id": "calculus.limit.approach",
             "kind": "mastery_check",
+            "measurement_kind": "near_transfer",
+            "measurement_item_id": "calculus.limit.approach.transfer-v2",
+            "episode_id": "episode-live-1",
+            "assessment": {
+                "method": "human",
+                "grader_id": "atomlearn/human-adjudication-v1",
+                "rubric_version": "human-v1",
+                "calibration_set_version": None,
+                "independent": True,
+                "answer_hash": "sha256:" + "f" * 64,
+            },
             "prompt": "Explain and distinguish the limit idea.",
             "response_summary": "Correct transfer response.",
             "scores": {"explain": 0.9, "discriminate": 0.9, "presentation_fluency": 0.0},
@@ -215,7 +269,7 @@ def test_opt_in_shadow_replay_override_and_real_outcome_linkage(tmp_path: Path) 
             "rationale": "Both required dimensions passed.",
         },
     )
-    recorded = output(invoke(data_root, "record-evidence", workspace, "--input", evidence, "--expected-revision", 2))
+    recorded = output(invoke(data_root, "record-evidence", workspace, "--input", evidence, "--expected-revision", 4))
     output(
         invoke(
             data_root,
@@ -225,7 +279,7 @@ def test_opt_in_shadow_replay_override_and_real_outcome_linkage(tmp_path: Path) 
             "--evidence-id",
             recorded["evidence_id"],
             "--expected-revision",
-            3,
+            recorded["revision"],
         )
     )
     linked = output(

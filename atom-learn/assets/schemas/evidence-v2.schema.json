@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/evidence-v2.schema.json",
+  "title": "AtomLearn persisted Evidence v2 item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "atom_id", "kind", "prompt", "response_summary", "feedback", "rationale",
+    "result", "created_at", "evidence_schema_version", "measurement_kind",
+    "measurement_item_id", "episode_id", "assessment", "scores",
+    "required_dimension_scores", "quality_tier", "quality_reason", "mastery_eligible",
+    "strategy_eligible", "provenance_incomplete"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^ev-[A-Za-z0-9._:-]{1,96}$"},
+    "atom_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "kind": {"enum": ["mastery_check", "review", "diagnostic"]},
+    "prompt": {"type": "string", "minLength": 1, "maxLength": 20000},
+    "response_summary": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "feedback": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "result": {"enum": ["pending", "mastered", "partial", "not_mastered"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "assessed_at": {"type": "string", "format": "date-time"},
+    "eligibility_block": {"const": "scorer_not_qualified_for_mastery"},
+    "evidence_schema_version": {"const": 2},
+    "measurement_kind": {"enum": ["immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"]},
+    "measurement_item_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "episode_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["method", "grader_id", "rubric_version", "calibration_set_version", "independent", "answer_hash"],
+      "properties": {
+        "method": {"enum": ["deterministic", "anchored_model", "dual_blind", "human", "legacy_model"]},
+        "grader_id": {"type": "string", "minLength": 3, "maxLength": 128},
+        "rubric_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "calibration_set_version": {"type": ["string", "null"], "minLength": 1, "maxLength": 96},
+        "independent": {"type": "boolean"},
+        "answer_hash": {
+          "oneOf": [
+            {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+            {"type": "null"}
+          ]
+        }
+      }
+    },
+    "scores": {"$ref": "#/$defs/scores"},
+    "required_dimension_scores": {"$ref": "#/$defs/scores"},
+    "quality_tier": {"enum": ["A", "B", "C", "legacy"]},
+    "quality_reason": {"type": "string", "minLength": 3, "maxLength": 256},
+    "mastery_eligible": {"type": "boolean"},
+    "strategy_eligible": {"type": "boolean"},
+    "provenance_incomplete": {"type": "boolean"}
+  },
+  "$defs": {
+    "scores": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": {"pattern": "^[a-z][a-z0-9_-]{1,63}$"},
+      "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}
+    }
+  }
+}

@@ -228,7 +228,7 @@ Use session adaptation only for presentation choices. Never let inferred prefere
 2. Require the separate `strategy enable-experiments` opt-in. Start every candidate in shadow mode and inspect at least one shadow exposure before live assignment.
 3. At the start of each matching Active Atom episode, call `strategy exposure` with a stable opaque episode key. Follow its chosen instruction for that episode; never switch arms mid-episode.
 4. Respect current-turn and stored explicit overrides. `shadow` and `overridden` exposures do not enter comparisons.
-5. Record and assess normal Evidence first, then link it once with `strategy record-outcome`. Never backfill an unexposed historical outcome.
+5. Record and assess qualified Evidence v2 first, then link it once with `strategy record-outcome`. Never link legacy, uncalibrated, non-independent, or unexposed historical Evidence.
 6. Use `strategy monitor` and accept long-lived `monitoring` when samples or delayed reviews are insufficient. Pause on degradation; promote only with a quality improvement and passing guardrails.
 
 Strategy values may change presentation only. Never let them change mastery, prerequisites, Atom status, skips, retrieval, citations, privacy, research scope, exam truth, or safety. Keep strategy revision independent from user-profile, adaptation, evolution, and course revisions.
@@ -278,14 +278,14 @@ Do not teach a future Atom to be conversationally helpful. Record it and return 
 
 ### Check mastery and advance
 
-1. Read [references/MASTERY.md](references/MASTERY.md) before designing or grading a check.
+1. Read [references/MASTERY.md](references/MASTERY.md) and [references/MEASUREMENT.md](references/MEASUREMENT.md) before designing or grading a check.
 2. Ask for observable performance; never use "Do you understand?" as the only check.
-3. Save the prompt, response summary, dimension scores, feedback, and evaluator rationale with `record-evidence`.
+3. Choose an immediate, delayed-retention, near-transfer, or far-transfer item. Save its item/episode identity, scorer/rubric/calibration provenance, independence, local answer hash, response summary, dimension scores, feedback, and rationale with `record-evidence`. Prefer Core deterministic scoring when its answer contract fits.
 4. Run `assess`. Let the CLI derive `mastered`, `partial`, or `not_mastered` from the Atom rubric.
 5. If not mastered, target the weakest dimension and keep the Atom active.
 6. If mastered, render progress, use `suggest-next`, and activate a successor only when the learner asks to continue or the active learning request clearly authorizes continuation.
 
-Never mark an Atom mastered without persisted Evidence. A provisional skip is a learner-directed assumption with its own status, not Evidence. Never record Evidence for a non-Active Atom; activate the intended Atom first and let the CLI reject mismatched or locked targets.
+Never mark an Atom mastered without persisted qualified Evidence. Free model scores, unregistered or uncalibrated graders, self-report, and non-independent review may guide feedback but cannot independently trigger mastery or strategy promotion. A provisional skip is a learner-directed assumption with its own status, not Evidence. Never record Evidence for a non-Active Atom; activate the intended Atom first and let the CLI reject mismatched or locked targets.
 
 ### Handle prerequisite backtracking
 
@@ -331,6 +331,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md) when a learner asks a side question or reveals a prerequisite gap.
 - Read [references/CONCEPT_ROUTING.md](references/CONCEPT_ROUTING.md) when an explanation exposes an unfamiliar related concept and the learner needs to know whether it belongs now, before, later, on an optional branch, or outside the goal.
 - Read [references/MASTERY.md](references/MASTERY.md) when creating checks, grading Evidence, or scheduling remediation.
+- Read [references/MEASUREMENT.md](references/MEASUREMENT.md) when selecting a scorer, creating held-out retention or transfer items, calibrating open-response grading, migrating legacy Evidence, or interpreting measurement quality.
 - Read [references/EVOLUTION.md](references/EVOLUTION.md) for the end-to-end evolution workflow.
 - Read [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md) before approval, application, or rollback.
 - Read [references/EVOLUTION_CAPSULE.md](references/EVOLUTION_CAPSULE.md) before building, linting, previewing, exporting, ingesting, or converting a privacy-minimized product feedback Capsule.

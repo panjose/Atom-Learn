@@ -1,0 +1,19 @@
+kind: atomlearn.learning-benchmark-protocol
+schema_version: 1
+protocol_version: learning-benchmark-v1
+layers: [engineering, calibration, learning_effect]
+required_learning_measures:
+  - immediate_mastery
+  - delayed_retention_7d
+  - delayed_retention_30d
+  - near_transfer
+  - far_transfer
+privacy:
+  opt_in: true
+  data_minimization: true
+  withdrawable: true
+  raw_answers_local_by_default: true
+claim_rules:
+  engineering_is_not_learning_gain: true
+  calibration_is_not_learning_gain: true
+  learning_gain_requires_control: true

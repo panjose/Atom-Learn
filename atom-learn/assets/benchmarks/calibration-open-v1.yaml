@@ -1,0 +1,39 @@
+kind: atomlearn.calibration-set
+schema_version: 1
+id: calibration-open-v1
+grader_id: atomlearn/fixture-anchored-v1
+rubric_version: open-v1
+thresholds:
+  min_samples: 4
+  max_mae: 0.05
+  min_agreement: 0.9
+  max_abstain_rate: 0.1
+  agreement_tolerance: 0.05
+baseline:
+  report_sha256: sha256:1111111111111111111111111111111111111111111111111111111111111111
+  grader_id: atomlearn/fixture-anchored-v0
+  rubric_version: open-v0
+  calibration_set_version: calibration-open-v0
+  mae: 0.03
+  bias: 0.01
+  agreement: 0.95
+  abstain_rate: 0.0
+  review_required_rate: 0.25
+  max_allowed_metric_delta: 0.1
+items:
+  - id: calibration.item-0
+    strata: {language: en, domain: calculus, difficulty: introductory, answer_length: short}
+    human_scores: {explain: 0.8, apply: 0.75}
+    prediction: {abstain: false, review_required: false, scores: {explain: 0.82, apply: 0.77}}
+  - id: calibration.item-1
+    strata: {language: zh-CN, domain: physics, difficulty: intermediate, answer_length: medium}
+    human_scores: {explain: 0.82, apply: 0.77}
+    prediction: {abstain: false, review_required: false, scores: {explain: 0.84, apply: 0.79}}
+  - id: calibration.item-2
+    strata: {language: en, domain: history, difficulty: advanced, answer_length: long}
+    human_scores: {explain: 0.84, apply: 0.79}
+    prediction: {abstain: false, review_required: false, scores: {explain: 0.86, apply: 0.81}}
+  - id: calibration.item-3
+    strata: {language: zh-CN, domain: biology, difficulty: introductory, answer_length: short}
+    human_scores: {explain: 0.86, apply: 0.81}
+    prediction: {abstain: false, review_required: true, scores: {explain: 0.88, apply: 0.83}}

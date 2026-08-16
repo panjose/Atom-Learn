@@ -541,6 +541,10 @@ class StrategyEngine:
                 raise StrategyError(f"Unknown Evidence: {evidence_id}")
             if evidence.get("result") not in {"mastered", "partial", "not_mastered"}:
                 raise StrategyError("Outcome requires assessed Evidence")
+            if evidence.get("strategy_eligible") is not True:
+                raise StrategyError(
+                    "Outcome requires Evidence explicitly qualified for strategy use by the scorer registry"
+                )
             workspace_events = _events(workspace.meta / "events.ndjson")
             evidence_event = next(
                 (
@@ -567,7 +571,7 @@ class StrategyEngine:
             required_dimensions = workspace.atoms[atom_id].get("mastery", {}).get("required_dimensions", [])
             if not isinstance(required_dimensions, list) or not required_dimensions:
                 raise StrategyError("Exposed Atom has no required mastery dimensions")
-            evidence_scores = evidence.get("scores", {})
+            evidence_scores = evidence.get("required_dimension_scores", {})
             missing_dimensions = [dimension for dimension in required_dimensions if dimension not in evidence_scores]
             if missing_dimensions:
                 raise StrategyError(
@@ -599,6 +603,9 @@ class StrategyEngine:
                 "evidence_ref": evidence_id,
                 "atom_ref": atom_ref,
                 "evidence_kind": str(evidence.get("kind")),
+                "measurement_kind": str(evidence.get("measurement_kind")),
+                "quality_tier": str(evidence.get("quality_tier")),
+                "grader_id": str(evidence.get("assessment", {}).get("grader_id")),
                 "result": evidence["result"],
                 "score": round(sum(scores) / len(scores), 6),
                 "attempts": int(workspace.atoms[atom_id].get("attempts", 1)),

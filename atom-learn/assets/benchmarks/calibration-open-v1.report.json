@@ -1,0 +1,53 @@
+{
+  "kind": "atomlearn.calibration-report",
+  "schema_version": 1,
+  "analysis_version": "calibration-v1",
+  "calibration_set_version": "calibration-open-v1",
+  "calibration_set_sha256": "sha256:45336ddc2d50f171036dd52a59f5bcd9ddaf4d3e6b0a7e8db37996fec5e1e59e",
+  "grader_id": "atomlearn/fixture-anchored-v1",
+  "rubric_version": "open-v1",
+  "sample_count": 4,
+  "scored_count": 4,
+  "abstain_count": 0,
+  "abstain_rate": 0.0,
+  "review_required_count": 1,
+  "review_required_rate": 0.25,
+  "overall": {"count": 8, "mae": 0.02, "bias": 0.02, "agreement": 1.0},
+  "per_dimension": {
+    "apply": {"count": 4, "mae": 0.02, "bias": 0.02, "agreement": 1.0},
+    "explain": {"count": 4, "mae": 0.02, "bias": 0.02, "agreement": 1.0}
+  },
+  "strata": {
+    "en|calculus|introductory|short": {"count": 2, "mae": 0.02, "bias": 0.02, "agreement": 1.0},
+    "en|history|advanced|long": {"count": 2, "mae": 0.02, "bias": 0.02, "agreement": 1.0},
+    "zh-CN|biology|introductory|short": {"count": 2, "mae": 0.02, "bias": 0.02, "agreement": 1.0},
+    "zh-CN|physics|intermediate|medium": {"count": 2, "mae": 0.02, "bias": 0.02, "agreement": 1.0}
+  },
+  "pass_confusion": {"pass_pass": 2, "pass_fail": 1, "fail_pass": 0, "fail_fail": 1},
+  "drift": {
+    "compared": true,
+    "baseline_report_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "baseline_grader_id": "atomlearn/fixture-anchored-v0",
+    "baseline_rubric_version": "open-v0",
+    "baseline_calibration_set_version": "calibration-open-v0",
+    "metric_deltas": {
+      "mae": -0.01,
+      "bias": 0.01,
+      "agreement": 0.05,
+      "abstain_rate": 0.0,
+      "review_required_rate": 0.0
+    },
+    "max_absolute_delta": 0.05,
+    "max_allowed_metric_delta": 0.1,
+    "threshold_exceeded": false
+  },
+  "thresholds": {
+    "min_samples": 4,
+    "max_mae": 0.05,
+    "min_agreement": 0.9,
+    "max_abstain_rate": 0.1,
+    "agreement_tolerance": 0.05
+  },
+  "qualified": true,
+  "qualification_reasons": []
+}

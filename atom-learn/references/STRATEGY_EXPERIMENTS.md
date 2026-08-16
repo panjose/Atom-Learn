@@ -34,7 +34,7 @@ After the learner completes an actual check, record and assess ordinary Evidence
 atomlearn strategy record-outcome <workspace> <exposure-id> --evidence-id <evidence-id>
 ```
 
-Only assessed Evidence for the exposed Atom is accepted. Review Evidence supplies delayed outcomes. Historical Evidence without an exposure is never backfilled.
+Only assessed Evidence for the exposed Atom with `strategy_eligible: true` is accepted. Strategy scoring reads the persisted `required_dimension_scores`, never caller-added auxiliary dimensions. Legacy, unregistered, uncalibrated, and non-independent Evidence is rejected even if its numeric scores pass the mastery threshold. Review Evidence supplies delayed outcomes. Historical Evidence without an exposure is never backfilled. See [MEASUREMENT.md](MEASUREMENT.md).
 
 ## Monitoring and promotion
 

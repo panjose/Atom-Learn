@@ -36,6 +36,8 @@ After all children are mastered, check the parent in `integrating` phase with a 
 
 ## Scoring
 
+Use [MEASUREMENT.md](MEASUREMENT.md) for Evidence v2 scorer provenance, item banks, held-out retention/transfer checks, calibration, eligibility, and legacy migration. The numeric rubric below defines educational meaning; it does not by itself qualify whoever produced the score.
+
 Score each required dimension from 0.0 to 1.0:
 
 - `0.0–0.39`: absent or substantially incorrect;
@@ -46,7 +48,9 @@ Score each required dimension from 0.0 to 1.0:
 
 The CLI marks `mastered` only when the average meets `pass_threshold` and every required dimension meets `minimum_dimension_score`. It marks `partial` when the average is at least 0.5, otherwise `not_mastered`.
 
-Save the prompt, response summary, scores, feedback, and rationale. Do not save a fabricated verbatim learner answer.
+Save the prompt, response summary, scores, feedback, rationale, measurement kind, item and episode IDs, registered grader/rubric/calibration provenance, independence claim, and a local answer hash. Core derives `required_dimension_scores`; never ask the caller to override them. Do not save a fabricated verbatim learner answer.
+
+Free model scores and other unregistered, uncalibrated, or non-independent graders may guide feedback but cannot independently master an Atom. Prefer a Core deterministic item when the answer contract is exact, otherwise use a registered calibrated, dual-independent, or human scorer. Raw responses stay local and are not copied into canonical Evidence.
 
 Record Evidence only for `current.active_atom_id`, and require that Atom's canonical status to be `active`. Do not pre-write Evidence for available, locked, deferred, skipped, mastered, or archived Atoms. `validate` rejects pending Evidence whose Atom is no longer Active.
 

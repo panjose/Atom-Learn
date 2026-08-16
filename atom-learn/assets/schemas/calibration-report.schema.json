@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/calibration-report.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "analysis_version", "calibration_set_version",
+    "calibration_set_sha256", "grader_id", "rubric_version", "sample_count",
+    "scored_count", "abstain_count", "abstain_rate", "review_required_count",
+    "review_required_rate", "overall", "per_dimension", "strata", "pass_confusion",
+    "drift", "thresholds", "qualified", "qualification_reasons"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.calibration-report"},
+    "schema_version": {"const": 1},
+    "analysis_version": {"const": "calibration-v1"},
+    "calibration_set_version": {"type": "string", "minLength": 3},
+    "calibration_set_sha256": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "grader_id": {"type": "string", "minLength": 3},
+    "rubric_version": {"type": "string", "minLength": 1},
+    "sample_count": {"type": "integer", "minimum": 1},
+    "scored_count": {"type": "integer", "minimum": 0},
+    "abstain_count": {"type": "integer", "minimum": 0},
+    "abstain_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "review_required_count": {"type": "integer", "minimum": 0},
+    "review_required_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "overall": {"$ref": "#/$defs/metrics"},
+    "per_dimension": {"type": "object", "additionalProperties": {"$ref": "#/$defs/metrics"}},
+    "strata": {"type": "object", "additionalProperties": {"$ref": "#/$defs/metrics"}},
+    "pass_confusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["pass_pass", "pass_fail", "fail_pass", "fail_fail"],
+      "properties": {
+        "pass_pass": {"type": "integer", "minimum": 0},
+        "pass_fail": {"type": "integer", "minimum": 0},
+        "fail_pass": {"type": "integer", "minimum": 0},
+        "fail_fail": {"type": "integer", "minimum": 0}
+      }
+    },
+    "drift": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "compared", "baseline_report_sha256", "baseline_grader_id", "baseline_rubric_version",
+        "baseline_calibration_set_version", "metric_deltas", "max_absolute_delta",
+        "max_allowed_metric_delta", "threshold_exceeded"
+      ],
+      "properties": {
+        "compared": {"type": "boolean"},
+        "baseline_report_sha256": {"oneOf": [{"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, {"type": "null"}]},
+        "baseline_grader_id": {"type": ["string", "null"], "minLength": 3},
+        "baseline_rubric_version": {"type": ["string", "null"], "minLength": 1},
+        "baseline_calibration_set_version": {"type": ["string", "null"], "minLength": 3},
+        "metric_deltas": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mae", "bias", "agreement", "abstain_rate", "review_required_rate"],
+          "properties": {
+            "mae": {"$ref": "#/$defs/driftMetric"},
+            "bias": {"$ref": "#/$defs/driftMetric"},
+            "agreement": {"$ref": "#/$defs/driftMetric"},
+            "abstain_rate": {"$ref": "#/$defs/driftMetric"},
+            "review_required_rate": {"$ref": "#/$defs/driftMetric"}
+          }
+        },
+        "max_absolute_delta": {"type": ["number", "null"], "minimum": 0, "maximum": 2},
+        "max_allowed_metric_delta": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "threshold_exceeded": {"type": "boolean"}
+      }
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["min_samples", "max_mae", "min_agreement", "max_abstain_rate", "agreement_tolerance"],
+      "properties": {
+        "min_samples": {"type": "integer", "minimum": 1},
+        "max_mae": {"type": "number", "minimum": 0, "maximum": 1},
+        "min_agreement": {"type": "number", "minimum": 0, "maximum": 1},
+        "max_abstain_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "agreement_tolerance": {"type": "number", "exclusiveMinimum": 0, "maximum": 1}
+      }
+    },
+    "qualified": {"type": "boolean"},
+    "qualification_reasons": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 3}}
+  },
+  "$defs": {
+    "driftMetric": {"type": ["number", "null"], "minimum": -2, "maximum": 2},
+    "metric": {"type": ["number", "null"], "minimum": -1, "maximum": 1},
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["count", "mae", "bias", "agreement"],
+      "properties": {
+        "count": {"type": "integer", "minimum": 0},
+        "mae": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "bias": {"$ref": "#/$defs/metric"},
+        "agreement": {"type": ["number", "null"], "minimum": 0, "maximum": 1}
+      }
+    }
+  }
+}
