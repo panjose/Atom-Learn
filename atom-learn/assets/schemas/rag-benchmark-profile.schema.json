@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/rag-benchmark-profile.schema.json",
+  "title": "AtomLearn bundled RAG benchmark profile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "id", "version", "title", "dimensions",
+    "thresholds", "reranker_thresholds", "sources", "queries", "claims", "workflow_cases"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.rag-benchmark-profile"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+    "version": {"type": "integer", "minimum": 1},
+    "title": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "dimensions": {
+      "type": "array", "minItems": 9, "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^(domain|language|structure|retrieval):[a-z0-9_-]+$"}
+    },
+    "thresholds": {"$ref": "#/$defs/thresholds"},
+    "reranker_thresholds": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mrr", "ndcg_at_k", "maximum_ndcg_regression"],
+      "properties": {
+        "mrr": {"type": "number", "minimum": 0, "maximum": 1},
+        "ndcg_at_k": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_ndcg_regression": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "sources": {"type": "array", "minItems": 3, "items": {"$ref": "#/$defs/source"}},
+    "queries": {"type": "array", "minItems": 3, "items": {"$ref": "#/$defs/query"}},
+    "claims": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/claim"}}
+    ,"workflow_cases": {"$ref": "#/$defs/workflowCases"}
+  },
+  "$defs": {
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "authority", "passages"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "title": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "authority": {"enum": ["primary", "official", "peer_reviewed", "textbook", "user", "secondary", "unknown"]},
+        "version": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "passages": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["locator", "section", "text"],
+            "properties": {
+              "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
+              "section": {"type": "string", "minLength": 1, "maxLength": 1000},
+              "text": {"type": "string", "minLength": 1, "maxLength": 50000}
+            }
+          }
+        }
+      }
+    },
+    "thresholds": {
+      "type": "object", "additionalProperties": false,
+      "required": ["recall_at_k", "mrr", "ndcg_at_k", "citation_correctness", "unsupported_claim_rate", "source_diversity", "freshness", "correction_success_rate", "residual_gap_rate"],
+      "properties": {
+        "recall_at_k": {"type": "number", "minimum": 0, "maximum": 1},
+        "mrr": {"type": "number", "minimum": 0, "maximum": 1},
+        "ndcg_at_k": {"type": "number", "minimum": 0, "maximum": 1},
+        "citation_correctness": {"type": "number", "minimum": 0, "maximum": 1},
+        "unsupported_claim_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "source_diversity": {"type": "number", "minimum": 0, "maximum": 1},
+        "freshness": {"type": "number", "minimum": 0, "maximum": 1},
+        "correction_success_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "residual_gap_rate": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "locatorRef": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_id", "locator"],
+      "properties": {
+        "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "locator": {"type": "string", "minLength": 1, "maxLength": 1000}
+      }
+    },
+    "query": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "query", "relevant"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "query": {"type": "string", "minLength": 1, "maxLength": 2000},
+        "alternate_queries": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "relevant": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/locatorRef"}}
+      }
+    },
+    "claim": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "cited", "supported", "abstained"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "cited": {"type": "array", "items": {"$ref": "#/$defs/locatorRef"}},
+        "supported": {"type": "array", "items": {"$ref": "#/$defs/locatorRef"}},
+        "abstained": {"type": "boolean"}
+      }
+    },
+    "workflowCases": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_diversity", "freshness", "correction"],
+      "properties": {
+        "source_diversity": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "cited", "minimum_sources"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+              "cited": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/locatorRef"}},
+              "minimum_sources": {"type": "integer", "minimum": 2, "maximum": 20}
+            }
+          }
+        },
+        "freshness": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "source_id", "acceptable_versions"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+              "source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+              "acceptable_versions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}}
+            }
+          }
+        },
+        "correction": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "before_status", "after_status", "evidence"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+              "before_status": {"enum": ["weak", "missing"]},
+              "after_status": {"enum": ["supported", "weak", "missing"]},
+              "evidence": {"type": "array", "items": {"$ref": "#/$defs/locatorRef"}}
+            }
+          }
+        }
+      }
+    }
+  }
+}

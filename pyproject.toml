@@ -17,6 +17,8 @@ atomlearn = "atomlearn:main"
 
 [project.optional-dependencies]
 ocr = ["PyMuPDF>=1.24", "pytesseract>=0.3.13", "Pillow>=10.0"]
+scale = ["usearch>=2.26,<3"]
+semantic = ["sentence-transformers>=5.2,<6"]
 dev = ["pytest>=8.0", "hypothesis>=6.120"]
 
 [tool.setuptools]
@@ -28,6 +30,8 @@ py-modules = [
   "intake",
   "rag",
   "document_ir",
+  "semantic",
+  "vector_index",
   "adaptation",
   "evolution",
   "research",

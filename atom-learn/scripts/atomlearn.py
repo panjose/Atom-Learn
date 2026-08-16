@@ -3010,10 +3010,12 @@ def run(args: argparse.Namespace) -> None:
     if args.command == "rag":
         from rag import AtomLearnError as RagAtomLearnError
         from rag import RagError, run as run_rag
+        from semantic import SemanticAdapterError
+        from vector_index import VectorIndexError
 
         try:
             run_rag(["--help"] if args.rag_help else args.rag_args)
-        except (RagError, RagAtomLearnError, OSError, sqlite3.Error, json.JSONDecodeError, yaml.YAMLError) as exc:
+        except (RagError, SemanticAdapterError, VectorIndexError, RagAtomLearnError, OSError, sqlite3.Error, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
     if args.command == "intake":

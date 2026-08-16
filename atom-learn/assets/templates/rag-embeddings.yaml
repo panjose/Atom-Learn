@@ -1,4 +1,8 @@
 model: approved-provider/model@version
+model_revision: immutable-provider-revision
+license: provider-model-license
+replace_profile: false
+confirmed: false
 embeddings:
   - chunk_id: source-id.r1.c00001
     vector: [0.1, -0.2]

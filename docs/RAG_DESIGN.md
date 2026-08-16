@@ -31,16 +31,19 @@ flowchart LR
     B --> P["Research source attachment"]
     Q["Question or coverage anchor"] --> D["Query variants"]
     C --> E["BM25"]
-    C --> F["Default multilingual hash embedding"]
-    C --> G["Optional provider embeddings"]
+    C --> F["Default multilingual hash vector"]
+    C --> G["Optional provider or approved local embeddings"]
     D --> E
     D --> F
     D --> G
+    F --> S["Bounded scoring or verified HNSW generation"]
+    G --> S
     E --> H["RRF candidate fusion"]
-    F --> H
-    G --> H
+    S --> H
     H --> I["Deterministic reranker"]
-    I --> V["Harness evidence verdict"]
+    I --> O["Optional benchmark-gated cross-encoder"]
+    O --> R["Child evidence plus bounded parent context"]
+    R --> V["Harness evidence verdict"]
     V -->|"supported"| J["Cited evidence bundle"]
     V -->|"weak or missing"| K["Structured Web Search task"]
     K --> L["Provenance-checked bounded passages"]
@@ -61,18 +64,20 @@ Extractors first normalize page, line, paragraph, JSON-path, row, heading, table
 The default candidate pool contains:
 
 - FTS5 BM25 results for the main and alternate queries;
-- a deterministic local multilingual hash embedding, including Chinese character n-grams;
-- optional cosine ranking when provider embeddings exist.
+- a deterministic local multilingual hash projection, including Chinese character n-grams;
+- optional cosine ranking for provider embeddings or an explicitly approved local learned model.
 
 RRF with `k=60` fuses rank positions without trying to compare incompatible raw BM25 and cosine score scales. The output keeps every component rank and raw component score for inspection.
 
-Every chunk receives `atomlearn/multilingual-hash-v1` by default. This embedding is local, versioned, deterministic, and requires no service or model download. It captures multilingual word/subword overlap but is deliberately not advertised as learned semantic understanding. Conceptual synonym recall still benefits from harness-generated query variants or an approved provider embedding.
+Every chunk receives `atomlearn/multilingual-hash-v1` by default. This vector is local, versioned, deterministic, and requires no service or model download. It captures multilingual word/subword overlap but is deliberately not advertised as learned semantic understanding. Conceptual synonym recall still benefits from harness-generated query variants or an approved provider/local learned embedding.
 
-An attached embedding batch establishes one explicit model-and-dimension profile per workspace. Query embeddings must name and match that profile, preventing silent fusion of incompatible vector spaces.
+An attached embedding batch establishes one explicit model-and-dimension profile per workspace. Replacing its model, revision, license, hash, backend, or dimension requires confirmation and a complete active-corpus batch. Local models use absolute non-symlink paths, safe weights, disabled remote code/network access, and a recorded directory hash. Query embeddings must name and match the active profile, preventing silent fusion of incompatible vector spaces.
 
-### 3.4 Deterministic reranking and harness judgment
+At or below the configured small-corpus boundary, dense scoring reads only the applicable vector column. Above it, a crash-contained USearch HNSW adapter loads a hash-verified active generation; if the generation is absent, stale, corrupt, or unhealthy, that dense component is skipped with zero scanned chunks. Generation activation occurs only after save, hash, reload, and self-retrieval verification. Incremental remove/add preserves the old generation and forces a full rebuild once accumulated tombstones cross the threshold.
 
-`atomlearn/deterministic-reranker-v1` reranks the fused candidate pool using query coverage, title/section coverage, exact-phrase signal, authority prior, locator quality, and normalized RRF rank. The component scores make ordering reproducible and directly testable. It does not decide truth: the harness still judges direct support, authority, recency, agreement, and locator quality. RRF and reranker scores are never treated as calibrated confidence.
+### 3.4 Reranking, parent context, and harness judgment
+
+`atomlearn/deterministic-reranker-v1` reranks the fused candidate pool using query coverage, title/section coverage, exact-phrase signal, authority prior, locator quality, and normalized RRF rank. An optional local cross-encoder can reorder only this bounded pool after it passes the current bundled profile's absolute and baseline-non-regression gates. Results retain both score provenances. Parent-child expansion adds bounded headings and siblings for interpretation while preserving the exact supporting child block and locator as the evidence target. None of these layers decides truth: the harness still judges direct support, authority, recency, agreement, and locator quality. RRF and reranker scores are never treated as calibrated confidence.
 
 ### 3.5 Corrective Web Search
 
@@ -108,12 +113,12 @@ The operational gate verifies evidence sufficiency per coverage anchor. `rag eva
 - freshness failures for versioned or current topics;
 - Web Search correction rate and gaps that remain unresolved.
 
-Configurable thresholds produce a quality gate and every metric includes per-case diagnostics. Evaluate retrieval separately from generation so a fluent answer cannot hide missing evidence. Add failure queries whenever learners expose a synonym, language, document-structure, OCR, table, formula, or global-context retrieval miss.
+Ad hoc evaluation without thresholds is explicitly `report_only`; five core thresholds are required for an ad hoc gate. Stable gates must name a bundled, versioned profile. `core-multidomain-v1` adds source-diversity, freshness, correction-success, and residual-gap cases to the five core ranking/grounding metrics, and spans textbook, research, exam, English, Chinese, cross-language, formula, table, OCR, multi-column, synonym, cross-section, and global-query dimensions. Every metric includes per-case diagnostics. Evaluate retrieval separately from generation so a fluent answer cannot hide missing evidence. Add failure queries whenever learners expose a synonym, language, document-structure, OCR, table, formula, or global-context retrieval miss.
 
 ## 7. Alternatives and extension points
 
-- Hosted vector database: attach embeddings now; replace the dense ranker later behind the same chunk/source IDs if scale requires it.
-- Learned cross-encoder reranker: add a provider adapter behind the current deterministic candidate contract, but preserve harness verdicts, offline tests, and provenance.
+- Hosted vector database: provider embeddings can still attach through active chunk IDs; an external store would have to preserve the same profile, generation, and source-filter contract.
+- Alternative learned rerankers: evaluate through the portable named-profile report and preserve deterministic baseline, harness verdicts, offline tests, and provenance.
 - Hierarchical RAG: ingest section and document summaries as separate, clearly labeled sources for long textbooks.
 - GraphRAG: use for corpus-wide research synthesis when entities, communities, and global questions justify its indexing cost; do not make it a prerequisite for ordinary courses.
 - Connectors: ingest permission-checked passages from Drive, SharePoint, Zotero, or other harness connectors through the same local/web manifest contract.

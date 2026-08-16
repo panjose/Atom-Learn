@@ -8,6 +8,8 @@
 - Search
 - Corrective Web Search orchestration
 - Provider embeddings
+- Local learned embeddings and HNSW
+- Cross-encoder gate
 - Coverage
 - Evaluation
 - Commands
@@ -23,6 +25,9 @@ Canonical runtime data lives in `.atomlearn/rag/`:
 - `events.ndjson`: append-only mutation audit;
 - `query-events.ndjson`: query ID, time, RAG revision, and returned chunk IDs;
 - `latest-coverage.yaml`: latest explicit coverage decision.
+- `vector-index/<kind>/gNNNNNN/`: immutable verified HNSW generations;
+- `vector-index/active.yaml`: active generation pointers;
+- `benchmarks/`: local named-gate and reranker reports.
 
 `RETRIEVAL.md` is generated. Do not edit it to mutate state.
 
@@ -87,6 +92,8 @@ alternate_queries: [alias, translated terminology]
 top_k: 8
 candidate_k: 50
 source_ids: [optional-source-filter]
+parent_context_chars: 4000 # 0-20000
+use_cross_encoder: true
 query_embedding: [0.1, -0.2] # optional
 embedding_model: approved-provider/model@version # required with query_embedding
 ```
@@ -100,7 +107,7 @@ Constraints:
 - source filter: at most 100 IDs;
 - embedding: 1-8192 finite, nonzero numeric values.
 
-The result includes `search_id`, query variants, retrieval metadata, candidate text, provenance, `document_ir_block_ids`, RRF score, component ranks, deterministic reranker score and components, and the harness evidence contract. Every chunk has a default `atomlearn/multilingual-hash-v1` local embedding, so BM25, default-dense, and deterministic reranking work without an API key. Neither the RRF nor reranker score is a confidence probability.
+The result includes `search_id`, query variants, retrieval metadata, candidate text, provenance, `document_ir_block_ids`, bounded parent context, RRF score, component ranks, deterministic and optional cross-encoder scores, and the harness evidence contract. Parent context never replaces the supporting child locator. Every chunk has a default `atomlearn/multilingual-hash-v1` local vector, so BM25, default-dense, and deterministic reranking work without an API key. Neither the RRF nor reranker score is a confidence probability. Large corpora use a verified HNSW generation or skip dense retrieval with zero scanned chunks.
 
 ## Corrective Web Search orchestration
 
@@ -120,12 +127,43 @@ web_evidence: # optional on a correction round
 
 ```yaml
 model: approved-provider/model@version
+model_revision: immutable-provider-revision
+license: provider-model-license
+replace_profile: false
+confirmed: false
 embeddings:
   - chunk_id: source-id.r1.c00001
     vector: [0.1, -0.2]
 ```
 
-`model` is mandatory. All vectors in one batch must have the same dimension and chunk IDs must be active. The first batch establishes the workspace embedding profile; later batches and query embeddings must match its model identifier and dimension. Attach embeddings only after ingestion.
+`model` is mandatory. All vectors in one batch must have the same dimension, chunk IDs must be unique and active, and a profile replacement must cover every active chunk atomically with explicit confirmation. The first batch establishes the workspace embedding profile; later batches and query embeddings must match its model identifier and dimension. Attach embeddings only after ingestion.
+
+## Local learned embeddings and HNSW
+
+```yaml
+model:
+  model_id: organization/multilingual-embedding
+  revision: immutable-revision
+  license: apache-2.0
+  path: C:/absolute/path/to/local-model
+  backend: torch # torch, onnx, or openvino
+  batch_size: 16
+replace_profile: false
+confirmed: false
+```
+
+The public input is validated by `assets/schemas/semantic-model.schema.json`. Local learned models must use safe weights and installed Sentence Transformers modules; remote code, network loading, symlinks, and pickle-capable weights are rejected. `rag embed-local` embeds every active chunk in one transaction. `rag index-build --kind default|semantic|all` creates and verifies a new generation; `--full` disables incremental reuse. See [SEMANTIC_RAG.md](SEMANTIC_RAG.md).
+
+## Cross-encoder gate
+
+`rag evaluate-reranker` accepts `profile` plus the same `model` shape, and writes a portable report following `assets/schemas/reranker-evaluation.schema.json`. `rag activate-reranker` accepts:
+
+```yaml
+report_path: C:/absolute/path/to/passing-report.json
+confirmed: true
+```
+
+Activation requires a passing current bundled profile, internally consistent metrics, and an unchanged local model tree. Search uses the active cross-encoder unless `use_cross_encoder: false` is set.
 
 ## Coverage
 
@@ -154,6 +192,7 @@ Every `evidence_chunk_id` must also belong to the freshly retrieved candidate se
 ## Evaluation
 
 ```yaml
+profile: core-multidomain-v1 # optional named thresholds; mutually exclusive with thresholds
 k: 10
 queries:
   - id: calculus-chain-rule
@@ -172,7 +211,7 @@ thresholds:
   unsupported_claim_rate: 0.05
 ```
 
-`rag evaluate` reports mean recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate. Retrieval labels and support labels are active chunk IDs. With no thresholds the result is `quality_gate: report_only`. To request a deterministic `pass`/`fail` gate, provide all five threshold values from 0 through 1; partial sets are rejected.
+`rag evaluate` reports mean recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate. Retrieval labels and support labels are active chunk IDs. With no profile or thresholds the result is `quality_gate: report_only`. To request an ad hoc deterministic `pass`/`fail` gate, provide all five core threshold values from 0 through 1; partial sets are rejected. Named profiles additionally bind source-diversity, freshness, correction-success, and residual-gap cases and thresholds. Stable release gates must use a bundled named profile. `rag benchmark` runs that profile only in a fresh RAG workspace and persists the report.
 
 ## Commands
 
@@ -181,11 +220,17 @@ python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag ingest <workspace> --input <sources.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag ingest-web <workspace> --input <web-evidence.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag attach-embeddings <workspace> --input <embeddings.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py rag embed-local <workspace> --input <local-embedding.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py rag index-build <workspace> --kind default|semantic|all
+python <SKILL_DIR>/scripts/atomlearn.py rag index-status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag search <workspace> --input <query.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace> [--context intake|research]
 python <SKILL_DIR>/scripts/atomlearn.py rag coverage <workspace> --input <coverage.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag correct <workspace> --input <rag-correction.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag evaluate <workspace> --input <rag-evaluation.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py rag benchmark <workspace> --profile core-multidomain-v1
+python <SKILL_DIR>/scripts/atomlearn.py rag evaluate-reranker <workspace> --input <reranker.yaml> --output <report.json>
+python <SKILL_DIR>/scripts/atomlearn.py rag activate-reranker <workspace> --input <activation.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag document-ir <workspace> <source-id> [--revision <revision>]
 python <SKILL_DIR>/scripts/atomlearn.py rag status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag validate <workspace>

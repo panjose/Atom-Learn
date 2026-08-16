@@ -663,6 +663,8 @@ FSRS 类实现作为 adapter 候选，不直接照搬 flashcard rating。需要�
 
 ### Phase 5：语义与规模 RAG
 
+实施状态（2026-08-16）：完成。默认小语料继续使用零 provider 路径；学习型本地模型必须显式批准，USearch HNSW 使用可恢复 generation 与 native 健康探测，cross-encoder 必须通过可移植的命名 benchmark report。内置 `core-multidomain-v1` 覆盖教材、科研、考试、中英文/跨语言与公式、表格、OCR、多栏等结构。
+
 - learned embedding adapter；
 - HNSW generation、增量 rebuild；
 - parent-child retrieval；

@@ -60,7 +60,7 @@ capabilities:
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/RAG.md]
     limitations:
       - The default dense-like signal is a deterministic multilingual hash projection, not a learned semantic embedding.
-      - Active chunks are scanned in-process; no approximate vector index is implemented in this release.
+      - Small corpora use bounded in-process dense scoring; large corpora require a verified optional HNSW generation and never silently fall back to a full dense scan.
 
   - id: rag.provider_embedding_adapter
     title: Provider-neutral attachment of externally generated learned embeddings
@@ -239,15 +239,45 @@ capabilities:
 
   - id: rag.learned_local_scale_v1
     title: Learned local multilingual embeddings HNSW and cross-encoder reranking
-    status: planned
-    default_mode: unavailable
-    public_claim: false
-    interfaces: []
-    implementation: []
-    verification: []
-    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    status: implemented
+    default_mode: opt_in
+    public_claim: true
+    interfaces:
+      - rag embed-local
+      - rag index-build
+      - rag index-status
+      - rag benchmark
+      - rag evaluate-reranker
+      - rag activate-reranker
+      - rag search
+    implementation:
+      - path: atom-learn/scripts/semantic.py
+        symbol: "def encode_documents"
+      - path: atom-learn/scripts/vector_index.py
+        symbol: "class VectorIndexStore"
+      - path: atom-learn/scripts/rag.py
+        symbol: "def run_benchmark_profile"
+      - path: atom-learn/scripts/rag.py
+        symbol: "def activate_reranker"
+    verification:
+      - path: tests/test_semantic_rag.py
+        symbol: "test_local_learned_embedding_is_explicit_hashed_and_queryable"
+      - path: tests/test_semantic_rag.py
+        symbol: "test_large_dense_retrieval_uses_crash_safe_incremental_hnsw_generations"
+      - path: tests/test_semantic_rag.py
+        symbol: "test_cross_encoder_requires_a_passing_portable_benchmark_report"
+      - path: tests/test_semantic_rag.py
+        symbol: "test_named_multidomain_benchmark_is_a_nonempty_release_gate"
+    documentation:
+      - README.md
+      - README.zh-CN.md
+      - atom-learn/SKILL.md
+      - atom-learn/references/SEMANTIC_RAG.md
+      - docs/V0_14_REMEDIATION_DESIGN.md
     limitations:
-      - This is a v0.14 implementation target, not a current capability.
+      - Models are user-supplied local directories; AtomLearn never silently downloads them and rejects pickle-capable weights or custom model code.
+      - USearch and sentence-transformers remain optional extras; the zero-provider deterministic path stays available for small corpora.
+      - Cross-encoders are activated only from a passing, current bundled benchmark profile and can be bypassed per query.
 
   - id: mastery.calibrated_evidence_v2
     title: Typed deterministic and calibrated open-response Evidence scoring

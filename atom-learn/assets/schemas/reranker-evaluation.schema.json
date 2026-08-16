@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/reranker-evaluation.schema.json",
+  "title": "AtomLearn portable local reranker evaluation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "created_at", "rag_revision", "corpus_signature",
+    "benchmark_profile", "model_profile", "k", "baseline_metrics", "candidate_metrics",
+    "thresholds", "threshold_results", "quality_gate", "query_results"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.reranker-evaluation"},
+    "schema_version": {"const": 1},
+    "created_at": {"type": "string", "format": "date-time"},
+    "rag_revision": {"type": "integer", "minimum": 0},
+    "corpus_signature": {"$ref": "#/$defs/hash"},
+    "benchmark_profile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version", "profile_sha256", "dimensions"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "version": {"type": "integer", "minimum": 1},
+        "profile_sha256": {"$ref": "#/$defs/hash"},
+        "dimensions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "model_profile": {"$ref": "#/$defs/modelProfile"},
+    "k": {"type": "integer", "minimum": 1, "maximum": 50},
+    "baseline_metrics": {"$ref": "#/$defs/rankingMetrics"},
+    "candidate_metrics": {"$ref": "#/$defs/rankingMetrics"},
+    "thresholds": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mrr", "ndcg_at_k", "maximum_ndcg_regression"],
+      "properties": {
+        "mrr": {"type": "number", "minimum": 0, "maximum": 1},
+        "ndcg_at_k": {"type": "number", "minimum": 0, "maximum": 1},
+        "maximum_ndcg_regression": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "threshold_results": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mrr", "ndcg_at_k", "maximum_ndcg_regression"],
+      "properties": {
+        "mrr": {"type": "boolean"},
+        "ndcg_at_k": {"type": "boolean"},
+        "maximum_ndcg_regression": {"type": "boolean"}
+      }
+    },
+    "quality_gate": {"enum": ["pass", "fail"]},
+    "query_results": {"type": "array", "minItems": 1, "items": {"type": "object"}}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "rankingMetrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["mrr", "ndcg_at_k"],
+      "properties": {
+        "mrr": {"type": "number", "minimum": 0, "maximum": 1},
+        "ndcg_at_k": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "modelProfile": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "kind", "role", "model", "model_revision", "license", "model_path",
+        "model_sha256", "model_bytes", "backend", "batch_size", "network_access",
+        "trust_remote_code"
+      ],
+      "properties": {
+        "kind": {"const": "learned_local"},
+        "role": {"const": "cross_encoder"},
+        "model": {"type": "string", "minLength": 1},
+        "model_revision": {"type": "string", "minLength": 1},
+        "license": {"type": "string", "minLength": 1},
+        "model_path": {"type": "string", "minLength": 3},
+        "model_sha256": {"$ref": "#/$defs/hash"},
+        "model_bytes": {"type": "integer", "minimum": 1},
+        "backend": {"enum": ["torch", "onnx", "openvino"]},
+        "batch_size": {"type": "integer", "minimum": 1, "maximum": 256},
+        "network_access": {"const": false},
+        "trust_remote_code": {"const": false}
+      }
+    }
+  }
+}

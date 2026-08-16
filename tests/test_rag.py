@@ -233,6 +233,36 @@ def test_provider_embeddings_join_hybrid_retrieval() -> None:
     blocked = invoke("rag", "search", path, "--input", mismatch, check=False)
     assert blocked.returncode == 2
     assert "must match" in blocked.stderr
+    duplicate = payload(
+        path,
+        "duplicate-embeddings.yaml",
+        {
+            "model": "fixture/semantic-v1",
+            "embeddings": [
+                {"chunk_id": "source-a.r1.c00001", "vector": [1.0, 0.0]},
+                {"chunk_id": "source-a.r1.c00001", "vector": [1.0, 0.0]},
+            ],
+        },
+    )
+    duplicate_result = invoke("rag", "attach-embeddings", path, "--input", duplicate, check=False)
+    assert duplicate_result.returncode == 2
+    assert "must be unique" in duplicate_result.stderr
+    revision_switch = payload(
+        path,
+        "embedding-revision-switch.yaml",
+        {
+            "model": "fixture/semantic-v1",
+            "model_revision": "r2",
+            "license": "test-only",
+            "embeddings": [
+                {"chunk_id": "source-a.r1.c00001", "vector": [1.0, 0.0]},
+                {"chunk_id": "source-b.r1.c00001", "vector": [0.0, 1.0]},
+            ],
+        },
+    )
+    revision_result = invoke("rag", "attach-embeddings", path, "--input", revision_switch, check=False)
+    assert revision_result.returncode == 2
+    assert "replacement requires" in revision_result.stderr
 
 
 def test_pdf_and_docx_textbook_extractors_preserve_locators() -> None:

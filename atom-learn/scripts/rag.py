@@ -21,8 +21,18 @@ from typing import Any, Iterable
 from urllib.parse import urlparse
 
 import yaml
+from jsonschema import Draft202012Validator
 
 from document_ir import DocumentIRError, build_document_ir, require_valid as require_valid_ir, retrieval_sections
+from semantic import (
+    SemanticAdapterError,
+    cross_encoder_scores,
+    encode_documents,
+    encode_query,
+    normalize_model_profile,
+    verify_model_profile,
+)
+from vector_index import VectorIndexError, VectorIndexStore, corpus_signature
 from atomlearn import (
     AtomLearnError,
     Workspace,
@@ -50,6 +60,9 @@ MAX_QUERY_CHARS = 2_000
 VECTOR_DIM = 768
 DEFAULT_EMBEDDING_MODEL = "atomlearn/multilingual-hash-v1"
 RERANKER_MODEL = "atomlearn/deterministic-reranker-v1"
+DEFAULT_DENSE_BRUTEFORCE_LIMIT = 2000
+BENCHMARK_PROFILE_DIR = Path(__file__).resolve().parents[1] / "assets" / "benchmarks" / "rag"
+SCHEMA_DIR = Path(__file__).resolve().parents[1] / "assets" / "schemas"
 AUTHORITY_PRIORS = {
     "primary": 1.0,
     "official": 1.0,
@@ -515,11 +528,19 @@ class RagEngine:
         self.events_path = self.root / "events.ndjson"
         self.queries_path = self.root / "query-events.ndjson"
         self.document_ir_dir = self.root / "document-ir"
+        self.vector_index_dir = self.root / "vector-index"
+        self.benchmark_dir = self.root / "benchmarks"
         self.db_path = self.root / "index.sqlite3"
         self.state = state
 
     @classmethod
-    def initialize(cls, workspace_path: str, chunk_chars: int = 2800, overlap_chars: int = 300) -> "RagEngine":
+    def initialize(
+        cls,
+        workspace_path: str,
+        chunk_chars: int = 2800,
+        overlap_chars: int = 300,
+        dense_bruteforce_limit: int = DEFAULT_DENSE_BRUTEFORCE_LIMIT,
+    ) -> "RagEngine":
         workspace = load_workspace(workspace_path)
         errors = workspace.validate()
         if errors:
@@ -528,6 +549,8 @@ class RagEngine:
             raise RagError("chunk_chars must be between 800 and 12000")
         if not 0 <= overlap_chars < chunk_chars // 2:
             raise RagError("overlap_chars must be non-negative and less than half of chunk_chars")
+        if not isinstance(dense_bruteforce_limit, int) or isinstance(dense_bruteforce_limit, bool) or not 1 <= dense_bruteforce_limit <= 100_000:
+            raise RagError("dense_bruteforce_limit must be between 1 and 100000")
         root = workspace.meta / "rag"
         if root.exists():
             raise RagError("RAG is already initialized")
@@ -537,12 +560,26 @@ class RagEngine:
             "revision": 0,
             "created_at": iso(),
             "updated_at": iso(),
-            "config": {"chunk_chars": chunk_chars, "overlap_chars": overlap_chars, "rrf_k": 60},
-            "default_embedding_profile": {"model": DEFAULT_EMBEDDING_MODEL, "dimension": VECTOR_DIM},
+            "config": {
+                "chunk_chars": chunk_chars,
+                "overlap_chars": overlap_chars,
+                "rrf_k": 60,
+                "dense_bruteforce_limit": dense_bruteforce_limit,
+                "hnsw_tombstone_rebuild_ratio": 0.2,
+            },
+            "default_embedding_profile": {
+                "kind": "hashed_lexical_v1",
+                "model": DEFAULT_EMBEDDING_MODEL,
+                "dimension": VECTOR_DIM,
+            },
             "embedding_profile": {"model": None, "dimension": None},
+            "vector_epochs": {"default": 0, "semantic": 0},
+            "reranker_profile": None,
         }
         engine = cls(workspace, state)
         engine.document_ir_dir.mkdir(parents=True, exist_ok=True)
+        engine.vector_index_dir.mkdir(parents=True, exist_ok=True)
+        engine.benchmark_dir.mkdir(parents=True, exist_ok=True)
         write_yaml(engine.state_path, state)
         write_yaml(engine.sources_path, {"sources": []})
         atomic_text(engine.events_path, "")
@@ -563,6 +600,16 @@ class RagEngine:
             raise RagError("RAG is not initialized; run `rag init` first")
         engine = cls(workspace, read_data(state_path))
         engine.document_ir_dir.mkdir(parents=True, exist_ok=True)
+        engine.vector_index_dir.mkdir(parents=True, exist_ok=True)
+        engine.benchmark_dir.mkdir(parents=True, exist_ok=True)
+        engine.state.setdefault("vector_epochs", {"default": 0, "semantic": 0})
+        engine.state.setdefault("reranker_profile", None)
+        engine.state.setdefault("config", {}).setdefault(
+            "dense_bruteforce_limit", DEFAULT_DENSE_BRUTEFORCE_LIMIT
+        )
+        engine.state["config"].setdefault("hnsw_tombstone_rebuild_ratio", 0.2)
+        default_profile = engine.state.setdefault("default_embedding_profile", {})
+        default_profile.setdefault("kind", "hashed_lexical_v1")
         engine._ensure_database_schema()
         return engine
 
@@ -828,6 +875,9 @@ class RagEngine:
                     )
                     inserted += 1
         write_yaml(self.sources_path, registry)
+        epochs = self.state.setdefault("vector_epochs", {"default": 0, "semantic": 0})
+        epochs["default"] = int(epochs.get("default", 0)) + 1
+        epochs["semantic"] = int(epochs.get("semantic", 0)) + 1
         result = {"source_ids": ids, "sources": len(ids), "chunks": inserted, "origin": origin}
         self.commit("rag.sources_ingested", result)
         return result
@@ -858,6 +908,20 @@ class RagEngine:
         if not isinstance(payload, dict) or not isinstance(payload.get("embeddings"), list) or not payload["embeddings"]:
             raise RagError("embedding payload must contain a non-empty embeddings list")
         model = limited_text(payload.get("model"), "embedding model", limit=500)
+        model_revision = limited_text(
+            payload.get("model_revision", "provider-asserted"),
+            "embedding model_revision",
+            limit=500,
+        )
+        license_name = limited_text(
+            payload.get("license", "provider-asserted"),
+            "embedding license",
+            limit=500,
+        )
+        replace_profile = payload.get("replace_profile", False)
+        confirmed = payload.get("confirmed", False)
+        if not isinstance(replace_profile, bool) or not isinstance(confirmed, bool):
+            raise RagError("replace_profile and confirmed must be boolean")
         if len(payload["embeddings"]) > 10_000:
             raise RagError("an embedding batch may contain at most 10000 chunks")
         normalized: list[tuple[str, list[float]]] = []
@@ -871,35 +935,328 @@ class RagEngine:
             if len(vector) != dimension:
                 raise RagError("all vectors in an embedding batch must have the same dimension")
             normalized.append((chunk_id, vector))
+        chunk_ids = [chunk_id for chunk_id, _ in normalized]
+        if len(chunk_ids) != len(set(chunk_ids)):
+            raise RagError("embedding chunk IDs must be unique within a batch")
         profile = self.state.setdefault("embedding_profile", {"model": None, "dimension": None})
-        if profile.get("model") not in {None, model} or profile.get("dimension") not in {None, dimension}:
-            raise RagError(
-                "embedding model/dimension differs from the active profile; create a consistent replacement index"
-            )
+        target_identity = {
+            "kind": "provider",
+            "model": model,
+            "model_revision": model_revision,
+            "license": license_name,
+            "dimension": dimension,
+        }
+        switching = profile.get("model") is not None and any(
+            profile.get(key) != value for key, value in target_identity.items()
+        )
+        if switching and not (replace_profile and confirmed):
+            raise RagError("embedding profile replacement requires replace_profile: true and confirmed: true")
         with self._connect() as connection:
+            active_count = connection.execute("SELECT COUNT(*) FROM chunks WHERE active = 1").fetchone()[0]
             active = {
                 row["chunk_id"]
                 for row in connection.execute(
                     f"SELECT chunk_id FROM chunks WHERE active = 1 AND chunk_id IN ({','.join('?' for _ in normalized)})",
-                    [item[0] for item in normalized],
+                    chunk_ids,
                 )
             }
             missing = sorted({item[0] for item in normalized} - active)
             if missing:
                 raise RagError("embedding chunk IDs are missing or inactive: " + ", ".join(missing[:20]))
+            if switching and len(normalized) != active_count:
+                raise RagError("embedding profile replacement must provide every active chunk in one atomic batch")
             for chunk_id, vector in normalized:
                 connection.execute("UPDATE chunks SET embedding_json = ? WHERE chunk_id = ?", (json.dumps(vector, separators=(",", ":")), chunk_id))
-        profile.update({"model": model, "dimension": dimension})
-        result = {"chunks": len(normalized), "model": model, "dimension": dimension}
+        profile.clear()
+        profile.update(target_identity)
+        epochs = self.state.setdefault("vector_epochs", {"default": 0, "semantic": 0})
+        epochs["semantic"] = int(epochs.get("semantic", 0)) + 1
+        result = {
+            "chunks": len(normalized),
+            "model": model,
+            "model_revision": model_revision,
+            "dimension": dimension,
+            "profile_replaced": switching,
+        }
         self.commit("rag.embeddings_attached", result)
         return result
+
+    def embed_local(
+        self,
+        payload: Any,
+        *,
+        model_factory: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) - {"model", "replace_profile", "confirmed"}:
+            raise RagError("local embedding payload accepts model, replace_profile, and confirmed")
+        profile = normalize_model_profile(payload.get("model"), "embedding")
+        replace_profile = payload.get("replace_profile", False)
+        confirmed = payload.get("confirmed", False)
+        if not isinstance(replace_profile, bool) or not isinstance(confirmed, bool):
+            raise RagError("replace_profile and confirmed must be boolean")
+        current = self.state.get("embedding_profile", {})
+        switching = current.get("model") is not None and any(
+            current.get(key) != profile.get(key)
+            for key in ["kind", "model", "model_revision", "license", "model_sha256", "backend"]
+        )
+        if switching and not (replace_profile and confirmed):
+            raise RagError("local model replacement requires replace_profile: true and confirmed: true")
+        with self._connect() as connection:
+            rows = connection.execute(
+                "SELECT chunk_id, contextual_content FROM chunks WHERE active = 1 ORDER BY chunk_id"
+            ).fetchall()
+        if not rows:
+            raise RagError("cannot embed an empty RAG corpus")
+        vectors = encode_documents(
+            profile,
+            [str(row["contextual_content"]) for row in rows],
+            factory=model_factory,
+        )
+        if len(vectors) != len(rows):
+            raise RagError("local embedding adapter returned the wrong number of vectors")
+        dimension = len(vectors[0])
+        with self._connect() as connection:
+            for row, vector in zip(rows, vectors):
+                connection.execute(
+                    "UPDATE chunks SET embedding_json = ? WHERE chunk_id = ? AND active = 1",
+                    (json.dumps(vector, separators=(",", ":")), row["chunk_id"]),
+                )
+        profile["dimension"] = dimension
+        self.state["embedding_profile"] = profile
+        epochs = self.state.setdefault("vector_epochs", {"default": 0, "semantic": 0})
+        epochs["semantic"] = int(epochs.get("semantic", 0)) + 1
+        result = {
+            "chunks": len(rows),
+            "model": profile["model"],
+            "model_revision": profile["model_revision"],
+            "model_sha256": profile["model_sha256"],
+            "dimension": dimension,
+            "profile_replaced": switching,
+            "network_access": False,
+        }
+        self.commit("rag.local_embeddings_generated", result)
+        return result
+
+    def _vector_profile(self, kind: str) -> dict[str, Any] | None:
+        epochs = self.state.get("vector_epochs", {})
+        if kind == "default":
+            profile = dict(
+                self.state.get(
+                    "default_embedding_profile",
+                    {"kind": "hashed_lexical_v1", "model": DEFAULT_EMBEDDING_MODEL, "dimension": VECTOR_DIM},
+                )
+            )
+        elif kind == "semantic":
+            configured = self.state.get("embedding_profile", {})
+            if not configured.get("model") or not configured.get("dimension"):
+                return None
+            profile = dict(configured)
+        else:
+            raise RagError(f"unknown vector index kind: {kind}")
+        profile["corpus_epoch"] = int(epochs.get(kind, 0))
+        return profile
+
+    def _vector_rows(self, kind: str, source_ids: list[str] | None = None) -> list[dict[str, Any]]:
+        column = "feature_json" if kind == "default" else "embedding_json"
+        sql = (
+            "SELECT chunk_id, source_id, source_revision, content_sha256, "
+            + column
+            + " AS vector_json FROM chunks WHERE active = 1 AND "
+            + column
+            + " IS NOT NULL"
+        )
+        params: list[Any] = []
+        if source_ids:
+            sql += " AND source_id IN ({})".format(",".join("?" for _ in source_ids))
+            params.extend(source_ids)
+        sql += " ORDER BY chunk_id"
+        with self._connect() as connection:
+            rows = connection.execute(sql, params).fetchall()
+        return [
+            {
+                "chunk_id": row["chunk_id"],
+                "source_id": row["source_id"],
+                "source_revision": row["source_revision"],
+                "content_sha256": row["content_sha256"],
+                "vector": json.loads(row["vector_json"]),
+            }
+            for row in rows
+        ]
+
+    def build_vector_index(self, kind: str, *, incremental: bool = True) -> dict[str, Any]:
+        kinds = ["default", "semantic"] if kind == "all" else [kind]
+        if any(item not in {"default", "semantic"} for item in kinds):
+            raise RagError("vector index kind must be default, semantic, or all")
+        store = VectorIndexStore(self.vector_index_dir)
+        results = []
+        for item in kinds:
+            profile = self._vector_profile(item)
+            if profile is None:
+                if kind == "all":
+                    results.append({"kind": item, "status": "not_configured"})
+                    continue
+                raise RagError("semantic embedding profile is not configured")
+            rows = self._vector_rows(item)
+            results.append(
+                store.build(
+                    item,
+                    profile,
+                    rows,
+                    incremental=incremental,
+                    tombstone_rebuild_ratio=float(
+                        self.state["config"].get("hnsw_tombstone_rebuild_ratio", 0.2)
+                    ),
+                )
+            )
+        return {"rag_revision": self.revision, "indexes": results}
+
+    def vector_index_status(self) -> dict[str, Any]:
+        store = VectorIndexStore(self.vector_index_dir)
+        indexes = []
+        for kind in ["default", "semantic"]:
+            profile = self._vector_profile(kind)
+            indexes.append(
+                store.status(kind, profile=profile) if profile is not None else {"kind": kind, "status": "not_configured"}
+            )
+        return {"rag_revision": self.revision, "indexes": indexes}
 
     @staticmethod
     def _fts_expression(query: str) -> str:
         tokens = unique(linguistic_tokens(query))[:40]
         return " OR ".join('"' + token.replace('"', '""') + '"' for token in tokens)
 
-    def search(self, payload: Any, *, record: bool = True) -> dict[str, Any]:
+    def _dense_candidates(
+        self,
+        kind: str,
+        query_vector: list[float],
+        candidate_k: int,
+        source_ids: list[str],
+    ) -> tuple[list[tuple[float, str]], dict[str, Any]]:
+        profile = self._vector_profile(kind)
+        if profile is None:
+            return [], {"mode": "not_configured", "scanned_chunks": 0}
+        column = "feature_json" if kind == "default" else "embedding_json"
+        with self._connect() as connection:
+            total = connection.execute(
+                f"SELECT COUNT(*) FROM chunks WHERE active = 1 AND {column} IS NOT NULL"
+            ).fetchone()[0]
+        limit = int(self.state["config"].get("dense_bruteforce_limit", DEFAULT_DENSE_BRUTEFORCE_LIMIT))
+        if total <= limit:
+            rows = self._vector_rows(kind, source_ids)
+            ranked = sorted(
+                (
+                    (cosine(query_vector, row["vector"]), row["chunk_id"])
+                    for row in rows
+                ),
+                key=lambda item: (-item[0], item[1]),
+            )[:candidate_k]
+            return (
+                [(score, chunk_id) for score, chunk_id in ranked if score > 0],
+                {"mode": "bruteforce", "scanned_chunks": len(rows), "corpus_chunks": total},
+            )
+        store = VectorIndexStore(self.vector_index_dir)
+        status = store.status(kind, profile=profile)
+        if status.get("status") != "ready":
+            return [], {
+                "mode": "skipped_large_index",
+                "scanned_chunks": 0,
+                "corpus_chunks": total,
+                "reason": f"{kind} HNSW index is {status.get('status')}; run `rag index-build`",
+            }
+        ranked = store.search(
+            kind,
+            profile,
+            None,
+            query_vector,
+            candidate_k,
+            source_ids=set(source_ids) if source_ids else None,
+        )
+        return ranked, {
+            "mode": "hnsw",
+            "scanned_chunks": 0,
+            "corpus_chunks": total,
+            "generation": status["generation"],
+        }
+
+    def _parent_context(
+        self,
+        row: sqlite3.Row,
+        budget: int,
+        cache: dict[tuple[str, int], dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        if budget <= 0:
+            return None
+        key = (str(row["source_id"]), int(row["source_revision"]))
+        if key not in cache:
+            try:
+                cache[key] = self.document_ir(*key)
+            except RagError:
+                return None
+        document = cache[key]
+        by_id = {block["block_id"]: block for block in document["blocks"]}
+        child_ids = json.loads(row["document_ir_json"])
+        selected: list[dict[str, Any]] = []
+        parent_ids: list[str] = []
+        for child_id in child_ids:
+            child = by_id.get(child_id)
+            if child is None:
+                continue
+            parent_id = child.get("parent_id")
+            if parent_id and parent_id not in parent_ids:
+                parent_ids.append(parent_id)
+                parent = by_id.get(parent_id)
+                if parent:
+                    selected.append(parent)
+                    selected.extend(
+                        block
+                        for block in document["blocks"]
+                        if block.get("parent_id") == parent_id and block["kind"] != "cell"
+                    )
+            elif child not in selected:
+                selected.append(child)
+        ordered: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for block in sorted(selected, key=lambda item: item["reading_order"]):
+            if block["block_id"] not in seen:
+                ordered.append(block)
+                seen.add(block["block_id"])
+        if not ordered:
+            return None
+        parts: list[str] = []
+        used = 0
+        truncated = False
+        included: list[str] = []
+        for block in ordered:
+            prefix = "" if not parts else "\n\n"
+            available = budget - used - len(prefix)
+            if available <= 0:
+                truncated = True
+                break
+            text = block["text"]
+            take = text[:available]
+            parts.append(prefix + take)
+            used += len(prefix) + len(take)
+            included.append(block["block_id"])
+            if len(take) < len(text):
+                truncated = True
+                break
+        return {
+            "text": "".join(parts),
+            "parent_block_ids": parent_ids,
+            "included_block_ids": included,
+            "supporting_child_block_ids": child_ids,
+            "truncated": truncated,
+            "evidence_citation_rule": "Cite the supporting child locator, not this broader context alone.",
+        }
+
+    def search(
+        self,
+        payload: Any,
+        *,
+        record: bool = True,
+        embedding_model_factory: Any = None,
+        reranker_model_factory: Any = None,
+    ) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise RagError("search payload must be a mapping")
         query = limited_text(payload.get("query"), "query")
@@ -912,26 +1269,40 @@ class RagEngine:
         if not isinstance(candidate_k, int) or isinstance(candidate_k, bool) or not top_k <= candidate_k <= 200:
             raise RagError("candidate_k must be an integer between top_k and 200")
         source_ids = string_list(payload.get("source_ids", []), "source_ids", maximum=100)
+        parent_context_chars = payload.get("parent_context_chars", 4000)
+        if (
+            not isinstance(parent_context_chars, int)
+            or isinstance(parent_context_chars, bool)
+            or not 0 <= parent_context_chars <= 20_000
+        ):
+            raise RagError("parent_context_chars must be an integer between 0 and 20000")
+        use_cross_encoder = payload.get("use_cross_encoder", True)
+        if not isinstance(use_cross_encoder, bool):
+            raise RagError("use_cross_encoder must be boolean")
         query_embedding = payload.get("query_embedding")
+        semantic_profile = self.state.get("embedding_profile", {})
         if query_embedding is not None:
             query_embedding = finite_vector(query_embedding, "query_embedding")
             embedding_model = limited_text(payload.get("embedding_model"), "embedding_model", limit=500)
-            profile = self.state.get("embedding_profile", {})
-            if embedding_model != profile.get("model") or len(query_embedding) != profile.get("dimension"):
+            if embedding_model != semantic_profile.get("model") or len(query_embedding) != semantic_profile.get("dimension"):
                 raise RagError("query embedding model and dimension must match the active embedding profile")
+        elif semantic_profile.get("kind") == "learned_local":
+            query_embedding = encode_query(
+                semantic_profile, query, factory=embedding_model_factory
+            )
         rankings: list[tuple[str, list[str]]] = []
         rows: dict[str, sqlite3.Row] = {}
         component_scores: dict[str, dict[str, float]] = defaultdict(dict)
+        dense_modes: dict[str, Any] = {}
         filter_sql = " AND c.source_id IN ({})".format(",".join("?" for _ in source_ids)) if source_ids else ""
         with self._connect() as connection:
-            active_rows = connection.execute(
-                "SELECT * FROM chunks WHERE active = 1" + (" AND source_id IN ({})".format(",".join("?" for _ in source_ids)) if source_ids else ""),
+            active_count = connection.execute(
+                "SELECT COUNT(*) FROM chunks WHERE active = 1"
+                + (" AND source_id IN ({})".format(",".join("?" for _ in source_ids)) if source_ids else ""),
                 source_ids,
-            ).fetchall()
-            for row in active_rows:
-                rows[row["chunk_id"]] = row
-            if not rows:
-                return self._empty_search(query, queries, source_ids, record)
+            ).fetchone()[0]
+            if not active_count:
+                return self._empty_search(query, queries, source_ids, record, corpus_empty=True)
             for query_index, variant in enumerate(queries):
                 expression = self._fts_expression(variant)
                 if expression:
@@ -947,22 +1318,18 @@ class RagEngine:
                     for row in lexical:
                         component_scores[row["chunk_id"]][f"bm25:{query_index}"] = float(row["lexical_score"])
                 feature = feature_vector(variant)
-                feature_ranked = sorted(
-                    ((cosine(feature, json.loads(row["feature_json"])), row["chunk_id"]) for row in active_rows),
-                    reverse=True,
-                )[:candidate_k]
+                feature_ranked, mode = self._dense_candidates(
+                    "default", feature, candidate_k, source_ids
+                )
+                dense_modes[f"default:{query_index}"] = mode
                 rankings.append((f"default_dense:{query_index}", [chunk_id for score, chunk_id in feature_ranked if score > 0]))
                 for score, chunk_id in feature_ranked:
                     component_scores[chunk_id][f"default_dense:{query_index}"] = round(score, 6)
             if query_embedding is not None:
-                dense_ranked: list[tuple[float, str]] = []
-                for row in active_rows:
-                    if row["embedding_json"]:
-                        score = cosine(query_embedding, json.loads(row["embedding_json"]))
-                        if score >= 0:
-                            dense_ranked.append((score, row["chunk_id"]))
-                dense_ranked.sort(reverse=True)
-                dense_ranked = dense_ranked[:candidate_k]
+                dense_ranked, mode = self._dense_candidates(
+                    "semantic", query_embedding, candidate_k, source_ids
+                )
+                dense_modes["semantic"] = mode
                 if dense_ranked:
                     rankings.append(("dense", [chunk_id for _, chunk_id in dense_ranked]))
                     for score, chunk_id in dense_ranked:
@@ -975,6 +1342,17 @@ class RagEngine:
                 fused[chunk_id] += 1.0 / (rrf_k + rank)
                 ranks[chunk_id][name] = rank
         fused_order = sorted(fused, key=lambda chunk_id: (-fused[chunk_id], chunk_id))[:candidate_k]
+        if not fused_order:
+            return self._empty_search(query, queries, source_ids, record)
+        with self._connect() as connection:
+            selected_rows = connection.execute(
+                "SELECT * FROM chunks WHERE active = 1 AND chunk_id IN ({})".format(
+                    ",".join("?" for _ in fused_order)
+                ),
+                fused_order,
+            ).fetchall()
+        rows = {row["chunk_id"]: row for row in selected_rows}
+        fused_order = [chunk_id for chunk_id in fused_order if chunk_id in rows]
         maximum_fused = max(fused.values(), default=0.0)
         reranked: list[tuple[float, str, dict[str, float]]] = []
         for chunk_id in fused_order:
@@ -983,13 +1361,47 @@ class RagEngine:
             )
             reranked.append((score, chunk_id, rerank_components))
         reranked.sort(key=lambda item: (-item[0], -fused[item[1]], item[1]))
+        active_reranker = self.state.get("reranker_profile")
+        cross_scores: dict[str, float] = {}
+        if use_cross_encoder and active_reranker is not None:
+            if not isinstance(active_reranker, dict):
+                raise RagError("active reranker profile is invalid")
+            candidate_ids = [chunk_id for _, chunk_id, _ in reranked]
+            scores = cross_encoder_scores(
+                active_reranker,
+                query,
+                [str(rows[chunk_id]["contextual_content"]) for chunk_id in candidate_ids],
+                factory=reranker_model_factory,
+            )
+            cross_scores = dict(zip(candidate_ids, scores))
+            reranked.sort(
+                key=lambda item: (
+                    -cross_scores[item[1]],
+                    -item[0],
+                    -fused[item[1]],
+                    item[1],
+                )
+            )
         selected = reranked[:top_k]
         ordered = [chunk_id for _, chunk_id, _ in selected]
         rerank_by_id = {
-            chunk_id: {"score": score, "components": components, "rank": rank}
+            chunk_id: {
+                "score": round(cross_scores.get(chunk_id, score), 8),
+                "components": {
+                    **components,
+                    "deterministic_score": score,
+                    **(
+                        {"cross_encoder_score": round(cross_scores[chunk_id], 8)}
+                        if chunk_id in cross_scores
+                        else {}
+                    ),
+                },
+                "rank": rank,
+            }
             for rank, (score, chunk_id, components) in enumerate(reranked, start=1)
         }
         results = []
+        document_cache: dict[tuple[str, int], dict[str, Any]] = {}
         for chunk_id in ordered:
             row = rows[chunk_id]
             results.append(
@@ -1004,6 +1416,9 @@ class RagEngine:
                     "authority": row["authority"],
                     "uri": row["source_uri"],
                     "text": row["content"],
+                    "parent_context": self._parent_context(
+                        row, parent_context_chars, document_cache
+                    ),
                     "rrf_score": round(fused[chunk_id], 8),
                     "rerank_score": rerank_by_id[chunk_id]["score"],
                     "rerank_rank": rerank_by_id[chunk_id]["rank"],
@@ -1018,21 +1433,37 @@ class RagEngine:
             "query": query,
             "query_variants": queries,
             "retrieval": {
-                "strategy": "bm25+default-local-embedding+provider-dense-when-provided+rrf+deterministic-rerank",
+                "strategy": "bm25+bounded-default-dense+optional-semantic-dense+rrf+rerank",
                 "rrf_k": rrf_k,
                 "default_embedding_model": DEFAULT_EMBEDDING_MODEL,
                 "default_embedding_used": any(
                     any(name.startswith("default_dense:") for name in item["ranks"])
                     for item in results
                 ),
-                "provider_dense_used": query_embedding is not None and any("dense" in item["ranks"] for item in results),
+                "provider_dense_used": semantic_profile.get("kind") == "provider"
+                and query_embedding is not None
+                and any("dense" in item["ranks"] for item in results),
+                "semantic_dense_used": query_embedding is not None
+                and any("dense" in item["ranks"] for item in results),
+                "semantic_embedding_kind": semantic_profile.get("kind") if query_embedding is not None else None,
                 "dense_used": any(
                     any(name.startswith("default_dense:") or name == "dense" for name in item["ranks"])
                     for item in results
                 ),
                 "candidate_lists": len(rankings),
                 "fused_candidates": len(fused_order),
-                "reranker": RERANKER_MODEL,
+                "dense_execution": dense_modes,
+                "large_dense_full_scan_avoided": any(
+                    item.get("mode") in {"hnsw", "skipped_large_index"}
+                    for item in dense_modes.values()
+                ),
+                "parent_context_chars": parent_context_chars,
+                "reranker": (
+                    active_reranker["model"]
+                    if cross_scores and isinstance(active_reranker, dict)
+                    else RERANKER_MODEL
+                ),
+                "cross_encoder_used": bool(cross_scores),
             },
             "results": results,
             "needs_reranking": False,
@@ -1047,25 +1478,43 @@ class RagEngine:
             self._record_query({"search_id": search_id, "at": iso(), "rag_revision": self.revision, "query": query, "result_chunk_ids": ordered})
         return response
 
-    def _empty_search(self, query: str, queries: list[str], source_ids: list[str], record: bool) -> dict[str, Any]:
+    def _empty_search(
+        self,
+        query: str,
+        queries: list[str],
+        source_ids: list[str],
+        record: bool,
+        *,
+        corpus_empty: bool = False,
+    ) -> dict[str, Any]:
         search_id = "search-" + hashlib.sha256((query + iso()).encode("utf-8")).hexdigest()[:16]
         response = {
             "search_id": search_id,
             "query": query,
             "query_variants": queries,
             "retrieval": {
-                "strategy": "bm25+default-local-embedding+provider-dense-when-provided+rrf+deterministic-rerank",
+                "strategy": "bm25+bounded-default-dense+optional-semantic-dense+rrf+rerank",
                 "default_embedding_model": DEFAULT_EMBEDDING_MODEL,
                 "default_embedding_used": False,
                 "provider_dense_used": False,
+                "semantic_dense_used": False,
                 "dense_used": False,
+                "dense_execution": {},
+                "large_dense_full_scan_avoided": False,
                 "candidate_lists": 0,
                 "reranker": RERANKER_MODEL,
+                "cross_encoder_used": False,
             },
             "results": [],
             "needs_reranking": False,
             "web_search_needed": True,
-            "reason": "No active chunks matched the query" if source_ids else "The local RAG index has no active chunks",
+            "reason": (
+                "The selected source filter has no active chunks"
+                if source_ids and corpus_empty
+                else "The local RAG index has no active chunks"
+                if corpus_empty
+                else "No enabled retrieval path produced candidates for the active corpus"
+            ),
         }
         if record:
             self._record_query({"search_id": search_id, "at": iso(), "rag_revision": self.revision, "query": query, "result_chunk_ids": []})
@@ -1335,9 +1784,322 @@ class RagEngine:
             ),
         }
 
+    @staticmethod
+    def load_benchmark_profile(profile_id: str) -> dict[str, Any]:
+        profile_id = require_id(profile_id, "benchmark profile")
+        path = BENCHMARK_PROFILE_DIR / f"{profile_id}.yaml"
+        if not path.is_file():
+            raise RagError(f"unknown bundled RAG benchmark profile: {profile_id}")
+        try:
+            raw = path.read_text(encoding="utf-8")
+            profile = yaml.safe_load(raw)
+            schema = json.loads(
+                (SCHEMA_DIR / "rag-benchmark-profile.schema.json").read_text(encoding="utf-8")
+            )
+        except (OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise RagError(f"cannot read RAG benchmark profile {profile_id}: {exc}") from exc
+        errors = sorted(Draft202012Validator(schema).iter_errors(profile), key=lambda item: list(item.path))
+        if errors:
+            details = "; ".join(
+                f"{'/'.join(str(part) for part in error.path) or '<root>'}: {error.message}"
+                for error in errors[:10]
+            )
+            raise RagError(f"invalid bundled RAG benchmark profile {profile_id}: {details}")
+        if profile["id"] != profile_id:
+            raise RagError("RAG benchmark filename and profile id disagree")
+        return {
+            **profile,
+            "profile_sha256": "sha256:" + hashlib.sha256(raw.encode("utf-8")).hexdigest(),
+        }
+
+    def _locator_chunk_ids(self, references: Any, label: str) -> list[str]:
+        if not isinstance(references, list):
+            raise RagError(f"{label} must be a locator reference list")
+        result: list[str] = []
+        with self._connect() as connection:
+            for index, reference in enumerate(references):
+                if not isinstance(reference, dict):
+                    raise RagError(f"{label}[{index}] must be a mapping")
+                source_id = require_id(reference.get("source_id"), f"{label}[{index}].source_id")
+                locator = limited_text(reference.get("locator"), f"{label}[{index}].locator", limit=1000)
+                rows = connection.execute(
+                    "SELECT chunk_id FROM chunks WHERE active = 1 AND source_id = ? AND locator = ? ORDER BY chunk_id",
+                    (source_id, locator),
+                ).fetchall()
+                if not rows:
+                    raise RagError(f"{label}[{index}] does not resolve to an active chunk: {source_id} / {locator}")
+                result.extend(str(row["chunk_id"]) for row in rows)
+        return unique(result)
+
+    def _benchmark_evaluation_payload(self, profile: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "profile": profile["id"],
+            "k": 10,
+            "queries": [
+                {
+                    "id": item["id"],
+                    "query": item["query"],
+                    "alternate_queries": item.get("alternate_queries", []),
+                    "relevant_chunk_ids": self._locator_chunk_ids(
+                        item["relevant"], f"benchmark query {item['id']}.relevant"
+                    ),
+                }
+                for item in profile["queries"]
+            ],
+            "claims": [
+                {
+                    "id": item["id"],
+                    "cited_chunk_ids": self._locator_chunk_ids(
+                        item["cited"], f"benchmark claim {item['id']}.cited"
+                    ),
+                    "supported_chunk_ids": self._locator_chunk_ids(
+                        item["supported"], f"benchmark claim {item['id']}.supported"
+                    ),
+                    "abstained": item["abstained"],
+                }
+                for item in profile["claims"]
+            ],
+            "diversity_cases": [
+                {
+                    "id": item["id"],
+                    "cited_chunk_ids": self._locator_chunk_ids(
+                        item["cited"], f"benchmark diversity {item['id']}.cited"
+                    ),
+                    "minimum_sources": item["minimum_sources"],
+                }
+                for item in profile["workflow_cases"]["source_diversity"]
+            ],
+            "freshness_cases": profile["workflow_cases"]["freshness"],
+            "correction_cases": [
+                {
+                    "id": item["id"],
+                    "before_status": item["before_status"],
+                    "after_status": item["after_status"],
+                    "evidence_chunk_ids": self._locator_chunk_ids(
+                        item["evidence"], f"benchmark correction {item['id']}.evidence"
+                    ),
+                }
+                for item in profile["workflow_cases"]["correction"]
+            ],
+        }
+
+    def run_benchmark_profile(self, profile_id: str) -> dict[str, Any]:
+        profile = self.load_benchmark_profile(profile_id)
+        if self.revision != 0 or self._source_registry()["sources"]:
+            raise RagError("bundled RAG benchmarks require a fresh empty RAG workspace")
+        self.ingest({"sources": profile["sources"]}, "inline")
+        report = self.evaluate(self._benchmark_evaluation_payload(profile))
+        report_path = self.benchmark_dir / f"{profile_id}.report.json"
+        atomic_text(report_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        return {**report, "report_path": str(report_path)}
+
+    @staticmethod
+    def _ranking_metrics(
+        rankings: list[tuple[list[str], set[str]]], k: int
+    ) -> dict[str, float]:
+        reciprocal_ranks: list[float] = []
+        ndcgs: list[float] = []
+        for ranked, relevant in rankings:
+            hits = [rank for rank, chunk_id in enumerate(ranked[:k], start=1) if chunk_id in relevant]
+            reciprocal_ranks.append(1.0 / hits[0] if hits else 0.0)
+            dcg = sum(1.0 / math.log2(rank + 1) for rank in hits)
+            ideal = sum(
+                1.0 / math.log2(rank + 1)
+                for rank in range(1, min(k, len(relevant)) + 1)
+            )
+            ndcgs.append(dcg / ideal if ideal else 0.0)
+        return {
+            "mrr": round(sum(reciprocal_ranks) / len(reciprocal_ranks), 6),
+            "ndcg_at_k": round(sum(ndcgs) / len(ndcgs), 6),
+        }
+
+    def evaluate_reranker(
+        self,
+        payload: Any,
+        *,
+        model_factory: Any = None,
+    ) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) - {"model", "profile"}:
+            raise RagError("reranker evaluation accepts only model and profile")
+        profile = self.load_benchmark_profile(
+            limited_text(payload.get("profile", "core-multidomain-v1"), "benchmark profile", limit=200)
+        )
+        model_profile = normalize_model_profile(payload.get("model"), "cross_encoder")
+        evaluation = self._benchmark_evaluation_payload(profile)
+        source_ids = [item["id"] for item in profile["sources"]]
+        baseline_rankings: list[tuple[list[str], set[str]]] = []
+        candidate_rankings: list[tuple[list[str], set[str]]] = []
+        query_results: list[dict[str, Any]] = []
+        k = evaluation["k"]
+        for item in evaluation["queries"]:
+            baseline = self.search(
+                {
+                    "query": item["query"],
+                    "alternate_queries": item.get("alternate_queries", []),
+                    "source_ids": source_ids,
+                    "top_k": 50,
+                    "candidate_k": 50,
+                    "parent_context_chars": 0,
+                    "use_cross_encoder": False,
+                },
+                record=False,
+            )
+            baseline_ids = [result["chunk_id"] for result in baseline["results"]]
+            documents = [
+                "\n".join(
+                    value
+                    for value in [result["title"], result["section"], result["text"]]
+                    if value
+                )
+                for result in baseline["results"]
+            ]
+            scores = cross_encoder_scores(
+                model_profile,
+                item["query"],
+                documents,
+                factory=model_factory,
+            )
+            baseline_position = {chunk_id: rank for rank, chunk_id in enumerate(baseline_ids)}
+            candidate_ids = [
+                chunk_id
+                for _, chunk_id in sorted(
+                    zip(scores, baseline_ids),
+                    key=lambda pair: (-pair[0], baseline_position[pair[1]], pair[1]),
+                )
+            ]
+            relevant = set(item["relevant_chunk_ids"])
+            baseline_rankings.append((baseline_ids, relevant))
+            candidate_rankings.append((candidate_ids, relevant))
+            query_results.append(
+                {
+                    "id": item["id"],
+                    "relevant_chunk_ids": sorted(relevant),
+                    "baseline_chunk_ids": baseline_ids[:k],
+                    "candidate_chunk_ids": candidate_ids[:k],
+                }
+            )
+        baseline_metrics = self._ranking_metrics(baseline_rankings, k)
+        candidate_metrics = self._ranking_metrics(candidate_rankings, k)
+        thresholds = profile["reranker_thresholds"]
+        comparisons = {
+            "mrr": candidate_metrics["mrr"] >= thresholds["mrr"],
+            "ndcg_at_k": candidate_metrics["ndcg_at_k"] >= thresholds["ndcg_at_k"],
+            "maximum_ndcg_regression": candidate_metrics["ndcg_at_k"]
+            >= baseline_metrics["ndcg_at_k"] - thresholds["maximum_ndcg_regression"],
+        }
+        default_profile = self._vector_profile("default")
+        if default_profile is None:  # pragma: no cover - the default profile is mandatory
+            raise RagError("default vector profile is not configured")
+        return {
+            "kind": "atomlearn.reranker-evaluation",
+            "schema_version": 1,
+            "created_at": iso(),
+            "rag_revision": self.revision,
+            "corpus_signature": corpus_signature(
+                self._vector_rows("default"), default_profile
+            ),
+            "benchmark_profile": {
+                "id": profile["id"],
+                "version": profile["version"],
+                "profile_sha256": profile["profile_sha256"],
+                "dimensions": profile["dimensions"],
+            },
+            "model_profile": model_profile,
+            "k": k,
+            "baseline_metrics": baseline_metrics,
+            "candidate_metrics": candidate_metrics,
+            "thresholds": thresholds,
+            "threshold_results": comparisons,
+            "quality_gate": "pass" if all(comparisons.values()) else "fail",
+            "query_results": query_results,
+        }
+
+    def activate_reranker(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) - {"report_path", "confirmed"}:
+            raise RagError("reranker activation accepts report_path and confirmed")
+        if payload.get("confirmed") is not True:
+            raise RagError("reranker activation requires confirmed: true")
+        raw_path = limited_text(payload.get("report_path"), "report_path", limit=4000)
+        path = Path(raw_path).expanduser()
+        if not path.is_absolute():
+            raise RagError("report_path must be absolute")
+        try:
+            report = read_data(path.resolve())
+            report_schema = json.loads(
+                (SCHEMA_DIR / "reranker-evaluation.schema.json").read_text(encoding="utf-8")
+            )
+        except (OSError, AtomLearnError) as exc:
+            raise RagError(f"cannot read reranker evaluation report: {exc}") from exc
+        except json.JSONDecodeError as exc:
+            raise RagError(f"cannot read reranker evaluation schema: {exc}") from exc
+        report_errors = sorted(
+            Draft202012Validator(report_schema).iter_errors(report),
+            key=lambda item: list(item.path),
+        )
+        if report_errors:
+            details = "; ".join(
+                f"{'/'.join(str(part) for part in error.path) or '<root>'}: {error.message}"
+                for error in report_errors[:10]
+            )
+            raise RagError(f"invalid reranker evaluation report: {details}")
+        if report.get("schema_version") != 1 or report.get("quality_gate") != "pass":
+            raise RagError("only a passing supported reranker evaluation can be activated")
+        benchmark_identity = report.get("benchmark_profile", {})
+        benchmark = self.load_benchmark_profile(str(benchmark_identity.get("id", "")))
+        if (
+            benchmark_identity.get("version") != benchmark["version"]
+            or benchmark_identity.get("profile_sha256") != benchmark["profile_sha256"]
+        ):
+            raise RagError("reranker evaluation benchmark profile is stale or altered")
+        candidate = report.get("candidate_metrics", {})
+        baseline = report.get("baseline_metrics", {})
+        thresholds = benchmark["reranker_thresholds"]
+        try:
+            comparisons = {
+                "mrr": float(candidate["mrr"]) >= thresholds["mrr"],
+                "ndcg_at_k": float(candidate["ndcg_at_k"]) >= thresholds["ndcg_at_k"],
+                "maximum_ndcg_regression": float(candidate["ndcg_at_k"])
+                >= float(baseline["ndcg_at_k"]) - thresholds["maximum_ndcg_regression"],
+            }
+        except (KeyError, TypeError, ValueError) as exc:
+            raise RagError("reranker evaluation metrics are incomplete") from exc
+        if not all(comparisons.values()) or comparisons != report.get("threshold_results"):
+            raise RagError("reranker evaluation metrics do not satisfy the current benchmark gate")
+        model_profile = report.get("model_profile")
+        if not isinstance(model_profile, dict) or model_profile.get("role") != "cross_encoder":
+            raise RagError("reranker evaluation has no valid cross-encoder profile")
+        verify_model_profile(model_profile)
+        active_profile = {
+            **model_profile,
+            "benchmark_profile": benchmark["id"],
+            "benchmark_version": benchmark["version"],
+            "benchmark_sha256": benchmark["profile_sha256"],
+            "evaluation_report_sha256": "sha256:" + hashlib.sha256(
+                path.resolve().read_bytes()
+            ).hexdigest(),
+            "activated_at": iso(),
+        }
+        self.state["reranker_profile"] = active_profile
+        result = {
+            "model": active_profile["model"],
+            "model_revision": active_profile["model_revision"],
+            "model_sha256": active_profile["model_sha256"],
+            "benchmark_profile": benchmark["id"],
+        }
+        self.commit("rag.reranker_activated", result)
+        return result
+
     def evaluate(self, payload: Any) -> dict[str, Any]:
         if not isinstance(payload, dict) or not isinstance(payload.get("queries"), list) or not payload["queries"]:
             raise RagError("evaluation payload must contain a non-empty queries list")
+        profile_id = payload.get("profile")
+        benchmark_profile: dict[str, Any] | None = None
+        if profile_id is not None:
+            if "thresholds" in payload:
+                raise RagError("evaluation must use either a named profile or explicit thresholds, not both")
+            benchmark_profile = self.load_benchmark_profile(
+                limited_text(profile_id, "evaluation profile", limit=200)
+            )
         k = payload.get("k", 10)
         if not isinstance(k, int) or isinstance(k, bool) or not 1 <= k <= 50:
             raise RagError("evaluation k must be an integer between 1 and 50")
@@ -1435,17 +2197,145 @@ class RagEngine:
             "citation_correctness": round(correct_citations / citation_count, 6) if citation_count else 1.0,
             "unsupported_claim_rate": round(unsupported / asserted, 6) if asserted else 0.0,
         }
-        thresholds = payload.get("thresholds", {})
+        workflow_keys = {"diversity_cases", "freshness_cases", "correction_cases"}
+        supplied_workflow_keys = workflow_keys & set(payload)
+        if supplied_workflow_keys and supplied_workflow_keys != workflow_keys:
+            raise RagError(
+                "extended evaluation requires diversity_cases, freshness_cases, and correction_cases together"
+            )
+        workflow_results: dict[str, Any] = {}
+        if supplied_workflow_keys:
+            diversity_cases = payload["diversity_cases"]
+            freshness_cases = payload["freshness_cases"]
+            correction_cases = payload["correction_cases"]
+            if any(not isinstance(items, list) or not items for items in [diversity_cases, freshness_cases, correction_cases]):
+                raise RagError("extended evaluation case lists must all be non-empty")
+            with self._connect() as connection:
+                chunk_sources = {
+                    str(row["chunk_id"]): str(row["source_id"])
+                    for row in connection.execute(
+                        "SELECT chunk_id, source_id FROM chunks WHERE active = 1"
+                    )
+                }
+            diversity_results: list[dict[str, Any]] = []
+            for index, item in enumerate(diversity_cases):
+                if not isinstance(item, dict):
+                    raise RagError(f"diversity_cases[{index}] must be a mapping")
+                case_id = require_id(item.get("id"), f"diversity_cases[{index}].id")
+                cited_ids = string_list(
+                    item.get("cited_chunk_ids"), f"{case_id}.cited_chunk_ids", maximum=200
+                )
+                minimum = item.get("minimum_sources")
+                if not isinstance(minimum, int) or isinstance(minimum, bool) or not 2 <= minimum <= 20:
+                    raise RagError(f"{case_id}.minimum_sources must be an integer from 2 through 20")
+                missing = sorted(set(cited_ids) - set(chunk_sources))
+                if missing:
+                    raise RagError(f"{case_id} cites missing or inactive chunks: {', '.join(missing)}")
+                distinct_sources = len({chunk_sources[chunk_id] for chunk_id in cited_ids})
+                diversity_results.append(
+                    {
+                        "id": case_id,
+                        "distinct_sources": distinct_sources,
+                        "minimum_sources": minimum,
+                        "passed": distinct_sources >= minimum,
+                    }
+                )
+            source_versions = {
+                str(item["id"]): str(item.get("version", ""))
+                for item in self._source_registry()["sources"]
+            }
+            freshness_results: list[dict[str, Any]] = []
+            for index, item in enumerate(freshness_cases):
+                if not isinstance(item, dict):
+                    raise RagError(f"freshness_cases[{index}] must be a mapping")
+                case_id = require_id(item.get("id"), f"freshness_cases[{index}].id")
+                source_id = require_id(item.get("source_id"), f"{case_id}.source_id")
+                acceptable = string_list(
+                    item.get("acceptable_versions"), f"{case_id}.acceptable_versions", maximum=50
+                )
+                if not acceptable:
+                    raise RagError(f"{case_id}.acceptable_versions must not be empty")
+                if source_id not in source_versions:
+                    raise RagError(f"{case_id} references an unknown source: {source_id}")
+                actual = source_versions[source_id]
+                freshness_results.append(
+                    {
+                        "id": case_id,
+                        "source_id": source_id,
+                        "actual_version": actual,
+                        "acceptable_versions": acceptable,
+                        "passed": actual in acceptable,
+                    }
+                )
+            correction_results: list[dict[str, Any]] = []
+            for index, item in enumerate(correction_cases):
+                if not isinstance(item, dict):
+                    raise RagError(f"correction_cases[{index}] must be a mapping")
+                case_id = require_id(item.get("id"), f"correction_cases[{index}].id")
+                before = item.get("before_status")
+                after = item.get("after_status")
+                if before not in {"weak", "missing"} or after not in COVERAGE_STATUSES:
+                    raise RagError(f"{case_id} has invalid correction statuses")
+                evidence_ids = string_list(
+                    item.get("evidence_chunk_ids", []), f"{case_id}.evidence_chunk_ids", maximum=200
+                )
+                missing = sorted(set(evidence_ids) - active_ids)
+                if missing:
+                    raise RagError(f"{case_id} references missing correction evidence: {', '.join(missing)}")
+                if after == "supported" and not evidence_ids:
+                    raise RagError(f"{case_id} cannot be supported without correction evidence")
+                correction_results.append(
+                    {
+                        "id": case_id,
+                        "before_status": before,
+                        "after_status": after,
+                        "successful": after == "supported",
+                        "residual_gap": after != "supported",
+                    }
+                )
+            metrics.update(
+                {
+                    "source_diversity": round(
+                        sum(item["passed"] for item in diversity_results) / len(diversity_results), 6
+                    ),
+                    "freshness": round(
+                        sum(item["passed"] for item in freshness_results) / len(freshness_results), 6
+                    ),
+                    "correction_success_rate": round(
+                        sum(item["successful"] for item in correction_results) / len(correction_results), 6
+                    ),
+                    "residual_gap_rate": round(
+                        sum(item["residual_gap"] for item in correction_results) / len(correction_results), 6
+                    ),
+                }
+            )
+            workflow_results = {
+                "source_diversity": diversity_results,
+                "freshness": freshness_results,
+                "correction": correction_results,
+            }
+        thresholds = (
+            benchmark_profile["thresholds"]
+            if benchmark_profile is not None
+            else payload.get("thresholds", {})
+        )
         if not isinstance(thresholds, dict):
             raise RagError("evaluation thresholds must be a mapping")
 
-        threshold_names = {
+        base_threshold_names = {
             "recall_at_k",
             "mrr",
             "ndcg_at_k",
             "citation_correctness",
             "unsupported_claim_rate",
         }
+        extended_threshold_names = {
+            "source_diversity",
+            "freshness",
+            "correction_success_rate",
+            "residual_gap_rate",
+        }
+        threshold_names = base_threshold_names | extended_threshold_names
         unknown_thresholds = sorted(set(thresholds) - threshold_names)
         if unknown_thresholds:
             raise RagError("evaluation contains unknown thresholds: " + ", ".join(unknown_thresholds))
@@ -1458,7 +2348,12 @@ class RagEngine:
 
         comparisons = {}
         if thresholds:
-            required_thresholds = sorted(threshold_names - set(thresholds))
+            if extended_threshold_names & set(thresholds) and not supplied_workflow_keys:
+                raise RagError("extended evaluation thresholds require all three workflow case lists")
+            required_names = (
+                threshold_names if supplied_workflow_keys else base_threshold_names
+            )
+            required_thresholds = sorted(required_names - set(thresholds))
             if required_thresholds:
                 raise RagError(
                     "evaluation pass/fail requires every threshold; missing: " + ", ".join(required_thresholds)
@@ -1472,8 +2367,30 @@ class RagEngine:
                     "unsupported_claim_rate", 1.0
                 ),
             }
+            if supplied_workflow_keys:
+                comparisons.update(
+                    {
+                        "source_diversity": metrics["source_diversity"]
+                        >= threshold("source_diversity", 0.0),
+                        "freshness": metrics["freshness"] >= threshold("freshness", 0.0),
+                        "correction_success_rate": metrics["correction_success_rate"]
+                        >= threshold("correction_success_rate", 0.0),
+                        "residual_gap_rate": metrics["residual_gap_rate"]
+                        <= threshold("residual_gap_rate", 1.0),
+                    }
+                )
         return {
             "rag_revision": self.revision,
+            "benchmark_profile": (
+                {
+                    "id": benchmark_profile["id"],
+                    "version": benchmark_profile["version"],
+                    "dimensions": benchmark_profile["dimensions"],
+                    "profile_sha256": benchmark_profile["profile_sha256"],
+                }
+                if benchmark_profile is not None
+                else None
+            ),
             "metrics": metrics,
             "quality_gate": (
                 "report_only" if not thresholds else ("pass" if all(comparisons.values()) else "fail")
@@ -1481,6 +2398,7 @@ class RagEngine:
             "threshold_results": comparisons,
             "query_results": query_results,
             "claim_results": claim_results,
+            "workflow_results": workflow_results,
         }
 
     def commit(self, event_type: str, details: dict[str, Any]) -> None:
@@ -1505,6 +2423,11 @@ class RagEngine:
                 errors.append("invalid chunk_chars")
             if not 0 <= config.get("overlap_chars", -1) < config.get("chunk_chars", 0) // 2:
                 errors.append("invalid overlap_chars")
+            if not 1 <= config.get("dense_bruteforce_limit", 0) <= 100_000:
+                errors.append("invalid dense_bruteforce_limit")
+            tombstone_ratio = config.get("hnsw_tombstone_rebuild_ratio")
+            if not isinstance(tombstone_ratio, (int, float)) or isinstance(tombstone_ratio, bool) or not 0 <= float(tombstone_ratio) <= 0.9:
+                errors.append("invalid hnsw_tombstone_rebuild_ratio")
             profile = self.state.get("embedding_profile", {})
             if not isinstance(profile, dict):
                 errors.append("invalid embedding_profile")
@@ -1514,12 +2437,47 @@ class RagEngine:
                 not isinstance(profile.get("dimension"), int) or not 1 <= profile["dimension"] <= 8192
             ):
                 errors.append("invalid embedding profile dimension")
+            elif profile.get("model") is not None and profile.get("kind") not in {"provider", "learned_local"}:
+                errors.append("invalid embedding profile kind")
+            elif profile.get("kind") == "learned_local":
+                try:
+                    verify_model_profile(profile)
+                except SemanticAdapterError as exc:
+                    errors.append(str(exc))
+            reranker = self.state.get("reranker_profile")
+            if reranker is not None:
+                if not isinstance(reranker, dict) or reranker.get("role") != "cross_encoder":
+                    errors.append("invalid reranker_profile")
+                else:
+                    try:
+                        verify_model_profile(reranker)
+                        benchmark = self.load_benchmark_profile(
+                            str(reranker.get("benchmark_profile", ""))
+                        )
+                        if (
+                            reranker.get("benchmark_version") != benchmark["version"]
+                            or reranker.get("benchmark_sha256") != benchmark["profile_sha256"]
+                        ):
+                            errors.append("reranker benchmark approval is stale")
+                    except (SemanticAdapterError, RagError) as exc:
+                        errors.append(str(exc))
             default_profile = self.state.get(
                 "default_embedding_profile",
-                {"model": DEFAULT_EMBEDDING_MODEL, "dimension": VECTOR_DIM},
+                {"kind": "hashed_lexical_v1", "model": DEFAULT_EMBEDDING_MODEL, "dimension": VECTOR_DIM},
             )
-            if default_profile != {"model": DEFAULT_EMBEDDING_MODEL, "dimension": VECTOR_DIM}:
+            if default_profile != {
+                "kind": "hashed_lexical_v1",
+                "model": DEFAULT_EMBEDDING_MODEL,
+                "dimension": VECTOR_DIM,
+            }:
                 errors.append("invalid default_embedding_profile")
+            epochs = self.state.get("vector_epochs", {})
+            if set(epochs) != {"default", "semantic"} or any(
+                not isinstance(value, int) or isinstance(value, bool) or value < 0
+                for value in epochs.values()
+            ):
+                errors.append("invalid vector_epochs")
+            errors.extend(VectorIndexStore(self.vector_index_dir).validate())
             registry = self._source_registry()
             ids: list[str] = []
             active_ir_blocks: dict[str, set[str]] = {}
@@ -1612,9 +2570,10 @@ class RagEngine:
         coverage_gate = None
         if coverage:
             coverage_gate = coverage.get("gate") if coverage.get("rag_revision") == self.revision else "stale"
+        validation_errors = self.validate()
         return {
-            "valid": not self.validate(),
-            "validation_errors": self.validate(),
+            "valid": not validation_errors,
+            "validation_errors": validation_errors,
             "rag_revision": self.revision,
             "sources": len(registry["sources"]),
             "document_ir_sources": sum(
@@ -1626,9 +2585,11 @@ class RagEngine:
             "default_embedded_chunks": active_chunks,
             "default_embedding_profile": self.state.get(
                 "default_embedding_profile",
-                {"model": DEFAULT_EMBEDDING_MODEL, "dimension": VECTOR_DIM},
+                {"kind": "hashed_lexical_v1", "model": DEFAULT_EMBEDDING_MODEL, "dimension": VECTOR_DIM},
             ),
             "embedding_profile": self.state.get("embedding_profile"),
+            "vector_indexes": self.vector_index_status()["indexes"],
+            "reranker_profile": self.state.get("reranker_profile"),
             "coverage_gate": coverage_gate,
             "coverage_intake_revision": coverage.get("intake_revision") if coverage else None,
         }
@@ -1652,9 +2613,11 @@ class RagEngine:
             f"- Active chunks: `{active_chunks}`",
             f"- Chunks with default local embeddings: `{active_chunks}`",
             f"- Default embedding profile: `{DEFAULT_EMBEDDING_MODEL}`",
-            f"- Chunks with provider embeddings: `{embedded_chunks}`",
-            f"- Provider embedding profile: `{self.state.get('embedding_profile', {}).get('model') or 'not configured'}`",
-            f"- Reranker: `{RERANKER_MODEL}`",
+            f"- Chunks with optional semantic embeddings: `{embedded_chunks}`",
+            f"- Optional semantic embedding profile: `{self.state.get('embedding_profile', {}).get('model') or 'not configured'}`",
+            f"- Default vector index: `{self.vector_index_status()['indexes'][0]['status']}`",
+            f"- Semantic vector index: `{self.vector_index_status()['indexes'][1]['status']}`",
+            f"- Reranker: `{(self.state.get('reranker_profile') or {}).get('model') or RERANKER_MODEL}`",
             f"- Coverage gate: `{coverage_gate}`",
             "",
             "## Sources",
@@ -1677,50 +2640,92 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Manage AtomLearn retrieval and corrective web evidence")
     sub = parser.add_subparsers(dest="action", required=True)
     initialize = sub.add_parser("init", help="Create the persistent local retrieval index")
-    initialize.add_argument("workspace")
-    initialize.add_argument("--chunk-chars", type=int, default=2800)
-    initialize.add_argument("--overlap-chars", type=int, default=300)
+    initialize.add_argument("workspace", help="AtomLearn course workspace")
+    initialize.add_argument("--chunk-chars", type=int, default=2800, help="Maximum chunk size in characters")
+    initialize.add_argument("--overlap-chars", type=int, default=300, help="Character overlap between split chunks")
+    initialize.add_argument("--dense-bruteforce-limit", type=int, default=DEFAULT_DENSE_BRUTEFORCE_LIMIT, help="Largest corpus allowed to use in-process dense scoring")
     simple_help = {
         "status": "Show source, chunk, embedding, reranker, and coverage status",
         "validate": "Validate retrieval state, source registry, index, and coverage",
         "render": "Regenerate the retrieval status view",
         "requirements": "Generate revision-bound coverage anchors for intake or research",
         "document-ir": "Inspect one source revision through the shared structured Document IR",
+        "index-status": "Inspect optional vector index generations and stale state",
+        "benchmark": "Run a bundled named retrieval gate in a fresh RAG workspace",
     }
-    for action in ["status", "validate", "render", "requirements", "document-ir"]:
+    for action in ["status", "validate", "render", "requirements", "document-ir", "index-status"]:
         command = sub.add_parser(action, help=simple_help[action])
-        command.add_argument("workspace")
+        command.add_argument("workspace", help="AtomLearn course workspace")
         if action == "requirements":
-            command.add_argument("--context", choices=["auto", "intake", "research"], default="auto")
+            command.add_argument("--context", choices=["auto", "intake", "research"], default="auto", help="Canonical state that defines mandatory coverage anchors")
         if action == "document-ir":
-            command.add_argument("source_id")
-            command.add_argument("--revision", type=int)
+            command.add_argument("source_id", help="Stable registered source ID")
+            command.add_argument("--revision", type=int, help="Immutable source revision; defaults to active")
     payload_help = {
         "ingest": "Index local files, inline text, or structured passages",
         "ingest-web": "Index bounded provenance-complete Web evidence",
         "attach-embeddings": "Attach optional provider embeddings to active chunks",
-        "search": "Run hybrid retrieval and deterministic reranking",
+        "embed-local": "Generate learned embeddings with an explicitly approved local model",
+        "search": "Run hybrid retrieval with deterministic and approved optional reranking",
         "coverage": "Evaluate explicit evidence verdicts for required anchors",
         "correct": "Orchestrate coverage and structured harness Web Search correction",
         "evaluate": "Measure retrieval ranking, citations, and unsupported claims",
     }
-    for action in ["ingest", "ingest-web", "attach-embeddings", "search", "coverage", "correct", "evaluate"]:
+    for action in ["ingest", "ingest-web", "attach-embeddings", "embed-local", "search", "coverage", "correct", "evaluate"]:
         command = sub.add_parser(action, help=payload_help[action])
-        command.add_argument("workspace")
-        command.add_argument("--input", required=True)
+        command.add_argument("workspace", help="AtomLearn course workspace")
+        command.add_argument("--input", required=True, help=f"YAML or JSON payload for rag {action}")
         if action not in {"search", "evaluate"}:
-            command.add_argument("--expected-rag-revision", type=int)
+            command.add_argument("--expected-rag-revision", type=int, help="Reject mutation unless the current RAG revision matches")
+    index_build = sub.add_parser("index-build", help="Build a verified HNSW generation without replacing the old one")
+    index_build.add_argument("workspace", help="AtomLearn course workspace")
+    index_build.add_argument("--kind", choices=["default", "semantic", "all"], default="all", help="Vector space to build")
+    index_build.add_argument("--full", action="store_true", help="Force a full deterministic rebuild")
+    index_build.add_argument("--expected-rag-revision", type=int, help="Reject the build unless the current RAG revision matches")
+    benchmark = sub.add_parser("benchmark", help=simple_help["benchmark"])
+    benchmark.add_argument("workspace", help="Fresh dedicated AtomLearn benchmark workspace")
+    benchmark.add_argument("--profile", default="core-multidomain-v1", help="Bundled versioned benchmark profile ID")
+    benchmark.add_argument("--expected-rag-revision", type=int, help="Normally 0 for the required fresh RAG workspace")
+    evaluate_reranker = sub.add_parser(
+        "evaluate-reranker",
+        help="Evaluate an opt-in local cross-encoder against a bundled named profile",
+    )
+    evaluate_reranker.add_argument("workspace", help="Workspace containing the ingested bundled benchmark fixtures")
+    evaluate_reranker.add_argument("--input", required=True, help="Local cross-encoder model and named profile YAML or JSON")
+    evaluate_reranker.add_argument("--output", help="Portable report path; defaults inside the benchmark workspace")
+    activate_reranker = sub.add_parser(
+        "activate-reranker",
+        help="Activate a local cross-encoder only from a fresh passing evaluation report",
+    )
+    activate_reranker.add_argument("workspace", help="Target AtomLearn course workspace")
+    activate_reranker.add_argument("--input", required=True, help="Confirmed absolute passing-report activation payload")
+    activate_reranker.add_argument("--expected-rag-revision", type=int, help="Reject activation unless the current RAG revision matches")
     return parser
 
 
 def run(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if args.action == "init":
-        engine = RagEngine.initialize(args.workspace, args.chunk_chars, args.overlap_chars)
+        engine = RagEngine.initialize(
+            args.workspace,
+            args.chunk_chars,
+            args.overlap_chars,
+            args.dense_bruteforce_limit,
+        )
         print(json.dumps({"ok": True, **engine.status()}, ensure_ascii=False, indent=2))
         return
     engine = RagEngine.load(args.workspace)
-    if args.action in {"ingest", "ingest-web", "attach-embeddings", "coverage", "correct"}:
+    if args.action in {
+        "ingest",
+        "ingest-web",
+        "attach-embeddings",
+        "embed-local",
+        "coverage",
+        "correct",
+        "index-build",
+        "benchmark",
+        "activate-reranker",
+    }:
         engine.expect_revision(args.expected_rag_revision)
     if args.action == "validate":
         errors = engine.validate()
@@ -1736,12 +2741,38 @@ def run(argv: list[str] | None = None) -> None:
         print(yaml.safe_dump(engine.requirements(args.context), allow_unicode=True, sort_keys=False))
     elif args.action == "document-ir":
         print(json.dumps(engine.document_ir(args.source_id, args.revision), ensure_ascii=False, indent=2))
+    elif args.action == "index-status":
+        print(json.dumps(engine.vector_index_status(), ensure_ascii=False, indent=2))
     elif args.action == "ingest":
         print(json.dumps({"ok": True, "rag_revision": engine.revision + 1, "result": engine.ingest(read_data(Path(args.input)), "local")}, ensure_ascii=False, indent=2))
     elif args.action == "ingest-web":
         print(json.dumps({"ok": True, "rag_revision": engine.revision + 1, "result": engine.ingest(read_data(Path(args.input)), "web")}, ensure_ascii=False, indent=2))
     elif args.action == "attach-embeddings":
         print(json.dumps({"ok": True, "rag_revision": engine.revision + 1, "result": engine.attach_embeddings(read_data(Path(args.input)))}, ensure_ascii=False, indent=2))
+    elif args.action == "embed-local":
+        print(json.dumps({"ok": True, "rag_revision": engine.revision + 1, "result": engine.embed_local(read_data(Path(args.input)))}, ensure_ascii=False, indent=2))
+    elif args.action == "index-build":
+        print(json.dumps(engine.build_vector_index(args.kind, incremental=not args.full), ensure_ascii=False, indent=2))
+    elif args.action == "benchmark":
+        print(json.dumps(engine.run_benchmark_profile(args.profile), ensure_ascii=False, indent=2))
+    elif args.action == "evaluate-reranker":
+        report = engine.evaluate_reranker(read_data(Path(args.input)))
+        output_path = (
+            Path(args.output).expanduser().resolve()
+            if args.output
+            else engine.benchmark_dir
+            / (
+                f"reranker-{report['benchmark_profile']['id']}-"
+                f"{report['model_profile']['model_sha256'].removeprefix('sha256:')[:12]}.report.json"
+            )
+        )
+        if not output_path.parent.is_dir():
+            raise RagError(f"reranker report parent directory does not exist: {output_path.parent}")
+        atomic_text(output_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
+        print(json.dumps({**report, "report_path": str(output_path)}, ensure_ascii=False, indent=2))
+    elif args.action == "activate-reranker":
+        result = engine.activate_reranker(read_data(Path(args.input)))
+        print(json.dumps({"ok": True, "rag_revision": engine.revision, "result": result}, ensure_ascii=False, indent=2))
     elif args.action == "search":
         print(json.dumps(engine.search(read_data(Path(args.input))), ensure_ascii=False, indent=2))
     elif args.action == "coverage":
@@ -1762,7 +2793,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run(argv)
         return 0
-    except (RagError, DocumentIRError, AtomLearnError, OSError, sqlite3.Error, json.JSONDecodeError, yaml.YAMLError) as exc:
+    except (RagError, DocumentIRError, SemanticAdapterError, VectorIndexError, AtomLearnError, OSError, sqlite3.Error, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

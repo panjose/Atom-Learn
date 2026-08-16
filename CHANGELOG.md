@@ -8,6 +8,7 @@
 - Phase 2 adds Evidence v2 scorer provenance and eligibility gates, deterministic exact-choice and numeric/unit grading, held-out mastery/retention/transfer item banks, reproducible stratified open-response calibration reports, legacy migration and strategy exclusion, and an explicit three-layer learning benchmark claim protocol.
 - Phase 3 adds outcome-eligible strategy experiments with deterministic stratified uncertainty intervals, minimum effects, sample floors, delayed/transfer requirements, fixed stopping rules, replayed shadow assignments, conservative v1 migration, and a separately consented local-only learning-effect study contract with withdrawal and privacy minimization.
 - Phase 4 adds a revision-bound typed harness action/submission protocol, bilingual no-YAML start console, explicit phase and first-Atom confirmation, and a versioned layout-preserving Document IR shared by RAG, exam source processing, and research source attachment.
+- Phase 5 adds explicitly approved local learned embedding and cross-encoder adapters, crash-contained USearch HNSW generations with incremental rebuilds, child-grounded parent context, strict provider-profile replacement, and a bundled multilingual/multidomain/multistructure retrieval gate that cannot pass through empty thresholds.
 
 ## 0.13.0 - release-ready
 

@@ -385,7 +385,9 @@ def test_manager_cli_serializes_stable_error_envelopes(tmp_path: Path) -> None:
 
 def test_tag_release_workflow_is_signed_gated_and_immutable() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
-    assert "needs: release-gates" in workflow
+    assert "needs: [release-gates, scale-rag]" in workflow
+    assert "Stable named RAG gate" in workflow
+    assert 'python -m pip install -e ".[dev,scale]"' in workflow
     assert "secrets.ATOMLEARN_RELEASE_PRIVATE_KEY" in workflow
     assert "--channel stable" in workflow
     assert "--manager-artifact" in workflow

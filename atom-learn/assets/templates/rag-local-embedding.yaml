@@ -1,0 +1,9 @@
+model:
+  model_id: organization/multilingual-embedding
+  revision: immutable-model-revision
+  license: apache-2.0
+  path: C:/absolute/path/to/approved-model
+  backend: torch
+  batch_size: 16
+replace_profile: false
+confirmed: false

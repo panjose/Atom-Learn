@@ -11,7 +11,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 
 - Start from complete textbooks or knowledge bases, a user outline, or only a topic name
 - Index local sources and correct coverage gaps with harness Web Search
-- Fuse BM25, a default local multilingual hash projection, and optional learned provider embeddings, then deterministically rerank
+- Fuse BM25, a default local multilingual hash projection, optional provider or approved local learned embeddings, crash-safe HNSW generations, and benchmark-gated reranking
 - Require explicit evidence verdicts and stable source locators before sparse-input planning
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Map roots, learning spines, branches, hubs, derivations, historical development, contrasts, applications, and each concept's lineage
@@ -43,6 +43,8 @@ atomlearn --help
 ```
 
 The editable install exposes the short `atomlearn` console command. Direct `python atom-learn/scripts/atomlearn.py ...` invocation remains supported inside a copied Skill directory.
+
+The deterministic small-corpus RAG path needs no model runtime. Install `.[scale]` only for USearch HNSW generations and `.[semantic]` only for explicitly approved local Sentence Transformers models.
 
 Copy or link the repository's `atom-learn` directory into your personal Codex Skills directory, for example:
 
@@ -114,20 +116,23 @@ Complete-source mode inventories and reconciles materials; outline mode treats o
 
 ## RAG and Corrective Web Search
 
-AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. It preserves HTML and DOCX structure, PDF tables and formulas, and locatable OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns owning IR block IDs, fuses SQLite FTS5 BM25, a default local multilingual hash embedding, and optional provider embeddings, then applies a testable deterministic reranker. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
+AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. It preserves HTML and DOCX structure, PDF tables and formulas, and locatable OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns exact supporting IR block IDs plus bounded parent context, fuses SQLite FTS5 BM25, a default local multilingual hash vector, and optional provider or explicitly approved local learned embeddings. Small corpora keep the dependency-light path; large dense retrieval uses a verified USearch HNSW generation or skips that component with zero scanned chunks. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus
 python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sources.yaml
 python atom-learn/scripts/atomlearn.py rag document-ir courses/calculus calculus-text
+python atom-learn/scripts/atomlearn.py rag embed-local courses/calculus --input local-embedding.yaml
+python atom-learn/scripts/atomlearn.py rag index-build courses/calculus --kind all
 python atom-learn/scripts/atomlearn.py rag search courses/calculus --input query.yaml
 python atom-learn/scripts/atomlearn.py rag requirements courses/calculus
 python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input coverage.yaml
 python atom-learn/scripts/atomlearn.py rag correct courses/calculus --input rag-correction.yaml
 python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag-evaluation.yaml
+python atom-learn/scripts/atomlearn.py rag benchmark courses/rag-benchmark --profile core-multidomain-v1
 ```
 
-`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Without all five thresholds it returns `quality_gate: report_only`; a pass/fail decision is never inferred from permissive defaults. Outline and topic intake cannot become planning-ready until every mandatory anchor has explicit support for the current intake revision. See [Shared Document IR](atom-learn/references/DOCUMENT_IR.md), [Retrieval and Corrective Web Search](atom-learn/references/RAG.md), and [RAG Design](docs/RAG_DESIGN.md).
+`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Without all five thresholds or a named profile it returns `quality_gate: report_only`; a pass/fail decision is never inferred from permissive defaults. The bundled multidomain/multilingual/structured profile is a non-empty release gate. Local models are never downloaded silently, pickle-capable weights and custom code are rejected, and a cross-encoder can be activated only from a current passing portable benchmark report. Outline and topic intake cannot become planning-ready until every mandatory anchor has explicit support for the current intake revision. See [Shared Document IR](atom-learn/references/DOCUMENT_IR.md), [Retrieval and Corrective Web Search](atom-learn/references/RAG.md), [Learned Semantic and Scale RAG](atom-learn/references/SEMANTIC_RAG.md), and [RAG Design](docs/RAG_DESIGN.md).
 
 Research-field discovery uses the same gate with revision-bound anchors for the research question, surveys, method families, evaluations/datasets, and critique/replication evidence. Use `rag requirements --context research` when building a paper-oriented field map.
 

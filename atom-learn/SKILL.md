@@ -50,6 +50,8 @@ python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag ingest <workspace> --input <sources.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag correct <workspace> --input <rag-correction.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py rag index-status <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py rag benchmark <benchmark-workspace> --profile core-multidomain-v1
 python <SKILL_DIR>/scripts/atomlearn.py import-plan <workspace> --input <plan.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py intake complete <workspace>
 ```
@@ -69,7 +71,7 @@ Run `start` with `--json` for harness work. Execute only its current `workflow_a
 7. Rerun `rag correct` with that evidence and explicit harness verdicts. Pass only when every mandatory anchor is `supported` by evidence in that requirement's current candidate set.
 8. Preserve source IDs, locators, and returned `document_ir_block_ids` in the course plan and learner-facing citations. Abstain when the corrective loop cannot establish support.
 
-The default local multilingual hash projection needs no provider and is not learned semantic understanding. Use optional learned provider embeddings through `rag attach-embeddings` and a compatible `query_embedding`; never make a hosted vector provider mandatory. Maintain a labeled set and use `rag evaluate` for recall@k, MRR, nDCG, citation correctness, and unsupported claims. Treat evaluation without all five thresholds as `report_only`, never as a pass. For large-corpus global questions, ingest hierarchical summaries or use a graph index as a deliberate extension, not the default.
+The default local multilingual hash projection needs no provider and is not learned semantic understanding. Use optional provider embeddings through `rag attach-embeddings`, or an explicitly approved local model through `rag embed-local`; never make a hosted vector provider mandatory or silently download a model. Small corpora may use bounded dense scoring. For large corpora, inspect `rag index-status` and build a verified USearch HNSW generation; if it is missing or stale, accept the explicit skipped dense component rather than requesting a full scan. Keep exact child locators as evidence when parent context is returned. Maintain a labeled set and use `rag evaluate` for recall@k, MRR, nDCG, citation correctness, and unsupported claims. Treat evaluation without all five thresholds or a named profile as `report_only`, never as a pass. Activate a cross-encoder only from a passing current bundled-profile report, and preserve both deterministic and learned score provenance.
 
 ### Create a course
 
@@ -348,7 +350,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/WORKFLOW_ACTIONS.md](references/WORKFLOW_ACTIONS.md) when executing, resuming, or troubleshooting typed start actions and submissions.
 - Read [references/INTAKE_SCHEMA.md](references/INTAKE_SCHEMA.md) when creating or updating an intake payload, or troubleshooting intake state.
 - Read [references/RAG.md](references/RAG.md) when indexing materials, retrieving course evidence, correcting outline/topic gaps with Web Search, reranking, or evaluating retrieval and grounding quality.
-- Read [references/RAG_SCHEMA.md](references/RAG_SCHEMA.md) when creating source, web-evidence, query, embedding, correction, coverage, or evaluation payloads, or troubleshooting retrieval state.
+- Read [references/RAG_SCHEMA.md](references/RAG_SCHEMA.md) when creating source, web-evidence, query, embedding, correction, coverage, or evaluation payloads, or troubleshooting retrieval state. Read [references/SEMANTIC_RAG.md](references/SEMANTIC_RAG.md) before enabling local learned models, HNSW generations, named benchmarks, or cross-encoder reranking.
 - Read [references/DOCUMENT_IR.md](references/DOCUMENT_IR.md) when inspecting structured extraction, source revisions, block provenance, exam source processing, or research source attachment.
 - Read [references/SESSION_ADAPTATION.md](references/SESSION_ADAPTATION.md) when learning or applying presentation preferences from chat sessions, handling conflicts, corrections, or retirement, or deciding whether a signal is safe to persist.
 - Read [references/ADAPTATION_SCHEMA.md](references/ADAPTATION_SCHEMA.md) when creating session signal payloads or troubleshooting adaptation state.

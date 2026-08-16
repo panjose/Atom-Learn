@@ -70,9 +70,26 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  scale-rag:
+    name: Stable named RAG gate / Ubuntu / Python 3.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install the persisted HNSW scale adapter
+        run: python -m pip install -e ".[dev,scale]"
+      - name: Require named multilingual gate and real HNSW generations
+        run: python -m pytest tests/test_semantic_rag.py -q
+
   publish:
     name: Build sign and publish immutable release assets
-    needs: release-gates
+    needs: [release-gates, scale-rag]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

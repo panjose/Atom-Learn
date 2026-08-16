@@ -1,0 +1,164 @@
+kind: atomlearn.rag-benchmark-profile
+schema_version: 1
+id: core-multidomain-v1
+version: 1
+title: AtomLearn multilingual multidomain structured retrieval gate
+dimensions:
+  - domain:textbook
+  - domain:research
+  - domain:exam
+  - language:english
+  - language:chinese
+  - language:cross_language
+  - structure:formula
+  - structure:table
+  - structure:ocr
+  - structure:multi_column
+  - retrieval:synonym
+  - retrieval:cross_section
+  - retrieval:global
+thresholds:
+  recall_at_k: 0.9
+  mrr: 0.75
+  ndcg_at_k: 0.75
+  citation_correctness: 1.0
+  unsupported_claim_rate: 0.0
+  source_diversity: 1.0
+  freshness: 1.0
+  correction_success_rate: 1.0
+  residual_gap_rate: 0.0
+reranker_thresholds:
+  mrr: 0.75
+  ndcg_at_k: 0.75
+  maximum_ndcg_regression: 0.02
+sources:
+  - id: calculus-text
+    title: Calculus textbook fixture
+    authority: textbook
+    passages:
+      - locator: chapter 3, derivative
+        section: Derivatives
+        text: The derivative is the instantaneous rate of change and the slope of the tangent line at a point.
+      - locator: chapter 3, formula 1
+        section: Difference quotient
+        text: "f'(x) = lim h->0 (f(x+h)-f(x))/h"
+  - id: optimization-table
+    title: Optimization table fixture
+    authority: textbook
+    passages:
+      - locator: table 1
+        section: Optimizer controls
+        text: "| Term | Role |\n| --- | --- |\n| step size | controls update magnitude |\n| momentum | smooths successive updates |"
+  - id: causal-bilingual
+    title: Causal inference bilingual fixture
+    authority: textbook
+    passages:
+      - locator: section 2
+        section: Identification assumptions
+        text: 因果效应识别通常需要一致性、可交换性和正值性。Causal identification commonly requires consistency, exchangeability, and positivity.
+  - id: research-paper
+    title: RAG replication fixture
+    authority: peer_reviewed
+    version: fixture-2026
+    passages:
+      - locator: discussion, limitations
+        section: Replication evidence
+        text: A replication found that retrieval gains weakened under domain shift and identified benchmark coverage as a limitation.
+  - id: exam-rubric
+    title: Calculus marking rubric fixture
+    authority: official
+    passages:
+      - locator: question 2, rubric
+        section: Geometric derivative question
+        text: Award marks for explaining that the derivative is the tangent slope and for interpreting its sign.
+  - id: scanned-graph
+    title: OCR graph theory fixture
+    authority: textbook
+    passages:
+      - locator: page 4 [OCR]
+        section: Scanned theorem
+        text: Every finite tree has exactly one fewer edge than vertices.
+  - id: multicolumn-method
+    title: Multi-column method fixture
+    authority: peer_reviewed
+    passages:
+      - locator: page 2, columns 1-2
+        section: Method and result
+        text: The left column defines the verification method; the right column reports fewer unsupported actions under evaluation.
+  - id: field-summary
+    title: Field synthesis fixture
+    authority: peer_reviewed
+    passages:
+      - locator: synthesis
+        section: Global field view
+        text: The field combines retrieval methods, evaluation benchmarks, and replication critiques; evidence varies by dataset and assumption.
+  - id: operating-systems
+    title: Operating systems distractor
+    authority: textbook
+    passages:
+      - locator: scheduling
+        section: Scheduling
+        text: Round-robin scheduling gives each runnable process a fixed time quantum.
+  - id: orchard
+    title: Orchard distractor
+    authority: secondary
+    passages:
+      - locator: fruit
+        section: Orchard
+        text: Apples, pears, and plums are harvested from the orchard in autumn.
+queries:
+  - id: textbook.derivative
+    query: instantaneous rate of change tangent slope
+    relevant: [{source_id: calculus-text, locator: "chapter 3, derivative"}]
+  - id: formula.difference-quotient
+    query: derivative limit difference quotient formula
+    relevant: [{source_id: calculus-text, locator: "chapter 3, formula 1"}]
+  - id: table.optimizer
+    query: step size controls update magnitude
+    relevant: [{source_id: optimization-table, locator: table 1}]
+  - id: chinese.causal
+    query: 因果效应识别 可交换性 正值性
+    relevant: [{source_id: causal-bilingual, locator: section 2}]
+  - id: cross-language.causal
+    query: causal identification exchangeability positivity
+    relevant: [{source_id: causal-bilingual, locator: section 2}]
+  - id: research.replication
+    query: retrieval replication domain shift benchmark limitation
+    relevant: [{source_id: research-paper, locator: "discussion, limitations"}]
+  - id: exam.rubric
+    query: marking criteria geometric derivative tangent sign
+    relevant: [{source_id: exam-rubric, locator: "question 2, rubric"}]
+  - id: ocr.tree
+    query: scanned finite tree edges vertices
+    relevant: [{source_id: scanned-graph, locator: "page 4 [OCR]"}]
+  - id: multicolumn.method
+    query: verification method fewer unsupported actions columns
+    relevant: [{source_id: multicolumn-method, locator: "page 2, columns 1-2"}]
+  - id: global.field
+    query: field-wide retrieval methods benchmarks replication critiques
+    relevant: [{source_id: field-summary, locator: synthesis}]
+claims:
+  - id: claim.derivative
+    cited: [{source_id: calculus-text, locator: "chapter 3, derivative"}]
+    supported: [{source_id: calculus-text, locator: "chapter 3, derivative"}]
+    abstained: false
+  - id: claim.unknown
+    cited: []
+    supported: []
+    abstained: true
+workflow_cases:
+  source_diversity:
+    - id: diversity.derivative
+      cited:
+        - {source_id: calculus-text, locator: "chapter 3, derivative"}
+        - {source_id: exam-rubric, locator: "question 2, rubric"}
+      minimum_sources: 2
+  freshness:
+    - id: freshness.replication
+      source_id: research-paper
+      acceptable_versions: [fixture-2026]
+  correction:
+    - id: correction.replication
+      before_status: missing
+      after_status: supported
+      evidence: [{source_id: research-paper, locator: "discussion, limitations"}]

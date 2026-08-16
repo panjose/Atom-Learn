@@ -1,0 +1,8 @@
+profile: core-multidomain-v1
+model:
+  model_id: organization/multilingual-reranker
+  revision: immutable-model-revision
+  license: apache-2.0
+  path: C:/absolute/path/to/approved-reranker
+  backend: torch
+  batch_size: 16

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/semantic-model.schema.json",
+  "title": "AtomLearn opt-in local semantic model",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["model_id", "revision", "license", "path"],
+  "properties": {
+    "model_id": {"type": "string", "minLength": 1, "maxLength": 500},
+    "revision": {"type": "string", "minLength": 1, "maxLength": 500},
+    "license": {"type": "string", "minLength": 1, "maxLength": 500},
+    "path": {"type": "string", "minLength": 3, "maxLength": 4000},
+    "backend": {"enum": ["torch", "onnx", "openvino"]},
+    "batch_size": {"type": "integer", "minimum": 1, "maximum": 256}
+  }
+}

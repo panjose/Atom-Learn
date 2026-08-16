@@ -3,3 +3,5 @@ alternate_queries: []
 top_k: 8
 candidate_k: 50
 source_ids: []
+parent_context_chars: 4000
+use_cross_encoder: true
