@@ -19,11 +19,30 @@ tags: []
 metadata_verification:
   status: unverified
   checks: {}
+discovery: null
+screening:
+  status: included
+  matched_criteria: []
+  exclusion_criterion: null
+  reason: Imported directly into the reading corpus.
+  decision_source: human-import
+  decided_at: null
+integrity:
+  status: unknown
+  provider: null
+  checked_at: null
+  source_locator: null
 analysis:
   problem: ""
   contributions: []
   approach: ""
   datasets: []
+  populations: []
+  settings: []
+  methods: []
+  baselines: []
+  outcomes: []
+  assumptions: []
   claims: []
   limitations: []
   open_questions: []

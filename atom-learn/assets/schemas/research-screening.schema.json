@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/panjose/Atom-Learn/schemas/research-screening.schema.json",
+  "title": "AtomLearn research screening decisions",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["decisions"],
+  "properties": {
+    "decisions": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["paper_id", "decision", "matched_criteria", "exclusion_criterion", "reason", "confirmed"],
+        "properties": {
+          "paper_id": {"type": "string"}, "decision": {"enum": ["include", "exclude", "needs_review"]},
+          "matched_criteria": {"type": "array", "items": {"type": "string"}},
+          "exclusion_criterion": {"type": ["string", "null"]}, "reason": {"type": "string", "minLength": 1},
+          "confirmed": {"type": "boolean"}
+        }
+      }
+    }
+  }
+}

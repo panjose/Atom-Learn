@@ -1,0 +1,11 @@
+reviews:
+  - family_id: family.auto.example
+    decision: confirm
+    canonical_id: null
+    label: null
+    transfer_evidence:
+      seen_attempts: 5
+      seen_success_rate: 0.9
+      held_out_attempts: 5
+      held_out_success_rate: 0.6
+      source_locator: learner-attempt-log-2025

@@ -5,9 +5,20 @@ research_question: ""
 scope: ""
 inclusion_criteria: []
 exclusion_criteria: []
+protocol_revision: 0
+protocol:
+  languages: []
+  date_from: null
+  date_to: null
+  literature_types: []
+  target_outcomes: []
+  search_limits: []
 status: scoping
 active_paper_id: null
 paper_aliases: {}
+discovery_log: []
+screening_log: []
+latest_refresh: null
 latest_synthesis: null
 created_at: ""
 updated_at: ""

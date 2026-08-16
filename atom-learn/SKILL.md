@@ -96,10 +96,11 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 3. If questions are the only input, complete source intake and build a prerequisite-aware course before final Atom mapping. Do not build a course around memorized answer patterns.
 4. Retrieve the relevant question, marking scheme, syllabus, and course evidence. Use harness Web Search only to correct missing official context and ingest bounded evidence with provenance.
 5. Prefer `exam process-source` for an indexed paper; it consumes shared Document IR and retains block provenance without copying full text. Use `exam process` when separate question, answer, and marking artifacts must be linked, and `exam import` for already structured data.
-6. Inspect processing diagnostics and run `exam review-mappings` for pending proposals. Run `exam calibrate` when official difficulty anchors exist, then `exam analyze` and `exam validate`. Present commonness as a property of the supplied corpus, not a forecast of future questions.
-7. Run `adapt guidance --context exam`, then `exam plan --mode learning|review|mixed`. Use the queue's prerequisites, Evidence gaps, difficulty, and representative questions.
-8. If lineage is initialized, run `lineage trace` on the top target. Explain its prerequisite chain and exam-relevant conceptual thread before teaching it.
-9. Teach or review the top eligible Atom. Withhold the solution during a diagnostic attempt, record normal Evidence, assess it, and rerun the plan.
+6. Inspect processing diagnostics and run `exam review-mappings` for every pending joint stem/answer/rubric proposal. Pending or rejected mappings do not count as coverage. Run `exam calibrate` when official anchors exist; use `exam record-empirical` only for source-located aggregates and call unqualified output structural complexity, not observed difficulty.
+7. Run `exam propose-families`, then explicitly confirm/correct/reject item-family candidates. Use held-out transfer aggregates for `memorization_risk`; never infer intent from the risk.
+8. Run `adapt guidance --context exam`, then `exam plan --mode learning|review|mixed`. When the learner supplies calendar capacity, run `exam daily-plan`; report `infeasible` gaps rather than weakening mastery.
+9. If lineage is initialized, run `lineage trace` on the top target. Explain its prerequisite chain and exam-relevant conceptual thread before teaching it.
+10. Teach or review the top eligible Atom. Withhold the solution during a diagnostic attempt, record normal Evidence, assess it, and rerun the plan.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
@@ -110,9 +111,13 @@ python <SKILL_DIR>/scripts/atomlearn.py exam process-source <workspace> --source
 python <SKILL_DIR>/scripts/atomlearn.py exam process <workspace> --input <exam-process.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam review-mappings <workspace> --input <exam-mapping-review.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam calibrate <workspace> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam record-empirical <workspace> --input <exam-empirical-difficulty.yaml> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam propose-families <workspace> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam review-families <workspace> --input <exam-family-review.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-import.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam analyze <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam plan <workspace> --mode mixed --limit 10
+python <SKILL_DIR>/scripts/atomlearn.py exam daily-plan <workspace> --input <exam-daily-plan.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py exam validate <workspace>
 ```
 
@@ -243,17 +248,23 @@ Strategy values may change presentation only. Never let them change mastery, pre
 
 1. Create the base workspace with `init`. Build Knowledge Atoms when the field has concepts or methods the learner may need to repair.
 2. Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) and [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md).
-3. Define a research question, scope, inclusion criteria, exclusion criteria, and intended outcome before collecting papers.
+3. Define and persist a revisioned research protocol—question, scope, dates, languages, literature types, inclusion/exclusion criteria, outcomes, and search limits—before collecting papers.
 4. Run `adapt guidance --context research`; apply active research-orientation and source-priority preferences within the declared scope.
-5. Use the RAG corrective-search workflow to build an initial map of representative roles: survey, seminal, theory or method families, benchmarks or datasets, critiques or replications, and applications. Import normalizes DOI/title duplicates. Use `research reconcile-metadata` for harness/provider snapshots or `research fetch-metadata` for Crossref/OpenAlex verification and outgoing citation acquisition; do not equate citation count with evidence quality.
+5. Use `research discover` with Crossref, OpenAlex, or harness Web Search and submit typed results through `research submit-discovery`. Screen every candidate against the protocol; an unconfirmed model decision stays `needs_review`. Use bounded backward/forward `research snowball` and on-demand `research refresh`. Never equate citation count with evidence quality or bounded results with exhaustive coverage.
 6. Run `research init`, then `rag requirements --context research`. Pass research-question, survey, method, evaluation, and critique/replication coverage before finalizing the paper map.
-7. Create an import plan, then run `research import`. When a full paper is indexed, bind it with `research attach-source` so research state retains the shared IR revision and hash without copying paper text. Run `research validate` and `research next`.
+7. Create an import plan or confirm screened discovery candidates. When a full paper is indexed, bind it with `research attach-source` so research state retains the shared IR revision and hash without copying paper text. Run `research validate` and `research next`.
 8. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, use `lineage trace` to explain and repair their prerequisite context without losing the paper position.
-9. Read in triage, structure, and evidence passes. Save a critical note with `research note`; mark it complete only after the critical-reading guard passes.
-10. Run `research synthesize` after a coherent group is complete. Use its source-preserving claim themes to report agreements, contradictions, replications, evidence grades, recurring limitations, open questions, and search limits. Keep single-source and contested themes explicit.
+9. Read in triage, structure, and evidence passes. Save structured population/setting/dataset/method/baseline/outcome/metric/assumption facets and a sentence/table/figure/equation/block locator for every central claim. Mark it complete only after the critical-reading guard passes.
+10. Run `research synthesize` after a coherent group is complete, then review every proposed theme with `research review-synthesis`. Preserve conditional differences and claim locators; keep single-source and contested themes explicit.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field> --question <question> --scope <scope>
+python <SKILL_DIR>/scripts/atomlearn.py research set-protocol <workspace> --input <research-protocol.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research discover <workspace> --provider harness --query <query>
+python <SKILL_DIR>/scripts/atomlearn.py research submit-discovery <workspace> --input <research-discovery-submission.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research screen <workspace> --input <research-screening.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research snowball <workspace> <paper-id> --direction backward --stopping-rule <rule>
+python <SKILL_DIR>/scripts/atomlearn.py research refresh <workspace> --provider harness
 python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace> --context research
 python <SKILL_DIR>/scripts/atomlearn.py rag coverage <workspace> --input <research-coverage.yaml>
@@ -266,6 +277,7 @@ python <SKILL_DIR>/scripts/atomlearn.py research activate <workspace> <paper-id>
 python <SKILL_DIR>/scripts/atomlearn.py research note <workspace> <paper-id> --input <note.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research complete <workspace> <paper-id>
 python <SKILL_DIR>/scripts/atomlearn.py research synthesize <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py research review-synthesis <workspace> --input <research-synthesis-review.yaml>
 ```
 
 Do not call an observed open question a novel contribution without a current literature search. Do not mark a paper read from an abstract-only summary. Do not store complete paper text in canonical state.
@@ -369,4 +381,4 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a related-concept question, show the relationship and impact before structural mutation, name a scheduled destination when one exists, and require confirmation for a new prerequisite or optional branch. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, optional branches, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For exam preparation, require source locators, disclose unmapped knowledge points and corpus limits, keep prerequisite order, and refresh the exam plan after new Evidence. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have critical notes, cross-paper relations are represented, open questions and contradictions are explicit, and search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a related-concept question, show the relationship and impact before structural mutation, name a scheduled destination when one exists, and require confirmation for a new prerequisite or optional branch. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, optional branches, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For exam preparation, require source locators, count only reviewed mappings, distinguish structural/official/empirical difficulty, disclose corpus limits, keep prerequisite order, and report infeasible calendar gaps. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have claim-level locators, structured conditional differences are retained, theme proposals are reviewed, open questions and contradictions are explicit, and bounded search limits are stated.

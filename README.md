@@ -23,10 +23,10 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Restore state across sessions with revision conflict protection and event auditing
 - Schedule reviews at 1/3/7/30-day intervals, with course-level overrides
 - Split or merge Atoms with user confirmation while preserving stable ID aliases
-- Map a research field into a role-aware paper dependency and citation graph
-- Guide one Active Paper through critical notes, claim-evidence extraction, and cross-paper synthesis
-- Analyze past papers and question banks for source-traceable coverage, difficulty, and corpus emphasis
-- Generate targeted learning or review queues from exam emphasis, learner Evidence, and prerequisites
+- Discover, screen, refresh, and citation-expand a research field through a protocol-bound paper graph
+- Guide one Active Paper through locator-grounded structured claims and reviewable cross-paper synthesis
+- Analyze past papers with reviewed joint mappings and separate structural, official, and empirical difficulty
+- Build reviewed item families and capacity-checked daily learning, remediation, review, and practice plans
 - Adapt response style, pacing, examples, feedback, and research orientation from privacy-safe session signals
 - Analyze learning evidence and propose bounded, approval-gated course evolution
 - Generate learning, research, personalization, and evolution views from canonical YAML state
@@ -192,24 +192,26 @@ Use `atom-learn/assets/templates/concept-route.yaml` as the starter payload.
 
 ## Research Reading
 
-AtomLearn can orient reading around a research question instead of treating papers as isolated summaries. It normalizes DOI identifiers, merges DOI/title duplicates, verifies provider metadata, acquires outgoing citation relations from Crossref/OpenAlex or harness snapshots, and builds a guided role-aware paper map. Completed papers feed source-preserving cross-paper claim themes that keep agreements, contradictions, evidence strength, limitations, and provenance explicit.
+AtomLearn can orient reading around a revisioned research protocol instead of treating papers as isolated summaries. Crossref, OpenAlex, or harness Web Search discovery feeds DOI/title-deduplicated candidates into explicit screening; bounded backward/forward citation expansion and on-demand integrity refresh retain provider provenance. Completed papers contribute claim-level locators and structured population, dataset, method, outcome, metric, and assumption facets to reviewable cross-paper themes.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
 python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
-python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
-python atom-learn/scripts/atomlearn.py research reconcile-metadata courses/agent-research --input research-metadata.yaml --expected-research-revision 1
-python atom-learn/scripts/atomlearn.py research fetch-metadata courses/agent-research --provider crossref --expected-research-revision 2
-python atom-learn/scripts/atomlearn.py research attach-source courses/agent-research paper.field.survey --source-id survey-source --expected-research-revision 3
+python atom-learn/scripts/atomlearn.py research set-protocol courses/agent-research --input research-protocol.yaml --expected-research-revision 0
+python atom-learn/scripts/atomlearn.py research discover courses/agent-research --provider harness --query "reliable autonomous research agents" --expected-research-revision 1
+python atom-learn/scripts/atomlearn.py research submit-discovery courses/agent-research --input research-discovery-submission.yaml --expected-research-revision 2
+python atom-learn/scripts/atomlearn.py research screen courses/agent-research --input research-screening.yaml --expected-research-revision 3
+python atom-learn/scripts/atomlearn.py research snowball courses/agent-research paper.field.survey --direction backward --stopping-rule "one depth or 50 candidates"
+python atom-learn/scripts/atomlearn.py research refresh courses/agent-research --provider harness
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. An indexed paper can be attached to its shared Document IR revision and hash without copying full text into research state. Metadata conflicts and unresolved external references remain auditable; a synthesized single-source theme never masquerades as consensus. It does not claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
+Research mode keeps at most one Active Paper, requires confirmed inclusion, blocks integrity alerts and unread prerequisites, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. An indexed paper can be attached to shared Document IR without copying full text; claim block locators are verified against its source revision. Model screening and synthesis outputs remain proposals until reviewed. PRISMA-style counts describe only bounded results, and open questions never become novelty claims without current-literature verification. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md) and the [Phase 6 implementation record](docs/V0_14_PHASE6_IMPLEMENTATION.md).
 
 ## Exam Analysis and Targeted Preparation
 
-AtomLearn can turn supplied past papers, sample exams, mock exams, or question banks into a source-traceable assessment corpus. It automatically splits numbered questions, associates answer/marking sections, proposes reviewable knowledge-point and Atom mappings, and estimates a transparent five-factor difficulty rubric. Official anchors can calibrate non-official estimates. Analysis reports cross-paper coverage, score share, sample-contained emphasis, confidence, review status, and unmapped course gaps.
+AtomLearn can turn supplied past papers, sample exams, mock exams, or question banks into a source-traceable assessment corpus. It jointly uses question, answer, and rubric evidence for reviewable Atom mappings; pending mappings never count as coverage. It separates five-factor structural complexity, official difficulty, and source-located empirical difficulty, proposes reviewable cross-paper item families, measures held-out transfer risk, and can build a capacity-checked daily plan.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
@@ -217,12 +219,16 @@ python atom-learn/scripts/atomlearn.py exam process-source courses/calculus --so
 python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
 python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
+python atom-learn/scripts/atomlearn.py exam record-empirical courses/calculus --input exam-empirical-difficulty.yaml --expected-exam-revision 3
+python atom-learn/scripts/atomlearn.py exam propose-families courses/calculus --expected-exam-revision 4
+python atom-learn/scripts/atomlearn.py exam review-families courses/calculus --input exam-family-review.yaml --expected-exam-revision 5
 python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
 python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
+python atom-learn/scripts/atomlearn.py exam daily-plan courses/calculus --input exam-daily-plan.yaml
 # For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-`exam process-source` consumes the same Document IR used by RAG and retains exact block provenance while canonical exam state keeps only concise summaries, associations, and locators. The targeted queue combines corpus emphasis, current learner Evidence, calibrated question difficulty, and prerequisite order to recommend `learn`, `remediate`, `review`, or `repair_prerequisites`. Full questions, answers, and marking schemes remain in the private source/RAG layer. Frequency describes only the supplied corpus and is never presented as a prediction of future questions. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md).
+`exam process-source` consumes the same Document IR used by RAG and retains exact block provenance while canonical state keeps only concise summaries, associations, and locators. Empirical difficulty becomes effective only at 30 source-located attempts; otherwise the product says official difficulty or structural complexity. Item families require review, and `memorization_risk` describes seen-versus-held-out transfer rather than user intent. A daily plan that cannot fit returns `infeasible` and its workload gap without weakening mastery. Frequency describes only the supplied corpus and is never a prediction. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and the [Phase 6 implementation record](docs/V0_14_PHASE6_IMPLEMENTATION.md).
 
 ## Session-Based Self-Adaptation
 
@@ -276,6 +282,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
+- [v0.14 Phase 6 Exam and Research Implementation](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
 - [Self-Evolution v2 Proposal](docs/SELF_EVOLUTION_V2_DESIGN.md)
 - [Self-Evolution v2 Implementation Plan](docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md)

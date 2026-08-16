@@ -79,42 +79,81 @@ capabilities:
       - AtomLearn does not silently download a model or send source content to an embedding provider.
 
   - id: exam.reviewable_heuristics_v1
-    title: Reviewable question splitting mapping difficulty estimation and targeted queues
-    status: experimental
+    title: Reviewable joint question mapping calibrated difficulty item families and feasible daily plans
+    status: implemented
     default_mode: opt_in
     public_claim: true
-    interfaces: [exam process, exam review-mappings, exam analyze, exam plan]
+    interfaces:
+      - exam process-source
+      - exam process
+      - exam review-mappings
+      - exam record-empirical
+      - exam propose-families
+      - exam review-families
+      - exam analyze
+      - exam plan
+      - exam daily-plan
     implementation:
       - path: atom-learn/scripts/exam.py
         symbol: "def process_documents"
+      - path: atom-learn/scripts/exam.py
+        symbol: "def record_empirical_difficulty"
+      - path: atom-learn/scripts/exam.py
+        symbol: "def daily_plan"
     verification:
       - path: tests/test_exam.py
         symbol: "test_exam_process_splits_questions_links_marking_and_proposes_reviewable_atom_mappings"
+      - path: tests/test_exam.py
+        symbol: "test_empirical_difficulty_is_separate_qualified_and_source_located"
+      - path: tests/test_exam.py
+        symbol: "test_item_families_require_review_and_report_held_out_memorization_risk"
+      - path: tests/test_exam.py
+        symbol: "test_daily_exam_plan_fails_closed_when_capacity_cannot_fit_required_work"
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/EXAM_PREPARATION.md]
     limitations:
-      - Text heuristics estimate structural complexity; empirical difficulty requires official anchors or learner performance data.
-      - Source-to-exam import does not yet use a shared layout-preserving Document IR.
+      - Automatic boundaries, joint Atom mappings, and item families remain proposals until their explicit review gates pass.
+      - Empirical difficulty becomes effective only from a source-located aggregate with at least 30 attempts; otherwise the product says structural complexity or official difficulty.
 
   - id: research.guided_corpus_v1
-    title: Guided paper graph metadata reconciliation critical notes and auditable synthesis
-    status: experimental
+    title: Protocol-bound literature discovery screening citation expansion and structured synthesis
+    status: implemented
     default_mode: opt_in
     public_claim: true
-    interfaces: [research import, research reconcile-metadata, research fetch-metadata, research synthesize]
+    interfaces:
+      - research set-protocol
+      - research discover
+      - research submit-discovery
+      - research screen
+      - research snowball
+      - research refresh
+      - research attach-source
+      - research note
+      - research synthesize
+      - research review-synthesis
     implementation:
       - path: atom-learn/scripts/research.py
         symbol: "def fetch_metadata"
       - path: atom-learn/scripts/research.py
         symbol: "def synthesize"
+      - path: atom-learn/scripts/research.py
+        symbol: "def discover"
+      - path: atom-learn/scripts/research.py
+        symbol: "def screen"
+      - path: atom-learn/scripts/research.py
+        symbol: "def review_synthesis"
     verification:
       - path: tests/test_research.py
         symbol: "test_research_metadata_reconciliation_verifies_records_and_acquires_internal_citations"
       - path: tests/test_research.py
         symbol: "test_research_synthesis_surfaces_claims_contradictions_and_gaps"
+      - path: tests/test_research.py
+        symbol: "test_research_protocol_discovery_screening_snowball_and_refresh_close_the_audit_loop"
+      - path: tests/test_research.py
+        symbol: "test_research_completion_fails_without_claim_level_locator"
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/RESEARCH_READING.md]
     limitations:
-      - Metadata fetching starts from known DOI records; active query discovery and citation snowballing are not yet closed-loop.
-      - Cross-paper theme grouping remains primarily token-overlap based.
+      - Provider result limits mean PRISMA-style counts are audit aids, not a claim of exhaustive systematic-review coverage.
+      - Structured facet merges and explicit relations produce theme proposals; a human or harness review must confirm them before they are treated as accepted synthesis themes.
 
   - id: personalization.session_adaptation_v1
     title: Privacy-safe session and opt-in cross-course presentation adaptation

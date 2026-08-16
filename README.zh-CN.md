@@ -23,10 +23,10 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 跨会话恢复状态，并提供 revision 冲突保护和事件审计
 - 按 1/3/7/30 天间隔安排复习，同时支持课程级覆盖
 - 经用户确认后拆分或合并 Atom，并保留稳定 ID alias
-- 将科研领域组织为带角色、阅读依赖和引用关系的论文图
-- 围绕单一 Active Paper 完成批判性笔记、主张—证据抽取和跨论文综合
-- 分析往年题和题库，得到来源可追踪的覆盖、难度与样本内重点
-- 根据考试重点、学习者 Evidence 和先修关系生成针对性学习或复习队列
+- 通过受 protocol 约束的论文图发现、筛选、刷新并扩展科研领域引用关系
+- 围绕单一 Active Paper 形成 locator 驱动的结构化主张和可复核跨论文综合
+- 用已复核联合映射分析往年题，并分开结构、官方与经验难度
+- 建立已复核题族和经过容量校验的每日学习、补救、复习与练习计划
 - 从隐私安全的 session 信号中适配回答风格、节奏、示例、反馈和科研取向
 - 分析学习证据，并生成有边界、需审批的课程进化提案
 - 从规范化 YAML 状态生成学习、科研、个性化和进化视图
@@ -192,24 +192,26 @@ python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input co
 
 ## 科研论文阅读
 
-AtomLearn 可以围绕研究问题组织阅读，而不是把论文处理成彼此孤立的摘要。它会规范化 DOI、合并 DOI/标题重复项、验证供应商元数据、从 Crossref/OpenAlex 或 harness 快照获取外向引用关系，并建立角色感知的论文导向地图。完成阅读的论文会形成保留来源的跨论文主张主题，明确保留一致、矛盾、证据强度、局限和 provenance。
+AtomLearn 可以围绕带 revision 的科研 protocol 组织阅读，而不是把论文处理成彼此孤立的摘要。Crossref、OpenAlex 或 harness Web Search 发现的候选会先经过 DOI/标题去重与显式 screening；有界的前后向引文扩展和按需 integrity refresh 会保留 provider provenance。完成阅读的论文以 claim-level locator 以及 population、dataset、method、outcome、metric、assumption 等结构化 facet 进入可复核的跨论文主题。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
 python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
-python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
-python atom-learn/scripts/atomlearn.py research reconcile-metadata courses/agent-research --input research-metadata.yaml --expected-research-revision 1
-python atom-learn/scripts/atomlearn.py research fetch-metadata courses/agent-research --provider crossref --expected-research-revision 2
-python atom-learn/scripts/atomlearn.py research attach-source courses/agent-research paper.field.survey --source-id survey-source --expected-research-revision 3
+python atom-learn/scripts/atomlearn.py research set-protocol courses/agent-research --input research-protocol.yaml --expected-research-revision 0
+python atom-learn/scripts/atomlearn.py research discover courses/agent-research --provider harness --query "reliable autonomous research agents" --expected-research-revision 1
+python atom-learn/scripts/atomlearn.py research submit-discovery courses/agent-research --input research-discovery-submission.yaml --expected-research-revision 2
+python atom-learn/scripts/atomlearn.py research screen courses/agent-research --input research-screening.yaml --expected-research-revision 3
+python atom-learn/scripts/atomlearn.py research snowball courses/agent-research paper.field.survey --direction backward --stopping-rule "one depth or 50 candidates"
+python atom-learn/scripts/atomlearn.py research refresh courses/agent-research --provider harness
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-研究模式最多保留一个 Active Paper，会阻止未完成论文先修的激活、提示缺失的 Knowledge Atom，并生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。已建立索引的论文可以关联到共享 Document IR 的 revision 和 hash，而不会把全文复制到科研状态。元数据冲突与未解析外部引用保持可审计；单一来源的综合主题不会伪装成共识。它不会在缺少最新文献检索时宣称创新性。完整方法见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)。
+研究模式最多保留一个 Active Paper，要求确认纳入，并阻止 integrity 警报或未完成论文先修的激活；它会生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。已建立索引的论文可以关联到共享 Document IR 而不复制全文，claim block locator 会对 source revision 验证。模型 screening 和 synthesis 输出在复核前都只是 proposal。PRISMA 风格计数只描述有界结果，open question 也不会在缺少当前文献验证时变成创新性声明。详见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)和[Phase 6 实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)。
 
 ## 试题分析与针对性备考
 
-AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理为来源可追踪的考试语料。它会自动切分有编号的题目、关联答案/评分细则、提出可复核的知识点与 Atom 映射，并用透明的五因素量表估计难度；官方锚点可用于校准非官方估计。分析会报告跨试卷覆盖、分值占比、样本内重点、置信度、复核状态以及尚未进入课程图的知识缺口。
+AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理为来源可追踪的考试语料。它会联合题干、答案和 rubric 证据提出可复核 Atom 映射，pending 映射不会计入覆盖率；它会分开五因素结构复杂度、官方难度和带来源的经验难度，提出可复核的跨试卷题族、测量 held-out 迁移风险，并生成经过容量校验的每日计划。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
@@ -217,12 +219,16 @@ python atom-learn/scripts/atomlearn.py exam process-source courses/calculus --so
 python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
 python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
+python atom-learn/scripts/atomlearn.py exam record-empirical courses/calculus --input exam-empirical-difficulty.yaml --expected-exam-revision 3
+python atom-learn/scripts/atomlearn.py exam propose-families courses/calculus --expected-exam-revision 4
+python atom-learn/scripts/atomlearn.py exam review-families courses/calculus --input exam-family-review.yaml --expected-exam-revision 5
 python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
 python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
+python atom-learn/scripts/atomlearn.py exam daily-plan courses/calculus --input exam-daily-plan.yaml
 # For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-`exam process-source` 会消费 RAG 共用的同一份 Document IR，并在考试规范状态只保存简短摘要、关联、locator 的同时保留准确 block provenance。针对性队列会综合语料重点、学习者当前 Evidence、校准后的题目难度和先修顺序，给出 `learn`、`remediate`、`review` 或 `repair_prerequisites` 建议。完整题目、答案与评分细则保留在私有资料/RAG 层。频率只描述用户提供的样本，绝不会被表述为未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)。
+`exam process-source` 会消费 RAG 共用的同一份 Document IR，并在规范状态只保存简短摘要、关联和 locator 的同时保留准确 block provenance。经验难度只有在至少 30 次且带来源 locator 的作答聚合下才会生效；否则产品只表述官方难度或结构复杂度。题族必须复核，`memorization_risk` 描述 seen/held-out 迁移而不判断用户动机。无法容纳全部任务的日计划会返回 `infeasible` 和工作量缺口，不会降低 mastery。频率只描述用户提供的样本，绝不是未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[Phase 6 实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)。
 
 ## 基于 Session 的自适应
 
@@ -276,6 +282,7 @@ atomlearn-core version
 
 - [产品与技术设计](docs/PRODUCT_DESIGN.md)
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
+- [v0.14 Phase 6 考试与科研实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [自进化设计](docs/SELF_EVOLUTION_DESIGN.md)
 - [自进化 v2 设计提案](docs/SELF_EVOLUTION_V2_DESIGN.md)
 - [自进化 v2 详细实施方案](docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md)

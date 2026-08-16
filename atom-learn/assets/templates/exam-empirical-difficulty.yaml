@@ -1,0 +1,9 @@
+aggregates:
+  - question_id: paper-2025.q1
+    attempt_count: 30
+    correct_rate: 0.55
+    median_seconds: 420
+    discrimination: 0.32
+    irt_b: null
+    source: anonymized-course-aggregate
+    source_locator: assessment-export-2025-08

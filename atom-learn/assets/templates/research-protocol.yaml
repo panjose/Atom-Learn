@@ -1,0 +1,10 @@
+research_question: Which design choices improve reliability under inspectable evaluation?
+scope: Peer-reviewed methods, evaluations, critiques, and replications.
+languages: [English, Chinese]
+date_from: 2018-01-01
+date_to: null
+literature_types: [journal-article, proceedings-article, preprint]
+inclusion_criteria: [Contains inspectable evidence]
+exclusion_criteria: [Product announcement only]
+target_outcomes: [unsupported action rate, task success]
+search_limits: [Provider result caps make coverage bounded rather than exhaustive]

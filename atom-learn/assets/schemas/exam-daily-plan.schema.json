@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/panjose/Atom-Learn/schemas/exam-daily-plan.schema.json",
+  "title": "AtomLearn exam daily plan input",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["start_date", "target_date", "available_weekdays", "minutes_per_day", "durations", "desired_retention", "final_review_days", "mode"],
+  "properties": {
+    "start_date": {"type": "string", "format": "date"},
+    "target_date": {"type": ["string", "null"], "format": "date"},
+    "available_weekdays": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1, "maximum": 7}},
+    "minutes_per_day": {"type": "integer", "minimum": 1, "maximum": 1440},
+    "durations": {
+      "type": "object", "additionalProperties": false,
+      "required": ["learn", "remediate", "review", "practice", "prerequisite"],
+      "properties": {
+        "learn": {"type": "integer", "minimum": 1}, "remediate": {"type": "integer", "minimum": 1},
+        "review": {"type": "integer", "minimum": 1}, "practice": {"type": "integer", "minimum": 1},
+        "prerequisite": {"type": "integer", "minimum": 1}
+      }
+    },
+    "desired_retention": {"type": "number", "minimum": 0.5, "maximum": 0.99},
+    "final_review_days": {"type": "integer", "minimum": 0, "maximum": 365},
+    "mode": {"enum": ["learning", "review", "mixed"]}
+  }
+}

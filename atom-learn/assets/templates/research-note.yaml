@@ -2,10 +2,35 @@ problem: ""
 contributions: []
 approach: ""
 datasets: []
+populations: []
+settings: []
+methods: []
+baselines: []
+outcomes: []
+assumptions: []
 claims:
   - statement: ""
     evidence_summary: ""
     strength: unclear
+    effect: ""
+    uncertainty: ""
+    facets:
+      population: []
+      setting: []
+      dataset: []
+      method: []
+      baseline: []
+      outcome: []
+      metric: []
+      assumption: []
+    evidence_locator:
+      locator: ""
+      kind: sentence
+      extraction_method: human
+      confidence: 1.0
+      source_id: null
+      source_revision: null
+      block_ids: []
 limitations: []
 open_questions: []
 field_positioning: ""

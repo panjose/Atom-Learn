@@ -1,0 +1,13 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/panjose/Atom-Learn/schemas/research-synthesis-review.schema.json",
+  "title": "AtomLearn structured synthesis review",
+  "type": "object", "additionalProperties": false, "required": ["reviews"],
+  "properties": {"reviews": {"type": "array", "minItems": 1, "items": {
+    "type": "object", "additionalProperties": false, "required": ["theme_id", "decision", "label", "reason"],
+    "properties": {
+      "theme_id": {"type": "string"}, "decision": {"enum": ["confirm", "reject", "relabel"]},
+      "label": {"type": ["string", "null"]}, "reason": {"type": "string", "minLength": 1}
+    }
+  }}}
+}

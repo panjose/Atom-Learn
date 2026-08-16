@@ -1,0 +1,5 @@
+reviews:
+  - theme_id: theme.001
+    decision: confirm
+    label: null
+    reason: The structured outcome, metric, and setting facets support this merge.

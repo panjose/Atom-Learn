@@ -92,3 +92,22 @@ def test_research_and_exam_automatic_helpers_are_deterministic() -> None:
     assert research.title_fingerprint("A Method: Revisited!") == "amethodrevisited"
     sections = exam.split_numbered_sections("Question 1. First\nQ2: Second", "fixture")
     assert [item["number"] for item in sections] == ["1", "2"]
+    crossref = research.ResearchEngine._crossref_candidate(
+        {
+            "DOI": "10.1234/example", "title": ["Example"], "author": [{"given": "A", "family": "Author"}],
+            "issued": {"date-parts": [[2025]]}, "container-title": ["Venue"], "URL": "https://doi.org/10.1234/example",
+            "reference": [{"DOI": "10.1234/base"}],
+            "update-to": [{"type": "retraction"}],
+        }
+    )
+    assert crossref["integrity_status"] == "retracted"
+    assert crossref["references"] == [{"doi": "10.1234/base"}]
+    openalex = research.ResearchEngine._openalex_candidate(
+        {
+            "id": "https://openalex.org/W1", "display_name": "Example", "publication_year": 2025,
+            "authorships": [], "primary_location": None, "referenced_works": ["https://openalex.org/W0"],
+            "is_retracted": False,
+        }
+    )
+    assert openalex["integrity_status"] == "not_retracted"
+    assert openalex["references"] == [{"provider_id": "https://openalex.org/W0"}]

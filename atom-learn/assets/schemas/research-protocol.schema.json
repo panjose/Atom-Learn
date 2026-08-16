@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/panjose/Atom-Learn/schemas/research-protocol.schema.json",
+  "title": "AtomLearn research protocol",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["research_question", "scope", "languages", "date_from", "date_to", "literature_types", "inclusion_criteria", "exclusion_criteria", "target_outcomes", "search_limits"],
+  "properties": {
+    "research_question": {"type": "string", "minLength": 1, "maxLength": 2000},
+    "scope": {"type": "string", "maxLength": 2000},
+    "languages": {"$ref": "#/$defs/strings"},
+    "date_from": {"type": ["string", "null"], "format": "date"},
+    "date_to": {"type": ["string", "null"], "format": "date"},
+    "literature_types": {"$ref": "#/$defs/strings"},
+    "inclusion_criteria": {"$ref": "#/$defs/strings"},
+    "exclusion_criteria": {"$ref": "#/$defs/strings"},
+    "target_outcomes": {"$ref": "#/$defs/strings"},
+    "search_limits": {"$ref": "#/$defs/strings"}
+  },
+  "$defs": {"strings": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}}}
+}

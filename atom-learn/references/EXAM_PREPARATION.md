@@ -15,12 +15,13 @@
 
 Use supplied exams as evidence about the sampled assessment corpus, not as an oracle for the next exam.
 
-AtomLearn combines four distinct inputs:
+AtomLearn combines five distinct inputs:
 
 - source-located past papers, mock exams, sample exams, or question banks;
 - mappings from each question to stable knowledge-point IDs and optional Knowledge Atoms;
 - a transparent difficulty rubric;
 - current learner status, Evidence, reviews, and prerequisites.
+- optional source-located aggregate performance used only for empirical difficulty.
 
 Keep exam revision independent from course, RAG, and adaptation revisions. Importing another paper must not rewrite learning history, and normal learning must not alter the question corpus.
 
@@ -58,7 +59,7 @@ For every question, record:
 - one or more knowledge-point mappings whose weights total `1.0`;
 - an existing Atom ID when the course graph covers the point, or `null` when it does not.
 
-`process-source` is the preferred path for an indexed paper: it consumes the active shared Document IR, preserves owning block IDs in each question locator, and does not create another full-text copy. `process` remains available when question, answer, and marking artifacts must be supplied together. Both paths automatically split stable question numbers, derive locators, and propose mappings/difficulty; `process` also associates matching answer and marking sections by number. Inspect diagnostics and the review queue. Use the same knowledge-point ID, label, and Atom mapping throughout the corpus. Do not force a weak mapping to obtain 100% coverage. Preserve it as an explicit coverage gap.
+`process-source` is the preferred path for an indexed paper: it consumes the active shared Document IR, preserves owning block IDs in each question locator, and does not create another full-text copy. `process` remains available when question, answer, and marking artifacts must be supplied together. Both paths automatically split stable question numbers and derive locators; `process` jointly scores the question stem, answer, and rubric when proposing an Atom mapping. Every automatic mapping remains `pending` even when its score is high. Only confirmed or corrected mappings enter course coverage and planning. Inspect diagnostics and the review queue. Use the same knowledge-point ID, label, and Atom mapping throughout the corpus. Do not force a weak mapping to obtain 100% coverage. Preserve it as an explicit coverage gap.
 
 ## Determine difficulty
 
@@ -70,7 +71,9 @@ Rate every factor from `1` through `5`:
 - execution load;
 - time pressure.
 
-The runtime computes a weighted estimate and a band from `foundation` through `challenge`. Record whether the basis is an official rating, an explicit rubric, or a weaker estimate. If official levels exist, retain them and run `exam calibrate`: the learned offset adjusts non-official estimates, reports before/after MAE, and leaves the official anchors unchanged.
+The runtime calls this weighted estimate `structural_complexity` and reports a band from `foundation` through `challenge`. It is not presented as observed difficulty. Record whether an official rating exists and run `exam calibrate` when official anchors are available; the learned offset reports before/after MAE and leaves the anchors unchanged.
+
+Use `exam record-empirical --input assets/templates/exam-empirical-difficulty.yaml` for aggregate performance. Preserve attempts, correct rate, optional discrimination/time/IRT, source, and source locator. A record with fewer than 30 attempts remains visible but cannot become the effective difficulty. Effective priority is qualified empirical data, then official difficulty, then structural complexity, with the selected basis and uncertainty exposed.
 
 Difficulty describes the task under the stated conditions. It is not a claim about the learner's intelligence. Lower confidence when the marking scheme, time allowance, prerequisite assumptions, or expected solution path is missing.
 
@@ -116,6 +119,10 @@ If an exam-mapped Atom has a detailed expansion, its computed prerequisite closu
 
 When a target date is configured, the plan reports days remaining and warns on an expired or seven-day horizon. Time pressure may change iteration length, but it must not remove prerequisite or mastery guards.
 
+Use `exam propose-families` to propose cross-paper variants from normalized stems, knowledge candidates, and solution structure. Then use `exam review-families` to confirm, correct, or reject them. A held-out transfer aggregate may mark `memorization_risk` only after both seen and held-out samples have at least three attempts; this is a learning-transfer warning, not a judgment about user intent.
+
+For a calendar, use `exam daily-plan --input assets/templates/exam-daily-plan.yaml`. It schedules prerequisite, learn, remediate, review, and practice work within the declared weekdays and minutes, reserving the final review window. If the work does not fit, it returns `infeasible`, the remaining tasks and minute gap, and adjustment options without lowering mastery.
+
 Read `adapt guidance --context exam` and apply presentation/challenge preferences without changing corpus statistics or mastery thresholds.
 
 ## Run learning and review
@@ -133,6 +140,8 @@ Do not mark an Atom mastered merely because the learner recognized a past questi
 
 - Keep full question sources and marking schemes in the source/RAG layer.
 - Separate official difficulty from rubric estimates.
+- Call rubric output structural complexity unless official or qualified empirical evidence exists.
+- Keep proposed mappings and item families out of confirmed coverage until review.
 - Preserve low-confidence and unmapped results instead of inventing certainty.
 - Treat score weights and frequency as corpus descriptors, not forecasts.
 - Do not infer learner ability from task difficulty.

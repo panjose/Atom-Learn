@@ -27,6 +27,8 @@
 
 The YAML and NDJSON files are canonical. The four root Markdown files are generated projections. Research revision is independent from course and evolution revisions.
 
+`state.yaml` also stores a separate `protocol_revision`, the structured discovery protocol, append-only discovery/screening logs, and the latest refresh receipt. A discovery action records provider, query, filters, seed/direction/depth, stopping rule, result IDs, completion, and failure status.
+
 ## Research import plan
 
 ```yaml
@@ -84,6 +86,25 @@ claims:
     statement: A bounded statement of the central claim.
     evidence_summary: Evidence that directly bears on the claim.
     strength: moderate
+    effect: The bounded observed effect.
+    uncertainty: Confidence interval, variance, or stated uncertainty boundary.
+    facets:
+      population: [Target population]
+      setting: [Evaluation setting]
+      dataset: [Evidence source]
+      method: [Method family]
+      baseline: [Comparator]
+      outcome: [Outcome]
+      metric: [Metric]
+      assumption: [Condition]
+    evidence_locator:
+      locator: Results, table 2, row 4
+      kind: table
+      extraction_method: document_ir
+      confidence: 0.95
+      source_id: paper-source
+      source_revision: 1
+      block_ids: [block-0123456789abcdef01234567]
 limitations:
   - A boundary, threat, missing comparison, or external-validity limit.
 open_questions:
@@ -95,7 +116,13 @@ relations:
     note: The result changes under a broader evaluation distribution.
 ```
 
-Claim strength is `weak`, `mixed`, `moderate`, `strong`, or `unclear`. A paper cannot become `read` without a problem, at least one contribution, an approach, at least one evidence-linked claim, at least one limitation, and field positioning.
+Claim strength is `weak`, `mixed`, `moderate`, `strong`, or `unclear`. A paper cannot become `read` without a problem, at least one contribution, an approach, at least one evidence-linked claim with a sentence/table/figure/equation/block locator, at least one limitation, and field positioning. Document IR block IDs and source revision are verified when present.
+
+## Discovery and screening
+
+Set a protocol with `research set-protocol`, then use `research discover`. Harness discovery returns a typed action whose result must match `research-discovery-submission.schema.json`; Crossref/OpenAlex discovery passes through the same submission/import path. Candidates begin with screening status `candidate`. Only confirmed inclusion makes them readable. A model-only include/exclude decision becomes `needs_review`, and confirmed exclusion must cite a predeclared criterion.
+
+`research snowball` creates backward/forward actions with seed, depth, and stopping rule. `research refresh` checks saved queries and included-paper integrity metadata. The provider result set remains bounded; PRISMA-style counts do not assert exhaustive retrieval.
 
 ## Relations and identifiers
 
@@ -126,13 +153,20 @@ metadata_verification:
 
 ## Evidence synthesis
 
-`research synthesize` clusters semantically overlapping evidence-linked claims across completed papers, preserves every claim and evidence summary, evaluates paper-level support/extension/replication/contradiction relations, and records a bounded `latest_synthesis`. Every theme exposes source paper and claim IDs, evidence strengths, relation types, limitations, an `assessment`, and an evidence grade. A one-paper cluster is explicitly `single_source`; a contradiction is `contested`, never averaged away.
+`research synthesize` groups claims only from structured facet compatibility or explicit paper relations, preserves every claim locator and conditional context, and records a bounded `latest_synthesis`. Every theme exposes merge evidence, source paper and claim IDs, evidence strengths, relation types, limitations, an `assessment`, and an evidence grade. A one-paper cluster is `single_source`; a contradiction is `contested`, never averaged away. Themes start as `proposed`; `research review-synthesis` is required to confirm, relabel, or reject them.
 
 ## Commands
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research set-protocol <workspace> --input <research-protocol.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research discover <workspace> --provider harness|crossref|openalex --query <query>
+python <SKILL_DIR>/scripts/atomlearn.py research submit-discovery <workspace> --input <research-discovery-submission.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research screen <workspace> --input <research-screening.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research snowball <workspace> <paper-id> --direction backward|forward --stopping-rule <rule>
+python <SKILL_DIR>/scripts/atomlearn.py research refresh <workspace> --provider harness|crossref|openalex
 python <SKILL_DIR>/scripts/atomlearn.py research reconcile-metadata <workspace> --input <research-metadata.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref
 python <SKILL_DIR>/scripts/atomlearn.py research synthesize <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py research review-synthesis <workspace> --input <research-synthesis-review.yaml>
 ```

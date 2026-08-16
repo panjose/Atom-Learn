@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 import sys
@@ -107,6 +108,27 @@ def critical_note(
                 "statement": "The mechanism improves auditability under the reported conditions.",
                 "evidence_summary": "The controlled comparison reports fewer unsupported actions.",
                 "strength": "moderate",
+                "effect": "Fewer unsupported actions than the documented baseline.",
+                "uncertainty": "Single task-family evaluation.",
+                "facets": {
+                    "population": ["autonomous research agents"],
+                    "setting": ["controlled evaluation"],
+                    "dataset": ["Synthetic evaluation suite"],
+                    "method": ["bounded verification mechanism"],
+                    "baseline": ["documented baseline"],
+                    "outcome": ["unsupported action rate"],
+                    "metric": ["unsupported actions"],
+                    "assumption": ["inspectable tool traces"],
+                },
+                "evidence_locator": {
+                    "locator": "Results section, sentence 3",
+                    "kind": "sentence",
+                    "extraction_method": "human",
+                    "confidence": 1.0,
+                    "source_id": None,
+                    "source_revision": None,
+                    "block_ids": [],
+                },
             }
         ],
         "limitations": ["The evaluation covers only one task family."],
@@ -255,7 +277,19 @@ def test_research_synthesis_surfaces_claims_contradictions_and_gaps() -> None:
     assert result["contradictions"][0]["target_paper_id"] == "paper.method.alpha"
     assert len(result["evidence_synthesis"]["themes"]) == 1
     assert result["evidence_synthesis"]["themes"][0]["assessment"] == "contested"
+    assert result["evidence_synthesis"]["themes"][0]["review_status"] == "proposed"
     assert len(result["evidence_synthesis"]["themes"][0]["claims"]) == 3
+    assert result["evidence_synthesis"]["themes"][0]["conditional_differences"] == {}
+    reviewed = output(
+        invoke(
+            "research", "review-synthesis", path,
+            "--input", payload(path, "synthesis-review.yaml", {
+                "reviews": [{"theme_id": "theme.001", "decision": "confirm", "label": None, "reason": "Shared structured facets and explicit relations."}]
+            }),
+            "--expected-research-revision", synthesized["research_revision"],
+        )
+    )
+    assert reviewed["result"]["confirmed"] == 1
     matrix = (path / "LITERATURE_MATRIX.md").read_text(encoding="utf-8")
     gaps = (path / "RESEARCH_GAPS.md").read_text(encoding="utf-8")
     assert "evidence-linked claim" not in matrix
@@ -497,3 +531,138 @@ def test_research_attach_source_binds_shared_document_ir_without_copying_full_te
     assert paper["metadata_verification"]["checks"]["document_ir"]["block_count"] >= 2
     assert "full_text" not in paper
     assert output(invoke("research", "validate", path))["ok"] is True
+
+
+def test_research_protocol_discovery_screening_snowball_and_refresh_close_the_audit_loop() -> None:
+    path = workspace("discovery-loop")
+    protocol = {
+        "research_question": "Which mechanisms improve reliability?",
+        "scope": "Inspectable empirical studies.",
+        "languages": ["English"], "date_from": "2020-01-01", "date_to": None,
+        "literature_types": ["journal-article", "proceedings-article"],
+        "inclusion_criteria": ["Contains inspectable evidence"],
+        "exclusion_criteria": ["Product announcement only"],
+        "target_outcomes": ["unsupported action rate"],
+        "search_limits": ["Provider result cap"],
+    }
+    revision = output(
+        invoke("research", "set-protocol", path, "--input", payload(path, "protocol.yaml", protocol))
+    )["research_revision"]
+    discovery = output(
+        invoke(
+            "research", "discover", path, "--provider", "harness", "--query", "reliable research agents",
+            "--limit", 10, "--expected-research-revision", revision,
+        )
+    )
+    action_id = discovery["result"]["action"]["action_id"]
+    assert discovery["result"]["submission_required"] is True
+    submission = {
+        "action_id": action_id, "retrieved_at": "2026-08-16T10:00:00+08:00", "complete": True, "failure": None,
+        "records": [
+            {
+                "provider_id": "W100", "title": "Inspectable Agent Reliability", "authors": ["A. Author"],
+                "year": 2025, "venue": "AgentConf", "doi": "10.5555/reliable.1", "url": "https://doi.org/10.5555/reliable.1",
+                "references": [], "integrity_status": "not_retracted", "integrity_locator": "https://openalex.org/W100",
+            }
+        ],
+    }
+    submitted = output(
+        invoke(
+            "research", "submit-discovery", path, "--input", payload(path, "submission.yaml", submission),
+            "--expected-research-revision", discovery["research_revision"],
+        )
+    )
+    paper_id = submitted["result"]["imported_paper_ids"][0]
+    proposed_screen = {
+        "decisions": [{
+            "paper_id": paper_id, "decision": "include", "matched_criteria": ["Contains inspectable evidence"],
+            "exclusion_criterion": None, "reason": "Model proposes inclusion.", "confirmed": False,
+        }]
+    }
+    screened = output(
+        invoke(
+            "research", "screen", path, "--input", payload(path, "screen-proposed.yaml", proposed_screen),
+            "--expected-research-revision", submitted["research_revision"],
+        )
+    )
+    assert screened["result"]["needs_review_paper_ids"] == [paper_id]
+    proposed_screen["decisions"][0].update({"reason": "Human-confirmed protocol match.", "confirmed": True})
+    included = output(
+        invoke(
+            "research", "screen", path, "--input", payload(path, "screen-confirmed.yaml", proposed_screen),
+            "--expected-research-revision", screened["research_revision"],
+        )
+    )
+    assert included["result"]["included_paper_ids"] == [paper_id]
+
+    snowball = output(
+        invoke(
+            "research", "snowball", path, paper_id, "--direction", "backward", "--provider", "harness",
+            "--stopping-rule", "Stop after one depth or ten candidates.",
+            "--expected-research-revision", included["research_revision"],
+        )
+    )
+    snowball_submission = {
+        "action_id": snowball["result"]["action"]["action_id"], "retrieved_at": "2026-08-16T11:00:00+08:00",
+        "complete": True, "failure": None,
+        "records": [{
+            "provider_id": "W050", "title": "Earlier Reliability Evidence", "authors": ["B. Author"],
+            "year": 2022, "venue": "EvidenceConf", "doi": "10.5555/reliable.0", "url": "https://doi.org/10.5555/reliable.0",
+            "references": [], "integrity_status": "not_retracted", "integrity_locator": "https://openalex.org/W050",
+        }],
+    }
+    expanded = output(
+        invoke(
+            "research", "submit-discovery", path, "--input", payload(path, "snowball-submission.yaml", snowball_submission),
+            "--expected-research-revision", snowball["research_revision"],
+        )
+    )
+    cited_id = expanded["result"]["imported_paper_ids"][0]
+    papers = output(invoke("research", "list", path))
+    assert cited_id in next(item for item in papers if item["id"] == paper_id)["cites"]
+
+    refresh = output(
+        invoke(
+            "research", "refresh", path, "--provider", "harness",
+            "--expected-research-revision", expanded["research_revision"],
+        )
+    )
+    refresh_submission = copy.deepcopy(submission)
+    refresh_submission["action_id"] = refresh["result"]["action"]["action_id"]
+    refresh_submission["records"][0]["integrity_status"] = "retracted"
+    refreshed = output(
+        invoke(
+            "research", "submit-discovery", path, "--input", payload(path, "refresh-submission.yaml", refresh_submission),
+            "--expected-research-revision", refresh["research_revision"],
+        )
+    )
+    papers = output(invoke("research", "list", path))
+    seed = next(item for item in papers if item["id"] == paper_id)
+    assert seed["status"] == "queued"
+    assert seed["integrity"]["status"] == "retracted"
+    blocked = invoke(
+        "research", "activate", path, paper_id,
+        "--expected-research-revision", refreshed["research_revision"], check=False,
+    )
+    assert blocked.returncode == 2
+    assert "integrity alert" in blocked.stderr
+    status = output(invoke("research", "status", path))
+    assert status["screening"]["claim"].startswith("PRISMA-style")
+    assert status["discovery"]["coverage_claim"] == "bounded_provider_results_not_exhaustive"
+
+
+def test_research_completion_fails_without_claim_level_locator() -> None:
+    path = workspace("locator-guard")
+    revision = import_plan(path)["research_revision"]
+    activated = mutate(path, "activate", revision, "paper.field.survey")
+    note_path = critical_note(path, "paper.field.survey")
+    note = yaml.safe_load(note_path.read_text(encoding="utf-8"))
+    note["claims"][0].pop("evidence_locator")
+    missing = payload(path, "missing-locator.yaml", note)
+    recorded = mutate(path, "note", activated["research_revision"], "paper.field.survey", "--input", missing)
+    blocked = invoke(
+        "research", "complete", path, "paper.field.survey",
+        "--expected-research-revision", recorded["research_revision"], check=False,
+    )
+    assert blocked.returncode == 2
+    assert "completion requires a sentence, table, figure, equation, or block locator" in blocked.stderr

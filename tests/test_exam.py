@@ -5,6 +5,7 @@ import json
 import subprocess
 import sys
 import uuid
+from datetime import date, timedelta
 from pathlib import Path
 
 import yaml
@@ -520,3 +521,110 @@ def test_exam_process_source_consumes_shared_document_ir_and_retains_block_prove
     bank = yaml.safe_load((path / ".atomlearn" / "exam" / "bank.yaml").read_text(encoding="utf-8"))
     assert all(item["source_locator"].startswith("document-ir blocks block-") for item in bank["questions"])
     assert output(invoke("exam", "validate", path))["ok"] is True
+
+
+def test_joint_mapping_is_provisional_and_keeps_stem_answer_rubric_evidence() -> None:
+    path = workspace("joint-mapping")
+    process_payload = {
+        "documents": [
+            {
+                "paper": {
+                    "id": "joint-2025", "title": "Joint mapping paper", "year": 2025, "session": "",
+                    "kind": "official_past_exam", "total_points": 10, "source_id": "joint-source", "locator": "paper page 1",
+                },
+                "questions": "Question 1. Calculate a derivative. [10 marks]",
+                "answers": "Question 1. Use the derivative definition and difference quotient limit.",
+                "marking_scheme": "Question 1. derivative definition 4 marks; limit evaluation 6 marks",
+            }
+        ]
+    }
+    result = output(invoke("exam", "process", path, "--input", payload(path, "joint.yaml", process_payload)))
+    proposal = result["result"]["mapping_review_queue"][0]
+    bank = yaml.safe_load((path / ".atomlearn" / "exam" / "bank.yaml").read_text(encoding="utf-8"))
+    mapping_record = bank["questions"][0]["knowledge_points"][0]
+    assert mapping_record["review_status"] == "pending"
+    assert mapping_record["mapping_method"] == "joint-stem-answer-rubric-v1"
+    assert mapping_record["candidate_scores"][0].keys() == {"atom_id", "stem", "answer", "rubric", "joint"}
+    assert len(mapping_record["evidence_locators"]) == 3
+    assert proposal["proposed_atom_id"] is not None
+    assert output(invoke("exam", "analyze", path))["corpus"]["atom_mapping_coverage"] == 0.0
+
+
+def test_empirical_difficulty_is_separate_qualified_and_source_located() -> None:
+    path = workspace("empirical")
+    data = corpus()
+    output(invoke("exam", "import", path, "--input", payload(path, "exam.yaml", data)))
+    empirical = {
+        "aggregates": [
+            {
+                "question_id": "paper-2023.derivative", "attempt_count": 60, "correct_rate": 0.25,
+                "median_seconds": 500, "discrimination": 0.4, "irt_b": None,
+                "source": "anonymized cohort", "source_locator": "cohort-2025/item-1",
+            },
+            {
+                "question_id": "paper-2024.derivative", "attempt_count": 5, "correct_rate": 0.1,
+                "median_seconds": 600, "discrimination": None, "irt_b": None,
+                "source": "pilot", "source_locator": "pilot/item-2",
+            },
+        ]
+    }
+    recorded = output(invoke("exam", "record-empirical", path, "--input", payload(path, "empirical.yaml", empirical)))
+    assert recorded["result"]["qualified_question_ids"] == ["paper-2023.derivative"]
+    bank = yaml.safe_load((path / ".atomlearn" / "exam" / "bank.yaml").read_text(encoding="utf-8"))
+    difficulties = {item["id"]: item["difficulty"] for item in bank["questions"]}
+    assert difficulties["paper-2023.derivative"]["effective_basis"] == "empirical"
+    assert difficulties["paper-2023.derivative"]["empirical_difficulty"]["source_locator"] == "cohort-2025/item-1"
+    assert difficulties["paper-2024.derivative"]["effective_basis"] == "structural_complexity"
+
+
+def test_item_families_require_review_and_report_held_out_memorization_risk() -> None:
+    path = workspace("families")
+    documents = []
+    for year in [2024, 2025]:
+        documents.append(
+            {
+                "paper": {
+                    "id": f"family-{year}", "title": f"Family paper {year}", "year": year, "session": "",
+                    "kind": "official_past_exam", "total_points": 10, "source_id": f"family-source-{year}", "locator": "page 1",
+                },
+                "questions": f"Question 1. Calculate the derivative of x^{year - 2022} from the derivative definition. [10 marks]",
+                "answers": "Question 1. Apply the difference quotient limit.",
+                "marking_scheme": "Question 1. definition 4 marks; algebra 3 marks; limit 3 marks",
+            }
+        )
+    output(invoke("exam", "process", path, "--input", payload(path, "families-process.yaml", {"documents": documents})))
+    proposed = output(invoke("exam", "propose-families", path, "--threshold", 0.5))
+    family_id = proposed["result"]["proposed_family_ids"][0]
+    review = {
+        "reviews": [
+            {
+                "family_id": family_id, "decision": "confirm", "canonical_id": None, "label": None,
+                "transfer_evidence": {
+                    "seen_attempts": 5, "seen_success_rate": 1.0, "held_out_attempts": 5,
+                    "held_out_success_rate": 0.4, "source_locator": "attempt-log/family-transfer",
+                },
+            }
+        ]
+    }
+    output(invoke("exam", "review-families", path, "--input", payload(path, "family-review.yaml", review)))
+    family = output(invoke("exam", "analyze", path))["question_families"]["families"][0]
+    assert family["review_status"] == "confirmed"
+    assert family["memorization_risk"] == "high"
+    assert len(family["question_ids"]) == 2
+
+
+def test_daily_exam_plan_fails_closed_when_capacity_cannot_fit_required_work() -> None:
+    path = workspace("daily-plan")
+    output(invoke("exam", "import", path, "--input", payload(path, "exam.yaml", corpus())))
+    start = date.today()
+    daily = {
+        "start_date": start.isoformat(), "target_date": (start + timedelta(days=1)).isoformat(),
+        "available_weekdays": [start.isoweekday()], "minutes_per_day": 10,
+        "durations": {"learn": 20, "remediate": 20, "review": 20, "practice": 20, "prerequisite": 20},
+        "desired_retention": 0.9, "final_review_days": 1, "mode": "mixed",
+    }
+    plan = output(invoke("exam", "daily-plan", path, "--input", payload(path, "daily.yaml", daily)))
+    assert plan["status"] == "infeasible"
+    assert plan["gap_minutes"] > 0
+    assert plan["unscheduled_tasks"]
+    assert any("without lowering the mastery threshold" in item for item in plan["adjustments"])

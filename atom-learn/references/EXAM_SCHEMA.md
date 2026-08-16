@@ -112,7 +112,7 @@ The result includes unmatched answer/marking numbers, missing associations, and 
 
 `basis` is `official`, `rubric`, or `estimated`. Each factor is a number from `1` through `5`; confidence is `0.5`-`1.0`. `official_level` is a number from `1` through `5` or `null`, and is required when basis is `official`.
 
-The runtime derives:
+The runtime derives `structural_complexity`:
 
 ```text
 estimated = 0.24 conceptual_load
@@ -122,7 +122,7 @@ estimated = 0.24 conceptual_load
           + 0.10 time_pressure
 ```
 
-It stores `estimated_level`, `effective_level`, and a band: `foundation`, `standard`, `intermediate`, `advanced`, or `challenge`.
+It stores the raw/calibrated structural level and a band: `foundation`, `standard`, `intermediate`, `advanced`, or `challenge`. Optional `empirical` input contains `attempt_count`, `correct_rate`, optional `median_seconds`, `discrimination`, `irt_b`, and mandatory `source`/`source_locator`. At least 30 attempts are required before an empirical level can become effective. `effective_basis` declares `empirical`, `official`, or `structural_complexity`; the last is never described as reliable observed difficulty.
 
 ## Knowledge-point mappings
 
@@ -149,7 +149,9 @@ Archived Atom aliases are resolved during analysis. An unresolved archived mappi
 - per-knowledge-point and per-Atom frequency, score, paper coverage, difficulty, and confidence;
 - unmapped coverage gaps and limitations.
 
-`exam plan` returns a revision-bound priority queue derived from exam emphasis, learner gap, difficulty, prerequisites, and representative questions. The queue is generated, not canonical.
+`exam propose-families` creates canonical but provisional family records from normalized stems, knowledge candidates, and solution structure. `exam review-families` controls confirmed `family_id` assignment and optionally records held-out transfer evidence. `memorization_risk` remains `unknown` without minimum seen and held-out samples.
+
+`exam plan` returns a revision-bound priority queue derived from exam emphasis, learner gap, difficulty, prerequisites, and representative questions. `exam daily-plan` consumes the capacity contract in `assets/templates/exam-daily-plan.yaml` and returns either a complete daily schedule or explicit `infeasible` gaps. Both are generated, not canonical.
 
 ## Commands
 
@@ -159,9 +161,13 @@ python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-im
 python <SKILL_DIR>/scripts/atomlearn.py exam process <workspace> --input <exam-process.yaml> [--expected-exam-revision N]
 python <SKILL_DIR>/scripts/atomlearn.py exam review-mappings <workspace> --input <exam-mapping-review.yaml> [--expected-exam-revision N]
 python <SKILL_DIR>/scripts/atomlearn.py exam calibrate <workspace> [--expected-exam-revision N]
+python <SKILL_DIR>/scripts/atomlearn.py exam record-empirical <workspace> --input <exam-empirical-difficulty.yaml> [--expected-exam-revision N]
+python <SKILL_DIR>/scripts/atomlearn.py exam propose-families <workspace> [--threshold 0.62] [--expected-exam-revision N]
+python <SKILL_DIR>/scripts/atomlearn.py exam review-families <workspace> --input <exam-family-review.yaml> [--expected-exam-revision N]
 python <SKILL_DIR>/scripts/atomlearn.py exam status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam analyze <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam plan <workspace> [--mode learning|review|mixed] [--limit N]
+python <SKILL_DIR>/scripts/atomlearn.py exam daily-plan <workspace> --input <exam-daily-plan.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py exam validate <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam render <workspace>
 ```

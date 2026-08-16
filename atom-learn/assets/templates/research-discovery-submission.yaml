@@ -1,0 +1,15 @@
+action_id: research-action-000001
+retrieved_at: 2026-08-16T10:00:00+08:00
+complete: true
+failure: null
+records:
+  - provider_id: 10.1234/example
+    title: An inspectable research paper
+    authors: [A. Researcher]
+    year: 2025
+    venue: Example Venue
+    doi: 10.1234/example
+    url: https://doi.org/10.1234/example
+    references: []
+    integrity_status: not_retracted
+    integrity_locator: https://doi.org/10.1234/example

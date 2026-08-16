@@ -1,0 +1,7 @@
+decisions:
+  - paper_id: paper.discovered.example
+    decision: include
+    matched_criteria: [Contains inspectable evidence]
+    exclusion_criterion: null
+    reason: Reports a reproducible comparison relevant to the protocol.
+    confirmed: true

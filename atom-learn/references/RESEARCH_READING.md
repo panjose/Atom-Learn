@@ -28,6 +28,8 @@ Before searching, record:
 
 If the user asks for current coverage or a novelty claim, search current primary literature and verify bibliographic metadata. Separate observed metadata from inferred relevance. Never present an incomplete search as an exhaustive review.
 
+Persist the complete protocol with `research set-protocol` before discovery. Its revision is independent from the paper graph revision and records languages, dates, literature types, target outcomes, and search limits in addition to the question and inclusion/exclusion criteria.
+
 ## Build the paper map
 
 Prefer an initial map of 8-20 representative papers, then expand deliberately. Cover roles rather than selecting only highly cited or recent work:
@@ -41,7 +43,9 @@ Prefer an initial map of 8-20 representative papers, then expand deliberately. C
 
 Use `prerequisite_paper_ids` for the reading order. Use `cites` for internal citation links. Put references outside the imported set in `external_citations`. Link `concept_atom_ids` when a paper assumes knowledge that the learner may need to repair. When lineage is initialized, trace those Atoms to expose the smallest prerequisite and conceptual repair route while preserving the Active Paper.
 
-Import normalizes DOI forms and merges exact DOI/title duplicates before validating the paper graph. Run `research reconcile-metadata` with a provider snapshot, or `research fetch-metadata --provider crossref|openalex`, to verify title/DOI/year/authors and acquire outgoing citation relations. Review reported conflicts; do not overwrite contradictory metadata silently.
+Import normalizes DOI forms and merges exact DOI/title duplicates before validating the paper graph. `research discover` can query Crossref/OpenAlex directly or emit a typed harness Web Search action. Submit action results through `research submit-discovery`; Core records the exact query, filter, provider, result IDs, protocol revision, and failure status. Run `research snowball` for bounded backward/forward citation expansion and `research refresh` for saved-query, metadata, correction, and retraction checks. Review reported conflicts; do not overwrite contradictory metadata silently.
+
+Discovered records remain candidates. Use `research screen` against predeclared criteria. An unconfirmed model include/exclude suggestion becomes `needs_review`; confirmed exclusion requires one exact protocol criterion and a reason. PRISMA-style counts are audit totals for the bounded provider results, never an exhaustive-review claim. A retraction or integrity concern blocks activation until screening is explicitly reconsidered.
 
 Treat a provisionally skipped concept as a disclosed assumption, returned under `provisional_knowledge_atom_ids`, rather than a proven competency. Deferred and otherwise unsatisfied concepts remain `knowledge_gap_atom_ids`. If paper comprehension exposes a skipped-concept gap, backtrack without losing the Active Paper.
 
@@ -59,7 +63,7 @@ Use three passes:
 2. Structure: identify the problem, assumptions, contribution, approach, evaluation, and claimed boundary.
 3. Evidence: inspect experimental design or argument, baselines, data, metrics, uncertainty, threats, and whether the conclusion exceeds the evidence.
 
-For each central claim, store a concise statement, evidence summary, and strength: `weak`, `mixed`, `moderate`, `strong`, or `unclear`. Record limitations even when the paper does not state them explicitly, but label inference as analysis rather than author-reported fact.
+For each central claim, store a concise statement, evidence summary, and strength: `weak`, `mixed`, `moderate`, `strong`, or `unclear`. Also store population, setting, dataset, method, baseline, outcome, metric, assumption, effect/uncertainty, and a sentence/table/figure/equation/block evidence locator. Document IR block locators are checked against the attached source revision and block IDs. A paper cannot complete without claim-level locators. Record limitations even when the paper does not state them explicitly, but label inference as analysis rather than author-reported fact.
 
 Relate a completed paper to imported papers with `supports`, `extends`, `contradicts`, `replicates`, or `compares`. Keep the relation note specific about the claim, setting, or evidence difference.
 
@@ -76,7 +80,7 @@ Run synthesis after a coherent group is critically complete. The runtime forms s
 - limitations and external validity;
 - support, extension, contradiction, or replication relations.
 
-Treat `LITERATURE_MATRIX.md` as a comparison surface, not a ranking. Each synthesized theme retains its claim IDs, evidence summaries, strengths, paper relations, and limitations; single-source and contested themes remain explicit. Use `RESEARCH_GAPS.md` to inspect open questions, repeated limitations, contradictions, and missing replications.
+Treat `LITERATURE_MATRIX.md` as a comparison surface, not a ranking. Theme proposals require either compatible structured outcome/metric plus context facets or an explicit paper relation; token overlap alone cannot merge claims. Each theme retains claim locators and conditional population/dataset/metric/assumption differences. Themes remain `proposed` until `research review-synthesis` confirms, relabels, or rejects them. Single-source and contested themes remain explicit. Use `RESEARCH_GAPS.md` to inspect open questions, repeated limitations, contradictions, and missing replications.
 
 ## Identify research gaps
 
@@ -94,6 +98,12 @@ State search limits, uncertainty, and the date of current-literature verificatio
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field> --question <question> --scope <scope>
+python <SKILL_DIR>/scripts/atomlearn.py research set-protocol <workspace> --input <research-protocol.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research discover <workspace> --provider harness|crossref|openalex --query <query>
+python <SKILL_DIR>/scripts/atomlearn.py research submit-discovery <workspace> --input <research-discovery-submission.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research screen <workspace> --input <research-screening.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py research snowball <workspace> <paper-id> --direction backward|forward --stopping-rule <rule>
+python <SKILL_DIR>/scripts/atomlearn.py research refresh <workspace> --provider harness|crossref|openalex
 python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research reconcile-metadata <workspace> --input <research-metadata.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref
@@ -104,7 +114,8 @@ python <SKILL_DIR>/scripts/atomlearn.py research activate <workspace> <paper-id>
 python <SKILL_DIR>/scripts/atomlearn.py research note <workspace> <paper-id> --input <note.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research complete <workspace> <paper-id>
 python <SKILL_DIR>/scripts/atomlearn.py research synthesize <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py research review-synthesis <workspace> --input <research-synthesis-review.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research validate <workspace>
 ```
 
-Pass `--expected-research-revision` on every research mutation. Use `park` when a paper is relevant but not timely. Use `exclude --reason` when it fails declared scope criteria.
+Pass `--expected-research-revision` on every research mutation. Use `park` when a paper is relevant but not timely. Use `exclude --reason <reason> --criterion <predeclared-criterion>` when it fails declared scope criteria.

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/panjose/Atom-Learn/schemas/research-discovery-submission.schema.json",
+  "title": "AtomLearn research discovery submission",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action_id", "retrieved_at", "records", "complete", "failure"],
+  "properties": {
+    "action_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+    "retrieved_at": {"type": "string"},
+    "complete": {"type": "boolean"},
+    "failure": {"type": ["string", "null"]},
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["provider_id", "title", "authors", "year", "venue", "doi", "url", "references", "integrity_status", "integrity_locator"],
+        "properties": {
+          "provider_id": {"type": "string"}, "title": {"type": "string", "minLength": 1},
+          "authors": {"type": "array", "items": {"type": "string"}},
+          "year": {"type": ["integer", "null"], "minimum": 1000, "maximum": 3000},
+          "venue": {"type": "string"}, "doi": {"type": "string"}, "url": {"type": "string"},
+          "references": {"type": "array", "items": {"type": "object"}},
+          "integrity_status": {"enum": ["unknown", "not_retracted", "retracted", "concern"]},
+          "integrity_locator": {"type": "string"}
+        }
+      }
+    }
+  }
+}

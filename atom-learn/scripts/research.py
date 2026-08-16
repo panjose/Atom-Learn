@@ -5,14 +5,16 @@ from __future__ import annotations
 
 import argparse
 import copy
+import hashlib
 import json
 import os
 import re
 import sys
 from collections import Counter
+from datetime import date
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from atomlearn import (
@@ -25,6 +27,7 @@ from atomlearn import (
     load_workspace,
     read_data,
     require_id,
+    require_number,
     require_string,
     unique,
     write_yaml,
@@ -55,6 +58,13 @@ PAPER_ROLES = {
 RELATION_TYPES = {"supports", "extends", "contradicts", "replicates", "compares"}
 CLAIM_STRENGTHS = {"weak", "mixed", "moderate", "strong", "unclear"}
 METADATA_STATUSES = {"unverified", "verified", "conflict"}
+SCREENING_STATUSES = {"candidate", "screening", "included", "excluded", "needs_review"}
+DISCOVERY_PROVIDERS = {"harness", "crossref", "openalex"}
+DISCOVERY_KINDS = {"query", "backward", "forward", "refresh"}
+DISCOVERY_STATUSES = {"awaiting_submission", "completed", "partial", "failed"}
+EVIDENCE_KINDS = {"sentence", "table", "figure", "equation", "block", "other"}
+EXTRACTION_METHODS = {"human", "harness", "document_ir", "vision", "provider"}
+FACET_FIELDS = ["population", "setting", "dataset", "method", "baseline", "outcome", "metric", "assumption"]
 RESEARCH_STATUSES = {"scoping", "mapping", "reading", "synthesizing", "maintaining", "complete"}
 ROLE_ORDER = {
     "survey": 0,
@@ -214,11 +224,35 @@ class ResearchEngine:
             if paper_id in papers:
                 raise ResearchError(f"Duplicate paper ID: {paper_id}")
             paper.setdefault("metadata_verification", {"status": "unverified", "checks": {}})
+            paper.setdefault("discovery", None)
+            paper.setdefault(
+                "screening",
+                {
+                    "status": "candidate" if paper.get("status") == "discovered" else "needs_review" if paper.get("status") == "excluded" else "included",
+                    "matched_criteria": [],
+                    "exclusion_criterion": None,
+                    "reason": paper.get("exclusion_reason") or "Migrated existing research record.",
+                    "decision_source": "legacy-migration",
+                    "decided_at": paper.get("updated_at"),
+                },
+            )
+            paper.setdefault("integrity", {"status": "unknown", "provider": None, "checked_at": None, "source_locator": None})
             papers[paper_id] = paper
         state = read_data(state_path)
         state.setdefault("paper_aliases", {})
         state.setdefault("latest_synthesis", None)
-        return cls(workspace, state, papers)
+        state.setdefault("protocol_revision", 0)
+        state.setdefault("protocol", {
+            "languages": [], "date_from": None, "date_to": None, "literature_types": [],
+            "target_outcomes": [], "search_limits": [],
+        })
+        state.setdefault("discovery_log", [])
+        state.setdefault("screening_log", [])
+        state.setdefault("latest_refresh", None)
+        engine = cls(workspace, state, papers)
+        for paper_id, paper in papers.items():
+            paper["analysis"] = engine._normalize_analysis(paper_id, paper.get("analysis", {}))
+        return engine
 
     @property
     def revision(self) -> int:
@@ -246,6 +280,40 @@ class ResearchEngine:
             string_list(self.state.get("exclusion_criteria", []), "exclusion criteria")
         except (AtomLearnError, ResearchError) as exc:
             errors.append(str(exc))
+        protocol_revision = self.state.get("protocol_revision", 0)
+        if not isinstance(protocol_revision, int) or isinstance(protocol_revision, bool) or protocol_revision < 0:
+            errors.append("research protocol_revision must be a non-negative integer")
+        protocol = self.state.get("protocol", {})
+        if not isinstance(protocol, dict) or set(protocol) != {
+            "languages", "date_from", "date_to", "literature_types", "target_outcomes", "search_limits"
+        }:
+            errors.append("research protocol fields are invalid")
+        else:
+            try:
+                for field in ["languages", "literature_types", "target_outcomes", "search_limits"]:
+                    string_list(protocol.get(field, []), f"protocol.{field}")
+                for field in ["date_from", "date_to"]:
+                    if protocol.get(field) is not None:
+                        date.fromisoformat(str(protocol[field]))
+            except (ResearchError, ValueError) as exc:
+                errors.append(str(exc))
+        discovery_log = self.state.get("discovery_log", [])
+        if not isinstance(discovery_log, list):
+            errors.append("research discovery_log must be a list")
+        else:
+            seen_actions: set[str] = set()
+            for index, action in enumerate(discovery_log):
+                if not isinstance(action, dict):
+                    errors.append(f"discovery_log[{index}] must be a mapping")
+                    continue
+                action_id = action.get("action_id")
+                if action_id in seen_actions:
+                    errors.append(f"duplicate discovery action: {action_id}")
+                seen_actions.add(action_id)
+                if action.get("kind") not in DISCOVERY_KINDS or action.get("provider") not in DISCOVERY_PROVIDERS:
+                    errors.append(f"{action_id}: invalid discovery kind or provider")
+                if action.get("status") not in DISCOVERY_STATUSES:
+                    errors.append(f"{action_id}: invalid discovery status")
         active_ids: list[str] = []
         doi_owners: dict[str, str] = {}
         title_owners: dict[str, str] = {}
@@ -283,6 +351,20 @@ class ResearchEngine:
                 errors.append(f"{paper_id}: invalid metadata_verification")
             if paper.get("status") not in PAPER_STATUSES:
                 errors.append(f"{paper_id}: invalid status {paper.get('status')!r}")
+            screening = paper.get("screening")
+            if not isinstance(screening, dict) or screening.get("status") not in SCREENING_STATUSES:
+                errors.append(f"{paper_id}: invalid screening state")
+            else:
+                try:
+                    string_list(screening.get("matched_criteria", []), f"{paper_id}.screening.matched_criteria")
+                    require_text(screening.get("reason", ""), f"{paper_id}.screening.reason", allow_empty=True)
+                except ResearchError as exc:
+                    errors.append(str(exc))
+                if screening.get("status") == "excluded" and screening.get("exclusion_criterion") not in self.state.get("exclusion_criteria", []):
+                    errors.append(f"{paper_id}: screened exclusion must use a predeclared criterion")
+            integrity = paper.get("integrity")
+            if not isinstance(integrity, dict) or integrity.get("status") not in {"unknown", "not_retracted", "retracted", "concern"}:
+                errors.append(f"{paper_id}: invalid integrity status")
             if paper.get("role") not in PAPER_ROLES:
                 errors.append(f"{paper_id}: invalid role {paper.get('role')!r}")
             priority = paper.get("priority")
@@ -375,6 +457,8 @@ class ResearchEngine:
                 limit=4000,
             )
             string_list(analysis.get("datasets", []), f"{paper_id}.analysis.datasets")
+            for field in ["populations", "settings", "methods", "baselines", "outcomes", "assumptions"]:
+                string_list(analysis.get(field, []), f"{paper_id}.analysis.{field}")
             string_list(analysis.get("open_questions", []), f"{paper_id}.analysis.open_questions")
             if complete and (not problem or not contributions or not approach or not limitations):
                 errors.append(
@@ -403,6 +487,32 @@ class ResearchEngine:
             claim_ids.add(claim_id)
             if claim.get("strength") not in CLAIM_STRENGTHS:
                 errors.append(f"{claim_id}: invalid evidence strength")
+            try:
+                require_text(claim.get("effect", ""), f"{claim_id}.effect", allow_empty=True, limit=1000)
+                require_text(claim.get("uncertainty", ""), f"{claim_id}.uncertainty", allow_empty=True, limit=1000)
+                facets = claim.get("facets", {})
+                if not isinstance(facets, dict) or set(facets) != set(FACET_FIELDS):
+                    raise ResearchError(f"{claim_id}.facets must contain every structured facet field")
+                for field in FACET_FIELDS:
+                    string_list(facets[field], f"{claim_id}.facets.{field}")
+                locator = self._normalize_evidence_locator(claim.get("evidence_locator"), f"{claim_id}.evidence_locator")
+                if complete and not locator["locator"]:
+                    errors.append(f"{claim_id}: completion requires a sentence, table, figure, equation, or block locator")
+                if locator["block_ids"]:
+                    if not locator["source_id"] or locator["source_revision"] is None:
+                        errors.append(f"{claim_id}: block locators require source_id and source_revision")
+                    else:
+                        try:
+                            document = RagEngine.load(str(self.workspace.root)).document_ir(locator["source_id"])
+                            known_blocks = {item["block_id"] for item in document["blocks"]}
+                            if document["source_revision"] != locator["source_revision"]:
+                                errors.append(f"{claim_id}: evidence source revision is stale")
+                            if any(item not in known_blocks for item in locator["block_ids"]):
+                                errors.append(f"{claim_id}: evidence references unknown Document IR blocks")
+                        except (RagError, OSError) as exc:
+                            errors.append(f"{claim_id}: cannot verify Document IR evidence: {exc}")
+            except (AtomLearnError, ResearchError) as exc:
+                errors.append(str(exc))
         if complete and not claims:
             errors.append(f"{paper_id}: completion requires at least one evidence-linked claim")
         relations = analysis.get("relations", [])
@@ -451,6 +561,38 @@ class ResearchEngine:
             handle.flush()
             os.fsync(handle.fileno())
         self.render()
+
+    def set_protocol(self, payload: Any) -> dict[str, Any]:
+        required = {
+            "research_question", "scope", "languages", "date_from", "date_to", "literature_types",
+            "inclusion_criteria", "exclusion_criteria", "target_outcomes", "search_limits",
+        }
+        if not isinstance(payload, dict) or set(payload) != required:
+            raise ResearchError("research protocol must contain exactly the documented protocol fields")
+        date_from = payload.get("date_from")
+        date_to = payload.get("date_to")
+        for value, label in [(date_from, "date_from"), (date_to, "date_to")]:
+            if value is not None:
+                try:
+                    date.fromisoformat(str(value))
+                except ValueError as exc:
+                    raise ResearchError(f"protocol {label} must use YYYY-MM-DD or null") from exc
+        if date_from and date_to and str(date_from) > str(date_to):
+            raise ResearchError("protocol date_from cannot be after date_to")
+        self.state["research_question"] = require_text(payload["research_question"], "research question", limit=2000)
+        self.state["scope"] = require_text(payload["scope"], "scope", allow_empty=True, limit=2000)
+        self.state["inclusion_criteria"] = string_list(payload["inclusion_criteria"], "inclusion criteria")
+        self.state["exclusion_criteria"] = string_list(payload["exclusion_criteria"], "exclusion criteria")
+        self.state["protocol"] = {
+            "languages": string_list(payload["languages"], "languages", limit=100),
+            "date_from": str(date_from) if date_from else None,
+            "date_to": str(date_to) if date_to else None,
+            "literature_types": string_list(payload["literature_types"], "literature types", limit=200),
+            "target_outcomes": string_list(payload["target_outcomes"], "target outcomes"),
+            "search_limits": string_list(payload["search_limits"], "search limits"),
+        }
+        self.state["protocol_revision"] = int(self.state.get("protocol_revision", 0)) + 1
+        return {"protocol_revision": self.state["protocol_revision"], "protocol": copy.deepcopy(self.state["protocol"])}
 
     def import_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(plan, dict):
@@ -599,13 +741,40 @@ class ResearchEngine:
             paper["role"] = raw.get("role", paper.get("role", "method"))
         if "priority" in raw or not existing:
             paper["priority"] = raw.get("priority", paper.get("priority", 3))
-        if "status" in raw or not existing:
+        discovery_duplicate = bool(existing and raw.get("discovery") and raw.get("status") == "discovered")
+        if ("status" in raw and not discovery_duplicate) or not existing:
             paper["status"] = raw.get("status", paper.get("status", "queued"))
         if "analysis" in raw:
             paper["analysis"] = self._normalize_analysis(paper_id, raw["analysis"])
         if "metadata_verification" in raw:
             paper["metadata_verification"] = copy.deepcopy(raw["metadata_verification"])
         paper.setdefault("metadata_verification", {"status": "unverified", "checks": {}})
+        if "discovery" in raw:
+            if not isinstance(raw["discovery"], dict):
+                raise ResearchError(f"{paper_id}.discovery must be a mapping")
+            paper["discovery"] = copy.deepcopy(raw["discovery"])
+        paper.setdefault("discovery", None)
+        if "screening" in raw and not discovery_duplicate:
+            if not isinstance(raw["screening"], dict):
+                raise ResearchError(f"{paper_id}.screening must be a mapping")
+            paper["screening"] = copy.deepcopy(raw["screening"])
+        elif not existing:
+            paper["screening"] = {
+                "status": "candidate" if paper.get("status") == "discovered" else "included",
+                "matched_criteria": [],
+                "exclusion_criterion": None,
+                "reason": "Imported directly into the reading corpus." if paper.get("status") != "discovered" else "",
+                "decision_source": "human-import" if paper.get("status") != "discovered" else "discovery",
+                "decided_at": timestamp if paper.get("status") != "discovered" else None,
+            }
+        if "integrity" in raw:
+            if not isinstance(raw["integrity"], dict):
+                raise ResearchError(f"{paper_id}.integrity must be a mapping")
+            paper["integrity"] = copy.deepcopy(raw["integrity"])
+        paper.setdefault(
+            "integrity",
+            {"status": "unknown", "provider": None, "checked_at": None, "source_locator": None},
+        )
         if paper.get("status") == "excluded":
             paper["exclusion_reason"] = require_text(
                 raw.get("exclusion_reason", paper.get("exclusion_reason")),
@@ -628,6 +797,12 @@ class ResearchEngine:
             "contributions": string_list(raw.get("contributions", []), "analysis.contributions"),
             "approach": require_text(raw.get("approach", ""), "analysis.approach", allow_empty=True),
             "datasets": string_list(raw.get("datasets", []), "analysis.datasets"),
+            "populations": string_list(raw.get("populations", []), "analysis.populations"),
+            "settings": string_list(raw.get("settings", []), "analysis.settings"),
+            "methods": string_list(raw.get("methods", []), "analysis.methods"),
+            "baselines": string_list(raw.get("baselines", []), "analysis.baselines"),
+            "outcomes": string_list(raw.get("outcomes", []), "analysis.outcomes"),
+            "assumptions": string_list(raw.get("assumptions", []), "analysis.assumptions"),
             "claims": [],
             "limitations": string_list(raw.get("limitations", []), "analysis.limitations"),
             "open_questions": string_list(raw.get("open_questions", []), "analysis.open_questions"),
@@ -643,6 +818,13 @@ class ResearchEngine:
             if not isinstance(item, dict):
                 raise ResearchError("each claim must be a mapping")
             claim_id = require_id(item.get("id", f"{paper_id}.claim.{index:03d}"), "claim.id")
+            raw_facets = item.get("facets", {})
+            if not isinstance(raw_facets, dict) or set(raw_facets) - set(FACET_FIELDS):
+                raise ResearchError(f"{claim_id}.facets may contain only structured facet fields")
+            facets = {
+                field: string_list(raw_facets.get(field, []), f"{claim_id}.facets.{field}")
+                for field in FACET_FIELDS
+            }
             analysis["claims"].append(
                 {
                     "id": claim_id,
@@ -651,6 +833,14 @@ class ResearchEngine:
                         item.get("evidence_summary"), f"{claim_id}.evidence_summary", limit=2000
                     ),
                     "strength": item.get("strength", "unclear"),
+                    "effect": require_text(item.get("effect", ""), f"{claim_id}.effect", allow_empty=True, limit=1000),
+                    "uncertainty": require_text(
+                        item.get("uncertainty", ""), f"{claim_id}.uncertainty", allow_empty=True, limit=1000
+                    ),
+                    "facets": facets,
+                    "evidence_locator": self._normalize_evidence_locator(
+                        item.get("evidence_locator"), f"{claim_id}.evidence_locator"
+                    ),
                 }
             )
         relations = raw.get("relations", [])
@@ -667,6 +857,45 @@ class ResearchEngine:
                 }
             )
         return analysis
+
+    def _normalize_evidence_locator(self, raw: Any, label: str) -> dict[str, Any]:
+        if raw is None:
+            raw = {}
+        if isinstance(raw, str):
+            raw = {
+                "locator": raw, "kind": "other", "extraction_method": "human", "confidence": 1.0,
+                "source_id": None, "source_revision": None, "block_ids": [],
+            }
+        required = {"locator", "kind", "extraction_method", "confidence", "source_id", "source_revision", "block_ids"}
+        if not isinstance(raw, dict) or set(raw) - required:
+            raise ResearchError(f"{label} has unsupported fields")
+        kind = raw.get("kind", "other")
+        method = raw.get("extraction_method", "human")
+        if kind not in EVIDENCE_KINDS:
+            raise ResearchError(f"{label}.kind is invalid")
+        if method not in EXTRACTION_METHODS:
+            raise ResearchError(f"{label}.extraction_method is invalid")
+        source_id = raw.get("source_id")
+        if source_id is not None:
+            source_id = require_id(source_id, f"{label}.source_id")
+        source_revision = raw.get("source_revision")
+        if source_revision is not None and (
+            not isinstance(source_revision, int) or isinstance(source_revision, bool) or source_revision < 1
+        ):
+            raise ResearchError(f"{label}.source_revision must be a positive integer or null")
+        block_ids = raw.get("block_ids", [])
+        if not isinstance(block_ids, list) or any(not isinstance(item, str) for item in block_ids):
+            raise ResearchError(f"{label}.block_ids must be a string list")
+        confidence = raw.get("confidence", 1.0 if raw.get("locator") else 0.5)
+        return {
+            "locator": require_text(raw.get("locator", ""), f"{label}.locator", allow_empty=True, limit=2000),
+            "kind": kind,
+            "extraction_method": method,
+            "confidence": round(float(require_number(confidence, f"{label}.confidence", 0.5, 1.0)), 3),
+            "source_id": source_id,
+            "source_revision": source_revision,
+            "block_ids": unique(block_ids),
+        }
 
     def _metadata_indexes(self) -> tuple[dict[str, str], dict[str, str]]:
         doi_index = {
@@ -725,6 +954,13 @@ class ResearchEngine:
                 "retrieved_at": str(record.get("retrieved_at") or iso()),
                 "checks": checks,
             }
+            if record.get("integrity_status") in {"unknown", "not_retracted", "retracted", "concern"}:
+                paper["integrity"] = {
+                    "status": record["integrity_status"],
+                    "provider": provider,
+                    "checked_at": str(record.get("retrieved_at") or iso()),
+                    "source_locator": str(record.get("integrity_locator") or record.get("provider_id") or ""),
+                }
             if status == "verified":
                 verified.append(paper_id)
                 if record_doi and not paper.get("doi"):
@@ -806,6 +1042,11 @@ class ResearchEngine:
                             "doi": message.get("DOI", doi),
                             "url": message.get("URL", ""),
                             "references": [item for item in references if item],
+                            "integrity_status": "retracted" if any(
+                                str(item.get("type", "")).casefold() == "retraction"
+                                for item in message.get("update-to", [])
+                            ) else "not_retracted",
+                            "integrity_locator": message.get("URL", doi),
                         }
                     )
                 else:
@@ -826,6 +1067,8 @@ class ResearchEngine:
                             "doi": str(data.get("doi") or doi),
                             "url": (data.get("primary_location") or {}).get("landing_page_url", ""),
                             "references": [{"provider_id": item} for item in data.get("referenced_works", [])],
+                            "integrity_status": "retracted" if data.get("is_retracted") is True else "not_retracted",
+                            "integrity_locator": data.get("id", ""),
                         }
                     )
             except Exception as exc:  # provider/network failures are reported per paper
@@ -838,14 +1081,427 @@ class ResearchEngine:
         result["failures"] = failures
         return result
 
+    def _next_discovery_action_id(self) -> str:
+        return f"research-action-{len(self.state.get('discovery_log', [])) + 1:06d}"
+
+    def _create_discovery_action(
+        self,
+        *,
+        kind: str,
+        provider: str,
+        query: str,
+        limit: int,
+        from_year: int | None,
+        to_year: int | None,
+        seed_paper_id: str | None = None,
+        direction: str | None = None,
+        depth: int = 0,
+        stopping_rule: str = "",
+    ) -> dict[str, Any]:
+        if kind not in DISCOVERY_KINDS or provider not in DISCOVERY_PROVIDERS:
+            raise ResearchError("unsupported discovery kind or provider")
+        if not 1 <= limit <= 200:
+            raise ResearchError("discovery limit must be from 1 through 200")
+        if from_year is not None and not 1000 <= from_year <= 3000:
+            raise ResearchError("from-year must be from 1000 through 3000")
+        if to_year is not None and not 1000 <= to_year <= 3000:
+            raise ResearchError("to-year must be from 1000 through 3000")
+        if from_year and to_year and from_year > to_year:
+            raise ResearchError("from-year cannot be after to-year")
+        action_id = self._next_discovery_action_id()
+        record = {
+            "action_id": action_id,
+            "kind": kind,
+            "provider": provider,
+            "query": require_text(query, "discovery query", limit=2000),
+            "filters": {"from_year": from_year, "to_year": to_year, "limit": limit},
+            "seed_paper_id": seed_paper_id,
+            "direction": direction,
+            "depth": depth,
+            "stopping_rule": stopping_rule,
+            "protocol_revision": self.state.get("protocol_revision", 0),
+            "created_at": iso(),
+            "status": "awaiting_submission",
+            "completed_at": None,
+            "result_ids": [],
+            "complete": False,
+            "failure": None,
+        }
+        self.state.setdefault("discovery_log", []).append(record)
+        return {
+            "kind": "atomlearn.research.discovery.v1",
+            "action_id": action_id,
+            "research_revision": self.revision,
+            "protocol_revision": record["protocol_revision"],
+            "operation": kind,
+            "provider": provider,
+            "query": record["query"],
+            "filters": record["filters"],
+            "seed_paper_id": seed_paper_id,
+            "direction": direction,
+            "depth": depth,
+            "stopping_rule": stopping_rule,
+            "submission_schema": "atom-learn/assets/schemas/research-discovery-submission.schema.json",
+            "instructions": (
+                "Return bibliographic candidates and provider IDs with the exact query/filter provenance. "
+                "Do not claim exhaustive coverage; submit results with `research submit-discovery`."
+            ),
+        }
+
+    @staticmethod
+    def _crossref_candidate(item: dict[str, Any]) -> dict[str, Any]:
+        date_parts = (item.get("published-print") or item.get("published-online") or item.get("issued") or {}).get("date-parts", [[]])
+        updates = item.get("update-to", [])
+        integrity = "retracted" if any(str(update.get("type", "")).casefold() == "retraction" for update in updates) else "not_retracted"
+        return {
+            "provider_id": str(item.get("DOI") or ""),
+            "title": (item.get("title") or [""])[0],
+            "authors": [
+                " ".join(part for part in [author.get("given", ""), author.get("family", "")] if part).strip()
+                for author in item.get("author", [])
+            ],
+            "year": date_parts[0][0] if date_parts and date_parts[0] else None,
+            "venue": (item.get("container-title") or [""])[0],
+            "doi": item.get("DOI", ""),
+            "url": item.get("URL", ""),
+            "references": [
+                {key: value for key, value in {"doi": ref.get("DOI"), "title": ref.get("article-title")}.items() if value}
+                for ref in item.get("reference", [])
+            ],
+            "integrity_status": integrity,
+            "integrity_locator": str(item.get("URL") or item.get("DOI") or ""),
+        }
+
+    @staticmethod
+    def _openalex_candidate(item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "provider_id": str(item.get("id") or ""),
+            "title": item.get("display_name") or item.get("title") or "",
+            "authors": [entry.get("author", {}).get("display_name", "") for entry in item.get("authorships", [])],
+            "year": item.get("publication_year"),
+            "venue": ((item.get("primary_location") or {}).get("source") or {}).get("display_name", ""),
+            "doi": str(item.get("doi") or ""),
+            "url": (item.get("primary_location") or {}).get("landing_page_url", ""),
+            "references": [{"provider_id": reference} for reference in item.get("referenced_works", [])],
+            "integrity_status": "retracted" if item.get("is_retracted") is True else "not_retracted",
+            "integrity_locator": str(item.get("id") or ""),
+        }
+
+    def discover(
+        self,
+        query: str,
+        provider: str,
+        limit: int,
+        from_year: int | None,
+        to_year: int | None,
+        timeout: float,
+        mailto: str,
+    ) -> dict[str, Any]:
+        action = self._create_discovery_action(
+            kind="query", provider=provider, query=query, limit=limit, from_year=from_year, to_year=to_year
+        )
+        if provider == "harness":
+            return {"action": action, "submission_required": True}
+        if not 1 <= timeout <= 60:
+            raise ResearchError("discovery timeout must be between 1 and 60 seconds")
+        user_agent = "AtomLearn/0.14 (+https://github.com/panjose/Atom-Learn)"
+        if mailto:
+            user_agent += f" mailto:{mailto}"
+        try:
+            if provider == "crossref":
+                filters = []
+                if from_year:
+                    filters.append(f"from-pub-date:{from_year}-01-01")
+                if to_year:
+                    filters.append(f"until-pub-date:{to_year}-12-31")
+                params = {"query.bibliographic": query, "rows": limit, "select": "DOI,title,author,published-print,published-online,issued,container-title,URL,reference,update-to"}
+                if filters:
+                    params["filter"] = ",".join(filters)
+                data = fetch_json(f"https://api.crossref.org/works?{urlencode(params)}", user_agent, timeout)
+                records = [self._crossref_candidate(item) for item in data.get("message", {}).get("items", [])]
+            else:
+                filters = []
+                if from_year:
+                    filters.append(f"from_publication_date:{from_year}-01-01")
+                if to_year:
+                    filters.append(f"to_publication_date:{to_year}-12-31")
+                params = {"search": query, "per-page": limit}
+                if filters:
+                    params["filter"] = ",".join(filters)
+                if mailto:
+                    params["mailto"] = mailto
+                data = fetch_json(f"https://api.openalex.org/works?{urlencode(params)}", user_agent, timeout)
+                records = [self._openalex_candidate(item) for item in data.get("results", [])]
+        except Exception as exc:
+            log = next(item for item in self.state["discovery_log"] if item["action_id"] == action["action_id"])
+            log["status"] = "failed"
+            log["failure"] = str(exc)
+            log["completed_at"] = iso()
+            return {
+                "action_id": action["action_id"],
+                "action_status": "failed",
+                "failure": str(exc),
+                "retryable": True,
+                "coverage_claim": "no_discovery_coverage",
+            }
+        return self.submit_discovery(
+            {
+                "action_id": action["action_id"],
+                "retrieved_at": iso(),
+                "records": records,
+                "complete": True,
+                "failure": None,
+            }
+        )
+
+    @staticmethod
+    def _discovered_paper_id(record: dict[str, Any]) -> str:
+        identity = normalize_doi(record.get("doi", "")) or str(record.get("provider_id") or title_fingerprint(record.get("title")))
+        digest = hashlib.sha256(identity.casefold().encode("utf-8")).hexdigest()[:16]
+        return f"paper.discovered.{digest}"
+
+    def submit_discovery(self, payload: Any) -> dict[str, Any]:
+        required = {"action_id", "retrieved_at", "records", "complete", "failure"}
+        if not isinstance(payload, dict) or set(payload) != required:
+            raise ResearchError("discovery submission must contain exactly action_id, retrieved_at, records, complete, and failure")
+        action_id = require_id(payload.get("action_id"), "action_id")
+        action = next((item for item in self.state.get("discovery_log", []) if item.get("action_id") == action_id), None)
+        if action is None:
+            raise ResearchError(f"discovery action does not exist: {action_id}")
+        if action.get("status") != "awaiting_submission":
+            raise ResearchError(f"discovery action is not awaiting submission: {action_id}")
+        records = payload.get("records")
+        if not isinstance(records, list):
+            raise ResearchError("discovery records must be a list")
+        papers: list[dict[str, Any]] = []
+        for index, record in enumerate(records):
+            if not isinstance(record, dict):
+                raise ResearchError(f"records[{index}] must be a mapping")
+            title = require_text(record.get("title"), f"records[{index}].title", limit=1000)
+            paper_id = self._discovered_paper_id(record)
+            references = record.get("references", [])
+            if not isinstance(references, list):
+                raise ResearchError(f"records[{index}].references must be a list")
+            role = "survey" if "survey" in title.casefold() or "review" in title.casefold() else "method"
+            paper = {
+                "id": paper_id,
+                "title": title,
+                "authors": string_list(record.get("authors", []), f"records[{index}].authors", limit=500),
+                "year": record.get("year"),
+                "venue": str(record.get("venue") or ""),
+                "doi": str(record.get("doi") or ""),
+                "url": str(record.get("url") or ""),
+                "locator": str(record.get("url") or record.get("provider_id") or ""),
+                "role": role,
+                "priority": 3,
+                "status": "discovered",
+                "prerequisite_paper_ids": [],
+                "cites": [],
+                "external_citations": unique(
+                    normalize_doi(item.get("doi", "")) or str(item.get("provider_id") or item.get("title") or "")
+                    for item in references if isinstance(item, dict)
+                ),
+                "concept_atom_ids": [],
+                "tags": ["discovery-candidate"],
+                "discovery": {
+                    "action_id": action_id,
+                    "provider": action["provider"],
+                    "provider_id": str(record.get("provider_id") or ""),
+                    "query": action["query"],
+                    "retrieved_at": str(payload.get("retrieved_at")),
+                    "kind": action["kind"],
+                    "seed_paper_id": action.get("seed_paper_id"),
+                    "direction": action.get("direction"),
+                    "depth": action.get("depth", 0),
+                },
+                "screening": {
+                    "status": "candidate", "matched_criteria": [], "exclusion_criterion": None,
+                    "reason": "", "decision_source": "discovery", "decided_at": None,
+                },
+                "integrity": {
+                    "status": record.get("integrity_status", "unknown"),
+                    "provider": action["provider"],
+                    "checked_at": str(payload.get("retrieved_at")),
+                    "source_locator": str(record.get("integrity_locator") or record.get("provider_id") or ""),
+                },
+            }
+            papers.append(paper)
+        imported = self.import_plan({"papers": papers}) if papers else {"imported_paper_ids": [], "deduplicated": [], "total_papers": len(self.papers)}
+        result_ids = imported["imported_paper_ids"]
+        doi_index, title_index = self._metadata_indexes()
+        for record in records:
+            record_doi = normalize_doi(record.get("doi", ""))
+            canonical_id = doi_index.get(record_doi) if record_doi else None
+            if canonical_id is None:
+                canonical_id = title_index.get(title_fingerprint(record.get("title")))
+            if canonical_id and record.get("integrity_status") in {"unknown", "not_retracted", "retracted", "concern"}:
+                self.papers[canonical_id]["integrity"] = {
+                    "status": record["integrity_status"],
+                    "provider": action["provider"],
+                    "checked_at": str(payload.get("retrieved_at")),
+                    "source_locator": str(record.get("integrity_locator") or record.get("provider_id") or ""),
+                }
+        seed_id = action.get("seed_paper_id")
+        if seed_id in self.papers and action.get("kind") == "backward":
+            self.papers[seed_id]["cites"] = unique([
+                *self.papers[seed_id].get("cites", []), *(item for item in result_ids if item != seed_id)
+            ])
+        elif seed_id in self.papers and action.get("kind") == "forward":
+            for result_id in result_ids:
+                if result_id != seed_id and result_id in self.papers:
+                    self.papers[result_id]["cites"] = unique([*self.papers[result_id].get("cites", []), seed_id])
+        action["result_ids"] = result_ids
+        action["complete"] = payload.get("complete") is True
+        action["failure"] = str(payload.get("failure") or "") or None
+        action["status"] = "completed" if action["complete"] and not action["failure"] else "partial" if result_ids else "failed"
+        action["completed_at"] = iso()
+        if action["kind"] == "refresh":
+            self.state["latest_refresh"] = {"action_id": action_id, "at": action["completed_at"], "status": action["status"]}
+        return {
+            **imported,
+            "action_id": action_id,
+            "action_status": action["status"],
+            "retrieval_complete": action["complete"],
+            "coverage_claim": "bounded_provider_results_not_exhaustive",
+        }
+
+    def snowball(
+        self,
+        paper_id: str,
+        direction: str,
+        provider: str,
+        depth: int,
+        limit: int,
+        stopping_rule: str,
+    ) -> dict[str, Any]:
+        paper = self.paper(paper_id)
+        if direction not in {"backward", "forward"}:
+            raise ResearchError("snowball direction must be backward or forward")
+        if not 1 <= depth <= 5:
+            raise ResearchError("snowball depth must be from 1 through 5")
+        action = self._create_discovery_action(
+            kind=direction,
+            provider=provider,
+            query=paper.get("doi") or paper.get("title"),
+            limit=limit,
+            from_year=None,
+            to_year=None,
+            seed_paper_id=paper_id,
+            direction=direction,
+            depth=depth,
+            stopping_rule=require_text(stopping_rule, "stopping rule", limit=1000),
+        )
+        action["known_identifiers"] = paper.get("external_citations", []) if direction == "backward" else []
+        return {"action": action, "submission_required": True}
+
+    def refresh(self, provider: str, limit: int) -> dict[str, Any]:
+        included = [
+            paper_id for paper_id, paper in self.papers.items()
+            if paper.get("screening", {}).get("status") == "included" and paper.get("status") != "excluded"
+        ]
+        saved_queries = [item["query"] for item in self.state.get("discovery_log", []) if item.get("kind") == "query"]
+        query = " OR ".join(unique(saved_queries)) or self.state.get("research_question")
+        action = self._create_discovery_action(
+            kind="refresh", provider=provider, query=query, limit=limit, from_year=None, to_year=None,
+            stopping_rule="Check saved queries, included-paper metadata updates, corrections, and retractions.",
+        )
+        action["included_paper_ids"] = included
+        action["saved_queries"] = unique(saved_queries)
+        action["integrity_fields_required"] = ["integrity_status", "integrity_locator"]
+        return {"action": action, "submission_required": True}
+
+    def screen(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) != {"decisions"} or not isinstance(payload.get("decisions"), list):
+            raise ResearchError("screening payload must contain exactly a decisions list")
+        included: list[str] = []
+        excluded: list[str] = []
+        needs_review: list[str] = []
+        for index, decision in enumerate(payload["decisions"]):
+            required = {"paper_id", "decision", "matched_criteria", "exclusion_criterion", "reason", "confirmed"}
+            if not isinstance(decision, dict) or set(decision) != required:
+                raise ResearchError(f"decisions[{index}] has invalid fields")
+            paper = self.paper(require_id(decision.get("paper_id"), f"decisions[{index}].paper_id"))
+            outcome = decision.get("decision")
+            if outcome not in {"include", "exclude", "needs_review"}:
+                raise ResearchError(f"decisions[{index}].decision must be include, exclude, or needs_review")
+            matched = string_list(decision.get("matched_criteria"), f"decisions[{index}].matched_criteria")
+            unknown = sorted(set(matched) - set(self.state.get("inclusion_criteria", [])))
+            if unknown:
+                raise ResearchError("screening matched criteria were not predeclared: " + ", ".join(unknown))
+            exclusion = decision.get("exclusion_criterion")
+            if exclusion is not None and exclusion not in self.state.get("exclusion_criteria", []):
+                raise ResearchError("screening exclusion criterion was not predeclared")
+            confirmed = decision.get("confirmed") is True
+            final_outcome = outcome if confirmed or outcome == "needs_review" else "needs_review"
+            if final_outcome == "include" and not matched:
+                raise ResearchError("confirmed inclusion requires at least one predeclared inclusion criterion")
+            self.state.setdefault("screening_log", []).append(
+                {
+                    "paper_id": paper["id"], "status": "screening", "matched_criteria": [],
+                    "exclusion_criterion": None, "reason": "Protocol criteria evaluation started.",
+                    "decision_source": "core-transition", "decided_at": iso(),
+                }
+            )
+            screening = {
+                "status": "included" if final_outcome == "include" else "excluded" if final_outcome == "exclude" else "needs_review",
+                "matched_criteria": matched,
+                "exclusion_criterion": exclusion,
+                "reason": require_text(decision.get("reason"), f"decisions[{index}].reason", limit=2000),
+                "decision_source": "confirmed" if confirmed else "model_proposal",
+                "decided_at": iso(),
+            }
+            if final_outcome == "exclude" and exclusion is None:
+                raise ResearchError("confirmed exclusion requires a predeclared exclusion_criterion")
+            paper["screening"] = screening
+            if final_outcome == "include":
+                paper["status"] = "queued"
+                included.append(paper["id"])
+            elif final_outcome == "exclude":
+                paper["status"] = "excluded"
+                paper["exclusion_reason"] = screening["reason"]
+                excluded.append(paper["id"])
+            else:
+                paper["status"] = "discovered"
+                needs_review.append(paper["id"])
+            self.state.setdefault("screening_log", []).append({"paper_id": paper["id"], **screening})
+        return {
+            "included_paper_ids": included,
+            "excluded_paper_ids": excluded,
+            "needs_review_paper_ids": needs_review,
+            "counts": self.screening_summary(),
+        }
+
+    def screening_summary(self) -> dict[str, Any]:
+        counts = Counter(paper.get("screening", {}).get("status", "candidate") for paper in self.papers.values())
+        actions = self.state.get("discovery_log", [])
+        return {
+            "candidate": counts.get("candidate", 0),
+            "screening": counts.get("screening", 0),
+            "included": counts.get("included", 0),
+            "excluded": counts.get("excluded", 0),
+            "needs_review": counts.get("needs_review", 0),
+            "discovery_actions": len(actions),
+            "completed_actions": sum(item.get("status") == "completed" for item in actions),
+            "claim": "PRISMA-style audit counts only; retrieval is not asserted exhaustive.",
+        }
+
     def evidence_synthesis(self) -> dict[str, Any]:
         claims: list[dict[str, Any]] = []
         for paper_id, paper in self.papers.items():
             if paper.get("status") not in {"read", "synthesized"}:
                 continue
             for claim in paper.get("analysis", {}).get("claims", []):
-                claims.append({"paper_id": paper_id, **claim, "tokens": synthesis_tokens(claim.get("statement"))})
+                facets = claim.get("facets", {field: [] for field in FACET_FIELDS})
+                claims.append(
+                    {
+                        "paper_id": paper_id,
+                        **claim,
+                        "facets": facets,
+                        "tokens": synthesis_tokens(claim.get("statement")),
+                    }
+                )
         parents = list(range(len(claims)))
+        merge_reasons: dict[tuple[int, int], dict[str, Any]] = {}
 
         def find(index: int) -> int:
             while parents[index] != index:
@@ -873,11 +1529,29 @@ class ResearchEngine:
                 explicit_relation = relation_lookup.get((claims[left]["paper_id"], claims[right]["paper_id"])) or relation_lookup.get(
                     (claims[right]["paper_id"], claims[left]["paper_id"])
                 )
-                if len(overlap) / denominator >= 0.3 or (
-                    explicit_relation
-                    and (overlap or (claims_per_paper[claims[left]["paper_id"]] == claims_per_paper[claims[right]["paper_id"]] == 1))
-                ):
+                shared_facets = {
+                    field: sorted(set(claims[left]["facets"].get(field, [])) & set(claims[right]["facets"].get(field, [])))
+                    for field in FACET_FIELDS
+                }
+                outcome_anchor = bool(shared_facets["outcome"] or shared_facets["metric"])
+                context_anchor = bool(
+                    shared_facets["population"] or shared_facets["dataset"] or shared_facets["method"]
+                    or shared_facets["setting"] or shared_facets["assumption"]
+                )
+                structured_match = outcome_anchor and context_anchor
+                explicit_match = bool(explicit_relation) and (
+                    bool(overlap)
+                    or structured_match
+                    or claims_per_paper[claims[left]["paper_id"]] == claims_per_paper[claims[right]["paper_id"]] == 1
+                )
+                if structured_match or explicit_match:
                     union(left, right)
+                    merge_reasons[(left, right)] = {
+                        "basis": "explicit_relation" if explicit_match else "structured_facets",
+                        "relation": explicit_relation,
+                        "shared_facets": {field: values for field, values in shared_facets.items() if values},
+                        "token_overlap": round(len(overlap) / denominator, 3),
+                    }
         groups: dict[int, list[dict[str, Any]]] = {}
         for index, claim in enumerate(claims):
             groups.setdefault(find(index), []).append(claim)
@@ -898,19 +1572,45 @@ class ResearchEngine:
             if contested:
                 evidence_grade = "contested"
             token_counts = Counter(token for item in group for token in item["tokens"])
-            label = " / ".join(item for item, _ in token_counts.most_common(5)) or group[0]["statement"][:100]
+            facet_counts = Counter(
+                value
+                for item in group
+                for field in ["outcome", "metric", "method", "dataset"]
+                for value in item["facets"].get(field, [])
+            )
+            label = " / ".join(item for item, _ in facet_counts.most_common(5)) or " / ".join(
+                item for item, _ in token_counts.most_common(5)
+            ) or group[0]["statement"][:100]
+            conditional_differences = {
+                field: sorted({value for item in group for value in item["facets"].get(field, [])})
+                for field in FACET_FIELDS
+            }
+            conditional_differences = {field: values for field, values in conditional_differences.items() if len(values) > 1}
+            group_indexes = [claims.index(item) for item in group]
+            reasons = [
+                reason for pair, reason in merge_reasons.items()
+                if pair[0] in group_indexes and pair[1] in group_indexes
+            ]
             themes.append(
                 {
                     "id": f"theme.{theme_index:03d}",
                     "label": label,
                     "assessment": "contested" if contested else "corroborated" if corroborated else "single_source",
                     "evidence_grade": evidence_grade,
+                    "review_status": "proposed",
+                    "merge_basis": unique(reason["basis"] for reason in reasons) or ["single_source"],
+                    "merge_evidence": reasons,
                     "paper_ids": paper_ids,
                     "relation_types": relations,
                     "claims": [
-                        {key: item[key] for key in ["paper_id", "id", "statement", "evidence_summary", "strength"]}
+                        {key: item[key] for key in [
+                            "paper_id", "id", "statement", "evidence_summary", "strength", "effect",
+                            "uncertainty", "facets", "evidence_locator",
+                        ]}
                         for item in group
                     ],
+                    "conditional_differences": conditional_differences,
+                    "conditional_conflict": contested and bool(conditional_differences),
                     "limitations": unique(
                         limitation
                         for paper_id in paper_ids
@@ -918,7 +1618,44 @@ class ResearchEngine:
                     ),
                 }
             )
-        return {"generated_at": iso(), "source_paper_ids": unique(item["paper_id"] for item in claims), "themes": themes}
+        return {
+            "generated_at": iso(),
+            "source_paper_ids": unique(item["paper_id"] for item in claims),
+            "themes": themes,
+            "coverage_claim": "bounded_included_corpus_not_exhaustive",
+            "unsupported_novelty_claims_allowed": False,
+        }
+
+    def review_synthesis(self, payload: Any) -> dict[str, Any]:
+        synthesis = self.state.get("latest_synthesis")
+        if not isinstance(synthesis, dict):
+            raise ResearchError("No synthesis exists; run `research synthesize` first")
+        if not isinstance(payload, dict) or set(payload) != {"reviews"} or not isinstance(payload.get("reviews"), list):
+            raise ResearchError("synthesis review payload must contain exactly a reviews list")
+        themes = {item["id"]: item for item in synthesis.get("themes", [])}
+        reviewed: list[str] = []
+        for index, review in enumerate(payload["reviews"]):
+            if not isinstance(review, dict) or set(review) != {"theme_id", "decision", "label", "reason"}:
+                raise ResearchError(f"reviews[{index}] has invalid fields")
+            theme_id = require_id(review.get("theme_id"), f"reviews[{index}].theme_id")
+            theme = themes.get(theme_id)
+            if theme is None:
+                raise ResearchError(f"synthesis theme does not exist: {theme_id}")
+            decision = review.get("decision")
+            if decision not in {"confirm", "reject", "relabel"}:
+                raise ResearchError(f"reviews[{index}].decision must be confirm, reject, or relabel")
+            if any(not claim.get("evidence_locator", {}).get("locator") for claim in theme["claims"]):
+                raise ResearchError(f"{theme_id}: every claim needs a source locator before theme review")
+            theme["review_status"] = "confirmed" if decision in {"confirm", "relabel"} else "rejected"
+            if decision == "relabel":
+                theme["label"] = require_text(review.get("label"), f"reviews[{index}].label", limit=500)
+            theme["review_reason"] = require_text(review.get("reason"), f"reviews[{index}].reason", limit=2000)
+            reviewed.append(theme_id)
+        return {
+            "theme_ids": reviewed,
+            "confirmed": sum(item.get("review_status") == "confirmed" for item in themes.values()),
+            "remaining_proposals": sum(item.get("review_status") == "proposed" for item in themes.values()),
+        }
 
     def paper(self, paper_id: str) -> dict[str, Any]:
         paper_id = require_id(paper_id, "paper ID")
@@ -933,6 +1670,8 @@ class ResearchEngine:
         candidates: list[dict[str, Any]] = []
         for paper_id, paper in self.papers.items():
             if paper.get("status") not in {"discovered", "queued"}:
+                continue
+            if paper.get("screening", {}).get("status") != "included":
                 continue
             unmet = [item for item in paper.get("prerequisite_paper_ids", []) if item not in complete]
             if unmet:
@@ -997,6 +1736,10 @@ class ResearchEngine:
             raise ResearchError(f"Finish or park Active Paper {active_id} before activating another paper")
         if paper.get("status") not in {"discovered", "queued", "parked", "active"}:
             raise ResearchError(f"Paper {paper_id} cannot be activated from status {paper.get('status')}")
+        if paper.get("screening", {}).get("status") != "included":
+            raise ResearchError(f"Paper {paper_id} must have a confirmed inclusion decision before reading")
+        if paper.get("integrity", {}).get("status") in {"retracted", "concern"}:
+            raise ResearchError(f"Paper {paper_id} has an integrity alert and requires explicit screening review")
         unmet = [
             item
             for item in paper.get("prerequisite_paper_ids", [])
@@ -1062,13 +1805,19 @@ class ResearchEngine:
         self.state["status"] = "mapping"
         return {"paper_id": paper_id, "status": "parked"}
 
-    def exclude(self, paper_id: str, reason: str) -> dict[str, Any]:
+    def exclude(self, paper_id: str, reason: str, criterion: str) -> dict[str, Any]:
         paper = self.paper(paper_id)
         if paper.get("status") == "active":
             raise ResearchError("Park the Active Paper before excluding it")
+        if criterion not in self.state.get("exclusion_criteria", []):
+            raise ResearchError("exclusion criterion must be one of the predeclared research protocol criteria")
         paper["status"] = "excluded"
         paper["exclusion_reason"] = require_text(reason, "exclusion reason", limit=2000)
-        return {"paper_id": paper_id, "status": "excluded"}
+        paper["screening"] = {
+            "status": "excluded", "matched_criteria": [], "exclusion_criterion": criterion,
+            "reason": paper["exclusion_reason"], "decision_source": "confirmed", "decided_at": iso(),
+        }
+        return {"paper_id": paper_id, "status": "excluded", "exclusion_criterion": criterion}
 
     def synthesize(self) -> dict[str, Any]:
         integrated = []
@@ -1125,7 +1874,20 @@ class ResearchEngine:
             "open_question_count": len(self.open_questions()),
             "contradiction_count": len(self.contradictions()),
             "metadata": dict(Counter(paper.get("metadata_verification", {}).get("status", "unverified") for paper in self.papers.values())),
+            "integrity": dict(Counter(paper.get("integrity", {}).get("status", "unknown") for paper in self.papers.values())),
+            "screening": self.screening_summary(),
+            "protocol_revision": self.state.get("protocol_revision", 0),
+            "discovery": {
+                "action_count": len(self.state.get("discovery_log", [])),
+                "awaiting_submission": sum(item.get("status") == "awaiting_submission" for item in self.state.get("discovery_log", [])),
+                "latest_refresh": self.state.get("latest_refresh"),
+                "coverage_claim": "bounded_provider_results_not_exhaustive",
+            },
             "synthesis_theme_count": len((self.state.get("latest_synthesis") or {}).get("themes", [])),
+            "confirmed_synthesis_theme_count": sum(
+                item.get("review_status") == "confirmed"
+                for item in (self.state.get("latest_synthesis") or {}).get("themes", [])
+            ),
         }
 
     def render(self) -> None:
@@ -1231,11 +1993,12 @@ class ResearchEngine:
         themes = (self.state.get("latest_synthesis") or {}).get("themes", [])
         for theme in themes:
             matrix_lines.append(
-                f"- `{theme['id']}` **{markdown(theme['label'])}** — {theme['assessment']}, "
+                f"- `{theme['id']}` **{markdown(theme['label'])}** — {theme['assessment']}, review `{theme.get('review_status', 'proposed')}`, "
                 f"evidence `{theme['evidence_grade']}`; papers: {', '.join(theme['paper_ids'])}"
             )
             matrix_lines.extend(
-                f"  - `{claim['paper_id']}/{claim['id']}` [{claim['strength']}] {markdown(claim['statement'])} — {markdown(claim['evidence_summary'])}"
+                f"  - `{claim['paper_id']}/{claim['id']}` [{claim['strength']}] {markdown(claim['statement'])} — "
+                f"{markdown(claim['evidence_summary'])}; locator: {markdown(claim.get('evidence_locator', {}).get('locator'))}"
                 for claim in theme["claims"]
             )
         if not themes:
@@ -1314,6 +2077,42 @@ def build_parser() -> argparse.ArgumentParser:
     import_parser.add_argument("workspace")
     import_parser.add_argument("--input", required=True)
     add_revision_argument(import_parser)
+    protocol = sub.add_parser("set-protocol", help="Persist a revisioned discovery and screening protocol before search")
+    protocol.add_argument("workspace")
+    protocol.add_argument("--input", required=True)
+    add_revision_argument(protocol)
+    discover = sub.add_parser("discover", help="Search Crossref/OpenAlex or emit a typed harness Web Search action")
+    discover.add_argument("workspace")
+    discover.add_argument("--query")
+    discover.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS), default="harness")
+    discover.add_argument("--limit", type=int, default=25)
+    discover.add_argument("--from-year", type=int)
+    discover.add_argument("--to-year", type=int)
+    discover.add_argument("--timeout", type=float, default=15.0)
+    discover.add_argument("--mailto", default="")
+    add_revision_argument(discover)
+    submit_discovery = sub.add_parser("submit-discovery", help="Validate and import one revision-bound discovery/snowball/refresh result")
+    submit_discovery.add_argument("workspace")
+    submit_discovery.add_argument("--input", required=True)
+    add_revision_argument(submit_discovery)
+    screen = sub.add_parser("screen", help="Apply confirmed protocol-bound include/exclude decisions or retain model proposals for review")
+    screen.add_argument("workspace")
+    screen.add_argument("--input", required=True)
+    add_revision_argument(screen)
+    snowball = sub.add_parser("snowball", help="Emit a reproducible backward or forward citation-expansion action")
+    snowball.add_argument("workspace")
+    snowball.add_argument("paper_id")
+    snowball.add_argument("--direction", choices=["backward", "forward"], required=True)
+    snowball.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS), default="openalex")
+    snowball.add_argument("--depth", type=int, default=1)
+    snowball.add_argument("--limit", type=int, default=50)
+    snowball.add_argument("--stopping-rule", required=True)
+    add_revision_argument(snowball)
+    refresh = sub.add_parser("refresh", help="Emit an on-demand saved-query, metadata, correction, and retraction refresh action")
+    refresh.add_argument("workspace")
+    refresh.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS), default="harness")
+    refresh.add_argument("--limit", type=int, default=50)
+    add_revision_argument(refresh)
     reconcile = sub.add_parser("reconcile-metadata", help="Verify provider metadata and resolve outgoing citations")
     reconcile.add_argument("workspace")
     reconcile.add_argument("--input", required=True)
@@ -1353,7 +2152,13 @@ def build_parser() -> argparse.ArgumentParser:
         parser_for_action.add_argument("workspace")
         parser_for_action.add_argument("paper_id")
         parser_for_action.add_argument("--reason", required=True)
+        if action == "exclude":
+            parser_for_action.add_argument("--criterion", required=True)
         add_revision_argument(parser_for_action)
+    review_synthesis = sub.add_parser("review-synthesis", help="Confirm, relabel, or reject structured cross-paper theme proposals")
+    review_synthesis.add_argument("workspace")
+    review_synthesis.add_argument("--input", required=True)
+    add_revision_argument(review_synthesis)
     return parser
 
 
@@ -1402,6 +2207,29 @@ def run(argv: list[str] | None = None) -> None:
     if args.action == "import":
         result = engine.import_plan(read_data(Path(args.input)))
         event_type = "research.papers_imported"
+    elif args.action == "set-protocol":
+        result = engine.set_protocol(read_data(Path(args.input)))
+        event_type = "research.protocol_updated"
+    elif args.action == "discover":
+        result = engine.discover(
+            args.query or engine.state["research_question"], args.provider, args.limit,
+            args.from_year, args.to_year, args.timeout, args.mailto,
+        )
+        event_type = "research.discovery_started"
+    elif args.action == "submit-discovery":
+        result = engine.submit_discovery(read_data(Path(args.input)))
+        event_type = "research.discovery_submitted"
+    elif args.action == "screen":
+        result = engine.screen(read_data(Path(args.input)))
+        event_type = "research.screening_decided"
+    elif args.action == "snowball":
+        result = engine.snowball(
+            args.paper_id, args.direction, args.provider, args.depth, args.limit, args.stopping_rule
+        )
+        event_type = "research.snowball_started"
+    elif args.action == "refresh":
+        result = engine.refresh(args.provider, args.limit)
+        event_type = "research.refresh_started"
     elif args.action == "reconcile-metadata":
         result = engine.reconcile_metadata(read_data(Path(args.input)))
         event_type = "research.metadata_reconciled"
@@ -1424,11 +2252,14 @@ def run(argv: list[str] | None = None) -> None:
         result = engine.park(args.paper_id, args.reason)
         event_type = "research.paper_parked"
     elif args.action == "exclude":
-        result = engine.exclude(args.paper_id, args.reason)
+        result = engine.exclude(args.paper_id, args.reason, args.criterion)
         event_type = "research.paper_excluded"
     elif args.action == "synthesize":
         result = engine.synthesize()
         event_type = "research.synthesized"
+    elif args.action == "review-synthesis":
+        result = engine.review_synthesis(read_data(Path(args.input)))
+        event_type = "research.synthesis_reviewed"
     else:  # pragma: no cover
         raise ResearchError(f"Unhandled research action: {args.action}")
     engine.commit(event_type, result)
