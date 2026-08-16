@@ -68,6 +68,8 @@
       }
     },
     "course_plan": {"type": "object"},
+    "confirmed": {"type": "boolean"},
+    "activate_first": {"type": "boolean"},
     "chunk_chars": {"type": "integer", "minimum": 400, "maximum": 12000},
     "overlap_chars": {"type": "integer", "minimum": 0, "maximum": 2000}
   },

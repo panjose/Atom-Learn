@@ -29,6 +29,7 @@ from atomlearn import (
 )
 from intake import IntakeEngine, IntakeError
 from rag import AUTHORITATIVE, RagEngine, RagError
+from workflow import WorkflowError, make_action, validate_submission
 
 
 START_SCHEMA_VERSION = 1
@@ -217,7 +218,26 @@ class WizardEngine:
             "topic_terms": topic_terms,
             "discovery_sources": intake_sources if mode == "topic" else [],
             "ambiguities": payload.get("ambiguities", []),
-            "assumptions": payload.get("assumptions", []),
+            "assumptions": unique(
+                [
+                    *payload.get("assumptions", []),
+                    *(
+                        ["Purpose defaults to working knowledge until the learner changes it."]
+                        if mode == "topic" and "desired_outcome" not in payload
+                        else []
+                    ),
+                    *(
+                        ["Depth defaults to a practical working level until the learner changes it."]
+                        if mode == "topic" and "target_depth" not in payload
+                        else []
+                    ),
+                    *(
+                        ["No prior knowledge is assumed beyond prerequisites discovered during mapping."]
+                        if mode == "topic" and "prior_knowledge" not in payload
+                        else []
+                    ),
+                ]
+            ),
         }
         IntakeEngine.initialize(str(workspace.root), intake_payload)
         rag = RagEngine.initialize(str(workspace.root), payload.get("chunk_chars", 2800), payload.get("overlap_chars", 300))
@@ -266,11 +286,12 @@ class WizardEngine:
         self.state["revision"] = int(self.state.get("revision", 0)) + 1
         self.state["updated_at"] = iso()
         self.state["last_result"] = {
-            "status": result.get("status"),
-            "next_action": result.get("next_action"),
-            "web_search_tasks": result.get("web_search_tasks", []),
-            "course_plan_task": result.get("course_plan_task"),
+            key: value for key, value in result.items()
+            if key not in {"course_plan"}
         }
+        action = self.state["last_result"].get("workflow_action")
+        if action and action.get("workflow_revision") != self.state["revision"]:
+            raise WizardError("workflow action revision disagrees with the committed wizard revision")
         write_yaml(self.path, self.state)
         event = {
             "event_id": f"sevt-{self.state['revision']:06d}",
@@ -284,6 +305,58 @@ class WizardEngine:
             handle.flush()
             os.fsync(handle.fileno())
         self.render()
+
+    def current_result(self) -> dict[str, Any]:
+        result = self.state.get("last_result")
+        if not isinstance(result, dict) or not result.get("workflow_action"):
+            raise WizardError("start workflow has no resumable action; rerun with structured input")
+        return result
+
+    def _action(
+        self,
+        stage: str,
+        action: str,
+        parameters: dict[str, Any],
+        required_result_fields: list[str],
+    ) -> dict[str, Any]:
+        return make_action(
+            workflow_revision=self.state.get("revision", 0) + 1,
+            stage=stage,
+            action=action,
+            parameters=parameters,
+            required_result_fields=required_result_fields,
+        )
+
+    def apply_submission(self, submission: dict[str, Any]) -> dict[str, Any]:
+        current = self.current_result()["workflow_action"]
+        result = validate_submission(submission, current)
+        action = current["action"]
+        allowed = set(current["tool_contract"]["required_result_fields"])
+        unexpected = sorted(set(result) - allowed)
+        if unexpected:
+            raise WorkflowError("workflow submission result contains unsupported fields: " + ", ".join(unexpected))
+        if action == "web_search":
+            return {"web_evidence": result["web_evidence"], "verdicts": result["verdicts"]}
+        if action == "generate_course_plan":
+            return {"course_plan": result["course_plan"]}
+        if action == "confirm_phase":
+            if result.get("confirmed") is not True:
+                raise WorkflowError("phase confirmation requires result.confirmed: true")
+            return {"confirmed": True}
+        if action == "activate_first_atom":
+            if result.get("confirmed") is not True:
+                raise WorkflowError("first-Atom activation requires result.confirmed: true")
+            return {"activate_first": True}
+        if action == "clarify_goal":
+            intake = IntakeEngine.load(str(self.workspace.root))
+            guidance = intake.update({**result, "ambiguities": []})
+            intake.commit("intake.goal_clarified", {"fields": sorted(result)})
+            return {
+                "clarification_applied": True,
+                "guidance": guidance,
+                "_rerun_correction": True,
+            }
+        raise WorkflowError(f"Action {action} does not accept a submission")
 
     def _add_topic_discovery(self, payload: dict[str, Any]) -> None:
         if self.state.get("mode") != "topic" or not payload.get("web_evidence"):
@@ -303,7 +376,12 @@ class WizardEngine:
         if self.state.get("mode") == "sources":
             return None
         rag = RagEngine.load(str(self.workspace.root))
-        correction_requested = initial or "web_evidence" in payload or "verdicts" in payload
+        correction_requested = (
+            initial
+            or payload.get("_rerun_correction") is True
+            or "web_evidence" in payload
+            or "verdicts" in payload
+        )
         if correction_requested:
             self._add_topic_discovery(payload)
             coverage = rag.requirements("intake")
@@ -341,6 +419,25 @@ class WizardEngine:
         }
 
     def advance(self, payload: dict[str, Any], *, initial: bool = False) -> dict[str, Any]:
+        intake = IntakeEngine.load(str(self.workspace.root))
+        if intake.state.get("ambiguities") and not payload.get("clarification_applied"):
+            self.state["stage"] = "clarify_goal"
+            result = {
+                "ok": True,
+                "status": "clarification_required",
+                "workspace": str(self.workspace.root),
+                "wizard_revision": self.state.get("revision", 0) + 1,
+                "assumptions": intake.state.get("assumptions", []),
+                "workflow_action": self._action(
+                    "clarify_goal",
+                    "clarify_goal",
+                    {"ambiguities": intake.state["ambiguities"], "current_goal": intake.state.get("goal")},
+                    ["goal", "desired_outcome", "target_depth"],
+                ),
+                "next_action": "Answer the high-impact goal questions shown in workflow_action.",
+            }
+            self.commit("start.clarification_required", result)
+            return result
         coverage = self._coverage(payload, initial=initial)
         if coverage and coverage.get("status") != "complete":
             self.state["stage"] = "web_search_required"
@@ -352,14 +449,119 @@ class WizardEngine:
                 "intake": IntakeEngine.load(str(self.workspace.root)).status_summary(),
                 "rag_revision": coverage.get("rag_revision"),
                 "web_search_tasks": coverage.get("web_search_tasks", []),
+                "workflow_action": self._action(
+                    "evidence_discovery",
+                    "web_search",
+                    {
+                        "tasks": coverage.get("web_search_tasks", []),
+                        "instruction": "Use harness-native Web Search and open authoritative results.",
+                    },
+                    ["web_evidence", "verdicts"],
+                ),
                 "next_action": "Execute the returned tasks with harness Web Search, then rerun start with web_evidence and verdicts.",
             }
             self.commit("start.correction_required", result)
             return result
 
         intake = IntakeEngine.load(str(self.workspace.root))
+        pending_plan_path = self.workspace.meta / "pending-start-plan.yaml"
+        if payload.get("course_plan") is not None:
+            if self.workspace.atoms:
+                raise WizardError("a course plan is already imported; use import-plan for later updates")
+            preview = load_workspace(str(self.workspace.root))
+            preview_result = preview.import_plan(payload["course_plan"])
+            preview_errors = preview.validate()
+            if preview_errors:
+                raise WizardError("Proposed course plan is invalid:\n- " + "\n- ".join(preview_errors))
+            write_yaml(pending_plan_path, payload["course_plan"])
+            candidates = preview.suggest_next()
+            self.state["stage"] = "phase_confirmation_required"
+            result = {
+                "ok": True,
+                "status": "phase_confirmation_required",
+                "workspace": str(self.workspace.root),
+                "wizard_revision": self.state.get("revision", 0) + 1,
+                "plan_preview": {**preview_result, "first_candidates": candidates},
+                "workflow_action": self._action(
+                    "phase_confirmation",
+                    "confirm_phase",
+                    {
+                        "plan_summary": preview_result,
+                        "first_candidates": candidates,
+                        "will_mutate_course": True,
+                    },
+                    ["confirmed"],
+                ),
+                "next_action": "Review the first phase and confirm it before the plan is imported.",
+            }
+            self.commit("start.phase_confirmation_required", result)
+            return result
+
+        if self.state.get("stage") == "phase_confirmation_required":
+            if payload.get("confirmed") is not True:
+                return self.current_result()
+            if not pending_plan_path.is_file():
+                raise WizardError("pending confirmed course plan is missing")
+            workspace = load_workspace(str(self.workspace.root))
+            plan_result = workspace.import_plan(read_data(pending_plan_path))
+            workspace.commit("plan.imported", "Imported the plan through the start wizard", plan_result)
+            intake = IntakeEngine.load(str(self.workspace.root))
+            completion = intake.complete()
+            intake.commit("intake.completed", completion)
+            workspace = load_workspace(str(self.workspace.root))
+            candidates = workspace.suggest_next()
+            if not candidates:
+                raise WizardError("imported plan has no eligible first Atom")
+            self.state["stage"] = "first_atom_confirmation_required"
+            result = {
+                "ok": True,
+                "status": "first_atom_confirmation_required",
+                "workspace": str(self.workspace.root),
+                "wizard_revision": self.state.get("revision", 0) + 1,
+                "course_revision": workspace.revision,
+                "plan": plan_result,
+                "intake": completion,
+                "first_atom": candidates[0],
+                "workflow_action": self._action(
+                    "first_atom",
+                    "activate_first_atom",
+                    {"atom": candidates[0], "requires_confirmation": True},
+                    ["confirmed"],
+                ),
+                "next_action": "Confirm activation of the first eligible Atom.",
+            }
+            self.commit("start.first_atom_confirmation_required", result)
+            return result
+
+        if self.state.get("stage") == "first_atom_confirmation_required":
+            if payload.get("activate_first") is not True:
+                return self.current_result()
+            workspace = load_workspace(str(self.workspace.root))
+            candidates = workspace.suggest_next()
+            if not candidates:
+                raise WizardError("no eligible Atom is available for activation")
+            atom_id = candidates[0]["id"]
+            workspace.activate(atom_id)
+            workspace.commit("atom.activated", "Activated the confirmed first Atom", {"atom_id": atom_id})
+            self.state["stage"] = "complete"
+            result = {
+                "ok": True,
+                "status": "complete",
+                "workspace": str(self.workspace.root),
+                "wizard_revision": self.state.get("revision", 0) + 1,
+                "course_revision": workspace.revision,
+                "active_atom_id": atom_id,
+                "workflow_action": self._action(
+                    "complete", "done", {"active_atom_id": atom_id}, []
+                ),
+                "next_action": "Teach only the Active Atom and record qualified Evidence before advancing.",
+            }
+            self.commit("start.completed", result)
+            return result
+
         if payload.get("course_plan") is None:
             self.state["stage"] = "course_plan_required"
+            plan_task = self._plan_task()
             result = {
                 "ok": True,
                 "status": "course_plan_required",
@@ -367,33 +569,16 @@ class WizardEngine:
                 "wizard_revision": self.state.get("revision", 0) + 1,
                 "intake": intake.status_summary(),
                 "rag": RagEngine.load(str(self.workspace.root)).status(),
-                "course_plan_task": self._plan_task(),
+                "course_plan_task": plan_task,
+                "workflow_action": self._action(
+                    "course_planning", "generate_course_plan", plan_task, ["course_plan"]
+                ),
                 "next_action": "Generate the source-grounded plan and rerun start with course_plan in the same payload shape.",
             }
             self.commit("start.plan_required", result)
             return result
 
-        workspace = load_workspace(str(self.workspace.root))
-        if workspace.atoms:
-            raise WizardError("a course plan is already imported; use import-plan for later updates")
-        plan_result = workspace.import_plan(payload["course_plan"])
-        workspace.commit("plan.imported", "Imported the plan through the start wizard", plan_result)
-        intake = IntakeEngine.load(str(self.workspace.root))
-        completion = intake.complete()
-        intake.commit("intake.completed", completion)
-        self.state["stage"] = "complete"
-        result = {
-            "ok": True,
-            "status": "complete",
-            "workspace": str(self.workspace.root),
-            "wizard_revision": self.state.get("revision", 0) + 1,
-            "course_revision": workspace.revision,
-            "plan": plan_result,
-            "intake": completion,
-            "next_action": "Run suggest-next, then activate the first available Atom.",
-        }
-        self.commit("start.completed", result)
-        return result
+        raise WizardError("unhandled start workflow state")
 
     def render(self) -> None:
         last = self.state.get("last_result", {})
@@ -425,10 +610,14 @@ def build_parser() -> argparse.ArgumentParser:
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--input", help="JSON or YAML payload conforming to start.schema.json")
     source.add_argument("--topic", help="Shortest topic-only start; title and goal are inferred")
+    source.add_argument("--submission", help="Typed JSON/YAML result for the currently issued workflow action")
     parser.add_argument("--title", help="Optional title used with --topic")
     parser.add_argument("--goal", help="Optional learning goal used with --topic")
     parser.add_argument("--course-id", help="Optional stable course ID used with --topic")
     parser.add_argument("--print-schema", action="store_true", help="Print the JSON Schema and exit")
+    parser.add_argument("--confirm", action="store_true", help="Confirm the pending first learning phase")
+    parser.add_argument("--activate-first", action="store_true", help="Confirm and activate the proposed first Atom")
+    parser.add_argument("--json", action="store_true", help="Emit the complete typed action protocol as JSON")
     return parser
 
 
@@ -441,13 +630,19 @@ def run(argv: list[str] | None = None) -> None:
     if input_path:
         payload = validate_payload(read_data(input_path))
         base_dir = input_path.parent
+    elif args.submission:
+        payload = {}
+        base_dir = Path(args.submission).resolve().parent
     elif args.topic:
         payload = validate_payload(
             {key: value for key, value in {"topic": args.topic, "title": args.title, "goal": args.goal, "course_id": args.course_id}.items() if value is not None}
         )
         base_dir = Path.cwd()
     else:
-        payload = {}
+        payload = {key: value for key, value in {
+            "confirmed": True if args.confirm else None,
+            "activate_first": True if args.activate_first else None,
+        }.items() if value is not None}
         base_dir = Path.cwd()
     root = Path(args.workspace).resolve()
     initial = not (root / ".atomlearn").is_dir()
@@ -459,7 +654,24 @@ def run(argv: list[str] | None = None) -> None:
         engine = WizardEngine.load(str(root))
         if payload:
             validate_payload(payload)
-    print(json.dumps(engine.advance(payload, initial=initial), ensure_ascii=False, indent=2))
+    if args.submission:
+        submission = read_data(Path(args.submission))
+        payload = engine.apply_submission(submission)
+        result = engine.advance(payload, initial=False)
+    elif not initial and not payload:
+        result = engine.current_result()
+    else:
+        result = engine.advance(payload, initial=initial)
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+    else:
+        action = result.get("workflow_action", {})
+        display = action.get("display", {})
+        print(display.get("en") or result.get("next_action") or result.get("status"))
+        print(display.get("zh_CN") or "")
+        print(f"Workspace: {result.get('workspace', root)}")
+        print(f"Status: {result.get('status')}")
+        print(f"Next: {result.get('next_action')}")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -470,7 +682,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run(argv)
         return 0
-    except (WizardError, IntakeError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+    except (WizardError, WorkflowError, IntakeError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

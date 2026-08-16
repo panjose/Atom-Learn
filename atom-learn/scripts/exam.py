@@ -32,6 +32,7 @@ from atomlearn import (
     unique,
     write_yaml,
 )
+from rag import RagEngine, RagError
 
 
 PAPER_KINDS = {"official_past_exam", "sample_exam", "mock_exam", "question_bank", "practice_set"}
@@ -603,33 +604,46 @@ class ExamEngine:
             question_numbers = {item["number"] for item in question_sections}
             for section in question_sections:
                 number = section["number"]
+                block_ids = unique(
+                    re.findall(r"\[document-ir-block:(block-[a-f0-9]{24})\]", section["text"])
+                )
+                question_text = re.sub(
+                    r"^\s*\[document-ir-block:block-[a-f0-9]{24}\]\s*$",
+                    "",
+                    section["text"],
+                    flags=re.MULTILINE,
+                ).strip()
                 answer = answers.get(number)
                 scheme = marking.get(number)
-                points = extract_points(scheme["text"] if scheme else section["text"])
-                mappings = self._auto_mappings(section["text"], threshold)
+                points = extract_points(scheme["text"] if scheme else question_text)
+                mappings = self._auto_mappings(question_text, threshold)
                 slug = re.sub(r"[^a-z0-9]+", "-", number.casefold()).strip("-") or str(len(questions) + 1)
                 question_id = f"{paper_id}.q{slug}"
                 if mappings[0]["id"] == "unmapped.auto":
                     mappings[0]["id"] = f"unmapped.{question_id}"
                 status = "linked" if answer and scheme else "answer_only" if answer else "marking_only" if scheme else "missing"
-                collapsed = re.sub(r"\s+", " ", section["text"])
+                collapsed = re.sub(r"\s+", " ", question_text)
                 collapsed = re.sub(r"(?:\[|\()?\s*\d+(?:\.\d+)?\s*(?:marks?|points?|分)\s*(?:\]|\))?", "", collapsed, flags=re.IGNORECASE).strip()
                 questions.append(
                     {
                         "id": question_id,
                         "paper_id": paper_id,
                         "number": number,
-                        "type": self._auto_question_type(section["text"]),
+                        "type": self._auto_question_type(question_text),
                         "points": points,
                         "stem_summary": collapsed[:500],
-                        "source_locator": f"{paper.get('locator')}, lines {section['line_start']}-{section['line_end']}, question {number}",
+                        "source_locator": (
+                            "document-ir blocks " + ", ".join(block_ids)
+                            if block_ids
+                            else f"{paper.get('locator')}, lines {section['line_start']}-{section['line_end']}, question {number}"
+                        ),
                         "family_id": None,
                         "answer_locator": f"answer lines {answer['line_start']}-{answer['line_end']}, question {number}" if answer else "",
                         "marking_locator": f"marking lines {scheme['line_start']}-{scheme['line_end']}, question {number}" if scheme else "",
                         "marking_link_status": status,
-                        "cognitive_levels": self._auto_cognitive_levels(section["text"]),
+                        "cognitive_levels": self._auto_cognitive_levels(question_text),
                         "tags": ["auto-split", "mapping-review-pending"] if any(item["review_status"] == "pending" for item in mappings) else ["auto-split"],
-                        "difficulty": self._auto_difficulty(section["text"], mappings, points, bool(scheme)),
+                        "difficulty": self._auto_difficulty(question_text, mappings, points, bool(scheme)),
                         "knowledge_points": mappings,
                     }
                 )
@@ -646,6 +660,58 @@ class ExamEngine:
         result = self.import_bundle({"papers": papers, "questions": questions})
         result["processing"] = diagnostics
         result["mapping_review_queue"] = self.mapping_review_queue()
+        return result
+
+    def process_source(
+        self,
+        source_id: str,
+        *,
+        paper_id: str,
+        title: str | None,
+        year: int | None,
+        kind: str,
+    ) -> dict[str, Any]:
+        """Process the active revision of one RAG source through its shared Document IR."""
+        document = RagEngine.load(str(self.workspace.root)).document_ir(source_id)
+        rendered: list[str] = []
+        used_blocks: list[str] = []
+        for block in document["blocks"]:
+            if block["kind"] in {"heading", "cell", "figure", "image"}:
+                continue
+            lines = block["text"].splitlines()
+            inserted = False
+            for line in lines:
+                rendered.append(line)
+                if question_header(line):
+                    rendered.append(f"[document-ir-block:{block['block_id']}]")
+                    inserted = True
+            if not inserted:
+                rendered.append(f"[document-ir-block:{block['block_id']}]")
+            used_blocks.append(block["block_id"])
+        payload = {
+            "documents": [
+                {
+                    "paper": {
+                        "id": paper_id,
+                        "title": title or document["title"],
+                        "year": year,
+                        "session": "",
+                        "kind": kind,
+                        "total_points": None,
+                        "source_id": source_id,
+                        "locator": f"document-ir:{source_id}@r{document['source_revision']}",
+                    },
+                    "questions": "\n".join(rendered),
+                }
+            ]
+        }
+        result = self.process_documents(payload, self.workspace.root)
+        result["document_ir"] = {
+            "source_id": source_id,
+            "source_revision": document["source_revision"],
+            "consumed_block_count": len(used_blocks),
+            "content_sha256": document["content_sha256"],
+        }
         return result
 
     def mapping_review_queue(self) -> list[dict[str, Any]]:
@@ -1352,6 +1418,14 @@ def build_parser() -> argparse.ArgumentParser:
     process.add_argument("workspace")
     process.add_argument("--input", required=True)
     add_revision(process)
+    process_source = sub.add_parser("process-source", help="Process one indexed source through the shared Document IR")
+    process_source.add_argument("workspace")
+    process_source.add_argument("--source-id", required=True)
+    process_source.add_argument("--paper-id", required=True)
+    process_source.add_argument("--title")
+    process_source.add_argument("--year", type=int)
+    process_source.add_argument("--kind", choices=sorted(PAPER_KINDS), default="official_past_exam")
+    add_revision(process_source)
     review = sub.add_parser("review-mappings", help="Confirm, correct, or unmap automatic Atom proposals")
     review.add_argument("workspace")
     review.add_argument("--input", required=True)
@@ -1391,13 +1465,21 @@ def run(argv: list[str] | None = None) -> None:
     errors = engine.validate()
     if errors:
         raise ExamError("Refusing to use invalid exam state:\n- " + "\n- ".join(errors))
-    if args.action in {"import", "process", "review-mappings", "calibrate"}:
+    if args.action in {"import", "process", "process-source", "review-mappings", "calibrate"}:
         engine.expect_revision(args.expected_exam_revision)
         if args.action == "import":
             result = engine.import_bundle(read_data(Path(args.input)))
         elif args.action == "process":
             input_path = Path(args.input).resolve()
             result = engine.process_documents(read_data(input_path), input_path.parent)
+        elif args.action == "process-source":
+            result = engine.process_source(
+                args.source_id,
+                paper_id=args.paper_id,
+                title=args.title,
+                year=args.year,
+                kind=args.kind,
+            )
         elif args.action == "review-mappings":
             result = engine.review_mappings(read_data(Path(args.input)))
             engine._commit("exam.mappings_reviewed", result)
@@ -1430,7 +1512,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run(argv)
         return 0
-    except (ExamError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+    except (ExamError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

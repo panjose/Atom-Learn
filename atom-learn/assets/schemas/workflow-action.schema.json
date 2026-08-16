@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/workflow-action.schema.json",
+  "title": "AtomLearn typed harness workflow action",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "action_id", "workflow", "workflow_revision", "stage",
+    "action", "display", "tool_contract", "submission_schema", "idempotency_key", "created_at"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.workflow-action"},
+    "schema_version": {"const": 1},
+    "action_id": {"type": "string", "pattern": "^action-[a-f0-9]{24}$"},
+    "workflow": {"const": "start"},
+    "workflow_revision": {"type": "integer", "minimum": 1},
+    "stage": {"enum": [
+      "clarify_goal", "inventory_sources", "evidence_discovery", "coverage_judgment",
+      "course_planning", "plan_validation", "phase_confirmation", "first_atom", "complete"
+    ]},
+    "action": {"enum": [
+      "clarify_goal", "inventory_sources", "web_search", "judge_coverage",
+      "generate_course_plan", "validate_plan", "confirm_phase", "activate_first_atom", "done"
+    ]},
+    "display": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "zh_CN"],
+      "properties": {
+        "en": {"type": "string", "minLength": 1, "maxLength": 500},
+        "zh_CN": {"type": "string", "minLength": 1, "maxLength": 500}
+      }
+    },
+    "tool_contract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["capability", "parameters", "required_result_fields"],
+      "properties": {
+        "capability": {"enum": [
+          "harness.clarify", "harness.source_inventory", "harness.web_search",
+          "harness.coverage_judgment", "harness.course_plan", "core.plan_validation",
+          "user.phase_confirmation", "core.activate_atom", "none"
+        ]},
+        "parameters": {"type": "object"},
+        "required_result_fields": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "minLength": 1, "maxLength": 80}
+        }
+      }
+    },
+    "submission_schema": {"const": "https://atomlearn.dev/schemas/workflow-submission.schema.json"},
+    "idempotency_key": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "created_at": {"type": "string", "format": "date-time"}
+  }
+}

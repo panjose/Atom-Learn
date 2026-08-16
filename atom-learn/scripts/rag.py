@@ -22,6 +22,7 @@ from urllib.parse import urlparse
 
 import yaml
 
+from document_ir import DocumentIRError, build_document_ir, require_valid as require_valid_ir, retrieval_sections
 from atomlearn import (
     AtomLearnError,
     Workspace,
@@ -465,6 +466,12 @@ def chunk_sections(sections: list[dict[str, Any]], title: str, chunk_chars: int,
         content = limited_text(section.get("text"), "passage.text", limit=MAX_PASSAGE_CHARS)
         locator = limited_text(section.get("locator", "document"), "passage.locator", limit=1000)
         heading = limited_text(section.get("section", "Document"), "passage.section", limit=1000)
+        block_ids = section.get("block_ids", [])
+        if not isinstance(block_ids, list) or any(
+            not isinstance(block_id, str) or not re.fullmatch(r"block-[a-f0-9]{24}", block_id)
+            for block_id in block_ids
+        ):
+            raise RagError("passage.block_ids must contain Document IR block IDs")
         embedding = section.get("embedding")
         if embedding is not None:
             raise RagError("passage.embedding is not accepted during ingestion; ingest first, then use `rag attach-embeddings`")
@@ -477,7 +484,7 @@ def chunk_sections(sections: list[dict[str, Any]], title: str, chunk_chars: int,
             while remaining:
                 room = chunk_chars - len(buffer) - (2 if buffer else 0)
                 if room <= 0:
-                    chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer, "embedding": embedding})
+                    chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer, "embedding": embedding, "block_ids": block_ids})
                     buffer = buffer[-overlap_chars:] if overlap_chars else ""
                     room = chunk_chars - len(buffer) - (2 if buffer else 0)
                 take = remaining[:room]
@@ -488,13 +495,13 @@ def chunk_sections(sections: list[dict[str, Any]], title: str, chunk_chars: int,
                 buffer = f"{buffer}\n\n{take}".strip() if buffer else take.strip()
                 remaining = remaining[len(take) :].lstrip()
                 if len(buffer) >= chunk_chars:
-                    chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer, "embedding": embedding})
+                    chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer, "embedding": embedding, "block_ids": block_ids})
                     buffer = buffer[-overlap_chars:] if overlap_chars else ""
             if len(buffer) >= int(chunk_chars * 0.75):
-                chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer, "embedding": embedding})
+                chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer, "embedding": embedding, "block_ids": block_ids})
                 buffer = buffer[-overlap_chars:] if overlap_chars else ""
         if buffer.strip() and (not chunks or chunks[-1]["content"] != buffer.strip()):
-            chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer.strip(), "embedding": embedding})
+            chunks.append({"title": title, "section": heading, "locator": locator, "content": buffer.strip(), "embedding": embedding, "block_ids": block_ids})
     return chunks
 
 
@@ -507,6 +514,7 @@ class RagEngine:
         self.coverage_path = self.root / "latest-coverage.yaml"
         self.events_path = self.root / "events.ndjson"
         self.queries_path = self.root / "query-events.ndjson"
+        self.document_ir_dir = self.root / "document-ir"
         self.db_path = self.root / "index.sqlite3"
         self.state = state
 
@@ -534,6 +542,7 @@ class RagEngine:
             "embedding_profile": {"model": None, "dimension": None},
         }
         engine = cls(workspace, state)
+        engine.document_ir_dir.mkdir(parents=True, exist_ok=True)
         write_yaml(engine.state_path, state)
         write_yaml(engine.sources_path, {"sources": []})
         atomic_text(engine.events_path, "")
@@ -552,7 +561,18 @@ class RagEngine:
         state_path = root / "state.yaml"
         if not state_path.is_file():
             raise RagError("RAG is not initialized; run `rag init` first")
-        return cls(workspace, read_data(state_path))
+        engine = cls(workspace, read_data(state_path))
+        engine.document_ir_dir.mkdir(parents=True, exist_ok=True)
+        engine._ensure_database_schema()
+        return engine
+
+    def _ensure_database_schema(self) -> None:
+        with sqlite3.connect(self.db_path) as connection:
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(chunks)")}
+            if "document_ir_json" not in columns:
+                connection.execute(
+                    "ALTER TABLE chunks ADD COLUMN document_ir_json TEXT NOT NULL DEFAULT '[]'"
+                )
 
     def _connect(self) -> sqlite3.Connection:
         connection = sqlite3.connect(self.db_path)
@@ -573,6 +593,7 @@ class RagEngine:
                     title TEXT NOT NULL,
                     section TEXT NOT NULL,
                     locator TEXT NOT NULL,
+                    document_ir_json TEXT NOT NULL,
                     origin TEXT NOT NULL,
                     source_uri TEXT NOT NULL,
                     authority TEXT NOT NULL,
@@ -613,7 +634,9 @@ class RagEngine:
             raise RagError("RAG source registry is invalid")
         return payload
 
-    def _normalize_source(self, item: Any, index: int, origin: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    def _normalize_source(
+        self, item: Any, index: int, origin: str, source_revision: int
+    ) -> tuple[dict[str, Any], list[dict[str, Any]], dict[str, Any]]:
         if not isinstance(item, dict):
             raise RagError(f"sources[{index}] must be a mapping")
         source_id = require_id(item.get("id"), f"sources[{index}].id")
@@ -626,6 +649,7 @@ class RagEngine:
         retrieved_at = None
         source_uri = ""
         sections: list[dict[str, Any]]
+        suffix = ".web"
         if origin == "web":
             source_uri = limited_text(item.get("url"), f"{source_id}.url", limit=4000)
             parsed = urlparse(source_uri)
@@ -653,6 +677,7 @@ class RagEngine:
             raw_path = limited_text(item.get("path"), f"{source_id}.path", limit=4000)
             path = Path(raw_path).expanduser().resolve()
             source_uri = str(path)
+            suffix = path.suffix.lower()
             ocr_mode = item.get("ocr", "auto")
             if ocr_mode not in {"auto", "required", "off"}:
                 raise RagError(f"{source_id}.ocr must be auto, required, or off")
@@ -664,6 +689,7 @@ class RagEngine:
             source_uri = f"inline:{source_id}"
             content = limited_text(item.get("text"), f"{source_id}.text", limit=MAX_INLINE_CHARS)
             sections = markdown_sections(content)
+            suffix = ".md"
             origin = "inline"
         elif "passages" in item:
             source_uri = limited_text(item.get("location", f"inline:{source_id}"), f"{source_id}.location", limit=4000)
@@ -671,6 +697,7 @@ class RagEngine:
             if not isinstance(passages, list) or not passages:
                 raise RagError(f"{source_id}.passages must be a non-empty list")
             sections = []
+            suffix = ".passages"
             for passage_index, passage in enumerate(passages):
                 if not isinstance(passage, dict):
                     raise RagError(f"{source_id}.passages[{passage_index}] must be a mapping")
@@ -684,9 +711,19 @@ class RagEngine:
                 )
         else:
             raise RagError(f"{source_id} must provide path, text, or passages")
+        if any(section.get("embedding") is not None for section in sections):
+            raise RagError("passage.embedding is not accepted during ingestion; ingest first, then use `rag attach-embeddings`")
+        document_ir = build_document_ir(
+            source_id=source_id,
+            source_revision=source_revision,
+            title=title,
+            uri=source_uri,
+            suffix=suffix,
+            sections=sections,
+        )
         chunk_chars = self.state["config"]["chunk_chars"]
         overlap_chars = self.state["config"]["overlap_chars"]
-        chunks = chunk_sections(sections, title, chunk_chars, overlap_chars)
+        chunks = chunk_sections(retrieval_sections(document_ir), title, chunk_chars, overlap_chars)
         if not chunks:
             raise RagError(f"{source_id} produced no indexable text")
         metadata = {
@@ -699,7 +736,7 @@ class RagEngine:
             "query": query,
             "retrieved_at": retrieved_at,
         }
-        return metadata, chunks
+        return metadata, chunks, document_ir
 
     def ingest(self, payload: Any, origin: str) -> dict[str, Any]:
         if origin not in ORIGINS:
@@ -708,24 +745,41 @@ class RagEngine:
             raise RagError("ingestion payload must contain a non-empty sources list")
         if len(payload["sources"]) > 100:
             raise RagError("an ingestion batch may contain at most 100 sources")
-        normalized = [self._normalize_source(item, index, origin) for index, item in enumerate(payload["sources"])]
-        ids = [metadata["id"] for metadata, _ in normalized]
-        if len(ids) != len(set(ids)):
-            raise RagError("source IDs must be unique within an ingestion batch")
         registry = self._source_registry()
         by_id = {item["id"]: item for item in registry["sources"]}
+        source_ids = [require_id(item.get("id"), f"sources[{index}].id") if isinstance(item, dict) else "" for index, item in enumerate(payload["sources"])]
+        if len(source_ids) != len(set(source_ids)):
+            raise RagError("source IDs must be unique within an ingestion batch")
+        normalized = [
+            self._normalize_source(
+                item,
+                index,
+                origin,
+                (by_id.get(source_ids[index], {}).get("active_revision", 0) + 1),
+            )
+            for index, item in enumerate(payload["sources"])
+        ]
+        ids = [metadata["id"] for metadata, _, _ in normalized]
         inserted = 0
         timestamp = iso()
         with self._connect() as connection:
-            for metadata, chunks in normalized:
+            for metadata, chunks, document_ir in normalized:
                 existing = by_id.get(metadata["id"])
                 source_revision = (existing.get("active_revision", 0) + 1) if existing else 1
+                if document_ir["source_revision"] != source_revision:
+                    raise RagError(f"Document IR revision disagrees with source revision for {metadata['id']}")
+                ir_filename = f"{metadata['id']}.r{source_revision}.json"
+                ir_path = self.document_ir_dir / ir_filename
+                atomic_text(ir_path, json.dumps(document_ir, ensure_ascii=False, indent=2) + "\n")
                 connection.execute("UPDATE chunks SET active = 0 WHERE source_id = ? AND active = 1", (metadata["id"],))
                 revision_record = {
                     "revision": source_revision,
                     "indexed_at": timestamp,
                     "chunks": len(chunks),
                     "sha256": hashlib.sha256("\n".join(chunk["content"] for chunk in chunks).encode("utf-8")).hexdigest(),
+                    "document_ir_path": ir_filename,
+                    "document_ir_sha256": document_ir["content_sha256"],
+                    "document_ir_blocks": len(document_ir["blocks"]),
                     **{key: value for key, value in metadata.items() if key != "id"},
                 }
                 if existing:
@@ -753,6 +807,7 @@ class RagEngine:
                         metadata["title"],
                         chunk["section"],
                         chunk["locator"],
+                        json.dumps(chunk.get("block_ids", []), separators=(",", ":")),
                         metadata["origin"],
                         metadata["uri"],
                         metadata["authority"],
@@ -763,7 +818,10 @@ class RagEngine:
                         hashlib.sha256(chunk["content"].encode("utf-8")).hexdigest(),
                         timestamp,
                     )
-                    connection.execute("INSERT INTO chunks VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", row)
+                    connection.execute(
+                        "INSERT INTO chunks (chunk_id, source_id, source_revision, active, chunk_index, title, section, locator, document_ir_json, origin, source_uri, authority, content, contextual_content, feature_json, embedding_json, content_sha256, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        row,
+                    )
                     connection.execute(
                         "INSERT INTO chunks_fts(chunk_id, source_id, title, section, content, contextual_content) VALUES (?, ?, ?, ?, ?, ?)",
                         (chunk_id, metadata["id"], metadata["title"], chunk["section"], chunk["content"], contextual),
@@ -773,6 +831,28 @@ class RagEngine:
         result = {"source_ids": ids, "sources": len(ids), "chunks": inserted, "origin": origin}
         self.commit("rag.sources_ingested", result)
         return result
+
+    def document_ir(self, source_id: str, revision: int | None = None) -> dict[str, Any]:
+        source_id = require_id(source_id, "source_id")
+        source = next((item for item in self._source_registry()["sources"] if item.get("id") == source_id), None)
+        if source is None:
+            raise RagError(f"Unknown RAG source: {source_id}")
+        selected_revision = revision or source["active_revision"]
+        record = next(
+            (item for item in source["revisions"] if item.get("revision") == selected_revision),
+            None,
+        )
+        if record is None or not record.get("document_ir_path"):
+            raise RagError(f"Source {source_id} revision {selected_revision} has no Document IR; reingest it")
+        path = self.document_ir_dir / record["document_ir_path"]
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+            require_valid_ir(document)
+        except (OSError, json.JSONDecodeError, DocumentIRError) as exc:
+            raise RagError(f"Invalid Document IR for {source_id} revision {selected_revision}: {exc}") from exc
+        if document["source_id"] != source_id or document["source_revision"] != selected_revision:
+            raise RagError("Document IR identity disagrees with the source registry")
+        return document
 
     def attach_embeddings(self, payload: Any) -> dict[str, Any]:
         if not isinstance(payload, dict) or not isinstance(payload.get("embeddings"), list) or not payload["embeddings"]:
@@ -919,6 +999,7 @@ class RagEngine:
                     "title": row["title"],
                     "section": row["section"],
                     "locator": row["locator"],
+                    "document_ir_block_ids": json.loads(row["document_ir_json"]),
                     "origin": row["origin"],
                     "authority": row["authority"],
                     "uri": row["source_uri"],
@@ -1158,6 +1239,7 @@ class RagEngine:
                         "source_id": row["source_id"],
                         "title": row["title"],
                         "locator": row["locator"],
+                        "document_ir_block_ids": json.loads(row["document_ir_json"]),
                         "uri": row["source_uri"],
                         "authority": row["authority"],
                     }
@@ -1440,6 +1522,7 @@ class RagEngine:
                 errors.append("invalid default_embedding_profile")
             registry = self._source_registry()
             ids: list[str] = []
+            active_ir_blocks: dict[str, set[str]] = {}
             for index, item in enumerate(registry["sources"]):
                 if not isinstance(item, dict):
                     errors.append(f"sources[{index}] is not a mapping")
@@ -1456,6 +1539,25 @@ class RagEngine:
                     errors.append(f"sources[{index}] has invalid active_revision")
                 if not isinstance(item.get("revisions"), list) or not item.get("revisions"):
                     errors.append(f"sources[{index}] has no revision history")
+                else:
+                    active_record = next(
+                        (
+                            record
+                            for record in item["revisions"]
+                            if record.get("revision") == item.get("active_revision")
+                        ),
+                        None,
+                    )
+                    # Workspaces indexed before Document IR remain valid. Reingestion
+                    # upgrades a source revision and makes it available to IR consumers.
+                    if active_record and active_record.get("document_ir_path"):
+                        try:
+                            document = self.document_ir(str(item.get("id")), item.get("active_revision"))
+                            active_ir_blocks[str(item.get("id"))] = {
+                                block["block_id"] for block in document["blocks"]
+                            }
+                        except (RagError, TypeError) as exc:
+                            errors.append(str(exc))
             if len(ids) != len(set(ids)):
                 errors.append("duplicate source IDs in registry")
             with self._connect() as connection:
@@ -1473,6 +1575,21 @@ class RagEngine:
                 fts_count = connection.execute("SELECT COUNT(*) FROM chunks_fts").fetchone()[0]
                 if chunk_count != fts_count:
                     errors.append(f"FTS row count {fts_count} does not match chunk count {chunk_count}")
+                for row in connection.execute(
+                    "SELECT chunk_id, source_id, document_ir_json FROM chunks WHERE active = 1"
+                ):
+                    try:
+                        block_ids = json.loads(row["document_ir_json"])
+                    except json.JSONDecodeError:
+                        errors.append(f"chunk {row['chunk_id']} has invalid Document IR linkage JSON")
+                        continue
+                    known_blocks = active_ir_blocks.get(row["source_id"])
+                    if known_blocks is None:
+                        continue
+                    if not isinstance(block_ids, list) or not block_ids:
+                        errors.append(f"chunk {row['chunk_id']} has no Document IR block linkage")
+                    elif not set(block_ids) <= known_blocks:
+                        errors.append(f"chunk {row['chunk_id']} references unknown Document IR blocks")
         except (OSError, sqlite3.Error, RagError, TypeError) as exc:
             errors.append(str(exc))
         if self.coverage_path.exists():
@@ -1500,6 +1617,10 @@ class RagEngine:
             "validation_errors": self.validate(),
             "rag_revision": self.revision,
             "sources": len(registry["sources"]),
+            "document_ir_sources": sum(
+                bool(source.get("revisions", [{}])[-1].get("document_ir_path"))
+                for source in registry["sources"]
+            ),
             "active_chunks": active_chunks,
             "embedded_chunks": embedded_chunks,
             "default_embedded_chunks": active_chunks,
@@ -1564,12 +1685,16 @@ def build_parser() -> argparse.ArgumentParser:
         "validate": "Validate retrieval state, source registry, index, and coverage",
         "render": "Regenerate the retrieval status view",
         "requirements": "Generate revision-bound coverage anchors for intake or research",
+        "document-ir": "Inspect one source revision through the shared structured Document IR",
     }
-    for action in ["status", "validate", "render", "requirements"]:
+    for action in ["status", "validate", "render", "requirements", "document-ir"]:
         command = sub.add_parser(action, help=simple_help[action])
         command.add_argument("workspace")
         if action == "requirements":
             command.add_argument("--context", choices=["auto", "intake", "research"], default="auto")
+        if action == "document-ir":
+            command.add_argument("source_id")
+            command.add_argument("--revision", type=int)
     payload_help = {
         "ingest": "Index local files, inline text, or structured passages",
         "ingest-web": "Index bounded provenance-complete Web evidence",
@@ -1609,6 +1734,8 @@ def run(argv: list[str] | None = None) -> None:
         print(json.dumps({"ok": True, "view": "RETRIEVAL.md"}))
     elif args.action == "requirements":
         print(yaml.safe_dump(engine.requirements(args.context), allow_unicode=True, sort_keys=False))
+    elif args.action == "document-ir":
+        print(json.dumps(engine.document_ir(args.source_id, args.revision), ensure_ascii=False, indent=2))
     elif args.action == "ingest":
         print(json.dumps({"ok": True, "rag_revision": engine.revision + 1, "result": engine.ingest(read_data(Path(args.input)), "local")}, ensure_ascii=False, indent=2))
     elif args.action == "ingest-web":
@@ -1635,7 +1762,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run(argv)
         return 0
-    except (RagError, AtomLearnError, OSError, sqlite3.Error, json.JSONDecodeError, yaml.YAMLError) as exc:
+    except (RagError, DocumentIRError, AtomLearnError, OSError, sqlite3.Error, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

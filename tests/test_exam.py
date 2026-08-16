@@ -478,3 +478,45 @@ def test_exam_process_fails_closed_when_question_boundaries_are_not_detectable()
     assert blocked.returncode == 2
     assert "no recognizable numbered question headings" in blocked.stderr
     assert output(invoke("exam", "status", path))["question_count"] == 0
+
+
+def test_exam_process_source_consumes_shared_document_ir_and_retains_block_provenance() -> None:
+    path = workspace("document-ir")
+    output(invoke("rag", "init", path))
+    source = {
+        "sources": [
+            {
+                "id": "past-paper-source",
+                "title": "Calculus past paper",
+                "authority": "official",
+                "text": (
+                    "# Past paper\n"
+                    "Question 1. Calculate a derivative from the derivative definition. [10 marks]\n"
+                    "Show every limit step.\n"
+                    "Question 2. Explain the geometric meaning of a derivative. [5 marks]"
+                ),
+            }
+        ]
+    }
+    output(invoke("rag", "ingest", path, "--input", payload(path, "rag-source.yaml", source)))
+
+    processed = output(
+        invoke(
+            "exam",
+            "process-source",
+            path,
+            "--source-id",
+            "past-paper-source",
+            "--paper-id",
+            "paper-ir-2025",
+            "--year",
+            2025,
+        )
+    )
+    assert processed["exam_revision"] == 1
+    assert processed["result"]["document_ir"]["source_revision"] == 1
+    assert processed["result"]["processing"][0]["question_count"] == 2
+    assert output(invoke("exam", "status", path))["question_count"] == 2
+    bank = yaml.safe_load((path / ".atomlearn" / "exam" / "bank.yaml").read_text(encoding="utf-8"))
+    assert all(item["source_locator"].startswith("document-ir blocks block-") for item in bank["questions"])
+    assert output(invoke("exam", "validate", path))["ok"] is True

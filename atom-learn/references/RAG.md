@@ -56,13 +56,13 @@ sources:
 python <SKILL_DIR>/scripts/atomlearn.py rag ingest <workspace> --input <sources.yaml>
 ```
 
-Supported local formats are TXT, Markdown, RST, HTML, JSON, YAML, CSV, PDF, and DOCX. HTML headings, lists, and tables retain structure. DOCX tables remain separate locatable sections. PDF extraction preserves pages, detected formulas, and tables when `pdfplumber` is installed. Image-only pages use a `.pdf.ocr.txt`/`.ocr.txt` sidecar first, then optional PyMuPDF plus Tesseract OCR; set `ocr: required` to fail unless every empty page is recovered. Do not copy private materials into the Skill installation or repository; the runtime index belongs under the learner workspace's ignored `.atomlearn/rag/` directory.
+Supported local formats are TXT, Markdown, RST, HTML, JSON, YAML, CSV, PDF, and DOCX. Every new source revision first becomes the shared layout-preserving [Document IR](DOCUMENT_IR.md), whose stable block IDs are retained by retrieval chunks. HTML headings, lists, and tables retain structure. DOCX tables remain separate locatable sections. PDF extraction preserves pages, detected formulas, and tables when `pdfplumber` is installed. Image-only pages use a `.pdf.ocr.txt`/`.ocr.txt` sidecar first, then optional PyMuPDF plus Tesseract OCR; set `ocr: required` to fail unless every empty page is recovered. Do not copy private materials into the Skill installation or repository; the runtime index and IR belong under the learner workspace's ignored `.atomlearn/rag/` directory.
 
 For past papers and question banks, use one stable source ID per paper or collection and retain page/question locators. Keep full stems and marking schemes in this private source layer; pass only concise summaries and locators into the exam subsystem described in [EXAM_PREPARATION.md](EXAM_PREPARATION.md).
 
 For knowledge-lineage curation, retrieve evidence for the proposed relationship rather than only each Atom in isolation. Search for the source concept, target concept, relation type, and counterexamples or scope limits. A semantic relation above `0.7` confidence must cite a registered course or RAG source locator. Retrieval rank is candidate relevance, not relation confidence; see [KNOWLEDGE_LINEAGE.md](KNOWLEDGE_LINEAGE.md).
 
-The index creates contextual chunks from document title, section, locator, and content. Re-ingesting the same source ID creates a new immutable source revision and deactivates older chunks without losing their audit record. Pass `--expected-rag-revision <revision>` on ingestion, embedding, and coverage mutations when another process may share the workspace.
+The index creates contextual chunks from document title, section, locator, content, and owning Document IR blocks. Re-ingesting the same source ID creates a new immutable source and IR revision and deactivates older chunks without losing their audit record. Inspect either revision with `rag document-ir <workspace> <source-id> [--revision N]`. Pass `--expected-rag-revision <revision>` on ingestion, embedding, and coverage mutations when another process may share the workspace.
 
 ## Retrieve and rerank
 
@@ -92,7 +92,7 @@ The runtime fuses candidates and applies `atomlearn/deterministic-reranker-v1`, 
 - Do independent sources agree, conflict, or cover different conditions?
 - Is the locator precise enough for the learner to verify?
 
-Do not infer support from RRF or reranker scores; they rank candidates and are not calibrated truth probabilities. If results are empty or indirect, issue a focused corrective search.
+Each result includes `document_ir_block_ids` so an accepted chunk can be traced back to parsed source structure. Do not infer support from RRF or reranker scores; they rank candidates and are not calibrated truth probabilities. If results are empty or indirect, issue a focused corrective search.
 
 For exam mapping, retrieve separately for the tested concept, required solution steps, hidden prerequisites, and marking-scheme expectations. A lexical match between a question and an Atom title is not sufficient evidence for a mapping.
 
@@ -205,6 +205,7 @@ Supply the same `embedding_model` identifier and a compatible `query_embedding` 
 ## Handle source updates and privacy
 
 - Keep stable source IDs across editions or updated webpages; re-ingest to create a source revision.
+- Sources indexed before Document IR remain searchable; reingest them before using the IR, exam-source, or research-source commands.
 - Use new source IDs for meaningfully different works.
 - Keep secrets and authorization headers out of manifests.
 - Keep full private material in the learner workspace only.

@@ -15,8 +15,8 @@
 
 ```mermaid
 flowchart LR
-    A["Past papers / question bank"] --> B["Private source + RAG index"]
-    B --> C["Automatic question splitting"]
+    A["Past papers / question bank"] --> B["Private source + shared Document IR"]
+    B --> C["Block-provenance question splitting"]
     C --> K["Answer and marking association"]
     C --> D["Reviewable knowledge-point and Atom mapping"]
     C --> E["Five-factor difficulty rubric"]
@@ -55,7 +55,7 @@ flowchart LR
 
 映射权重总和必须为 `1.0`。缺失的 Atom 映射保留为 coverage gap，不能通过猜测强行补齐。
 
-`exam process` 接受提取后的题目、答案和评分细则文本或路径，识别 `Question 1`、`Q1`、`第 1 题` 和 `1.` 等稳定边界。它按题号建立关联、生成行号 locator、推断分值/题型/认知层级，并根据 Atom 标题、ID、目标和易错点提出映射。低分或候选接近的映射进入 review queue；`exam review-mappings` 支持确认、纠正或明确取消映射。无法识别题目边界时失败关闭，不把一整篇文本误当成一道题。
+`exam process-source` 直接消费 RAG 中 active source revision 的共享 Document IR，识别稳定题号边界，并把 owning block ID 写入 locator；考试规范状态不会复制全文。`exam process` 继续接受分别提取的题目、答案和评分细则文本或路径，并按题号关联这些材料。两条路径都会推断分值/题型/认知层级，并根据 Atom 标题、ID、目标和易错点提出映射。低分或候选接近的映射进入 review queue；`exam review-mappings` 支持确认、纠正或明确取消映射。无法识别题目边界时失败关闭，不把一整篇文本误当成一道题。
 
 ## 5. 难度确定
 

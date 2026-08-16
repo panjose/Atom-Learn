@@ -10,17 +10,20 @@ The start wizard removes the accidental requirement that a first-time learner un
 flowchart LR
     A["One learner request"] --> B["JSON Schema validation"]
     B --> C["Course + intake + RAG initialization"]
-    C --> D["Source normalization and indexing"]
+    C --> D["Source normalization + Document IR indexing"]
     D --> E{"Sparse-input coverage passes?"}
     E -->|"no"| F["Structured harness Web Search tasks"]
     F --> G["Bounded evidence + verdicts"]
     G --> E
     E -->|"yes or complete sources"| H["Source-grounded plan task"]
-    H --> I["Plan import + traceability gate"]
-    I --> J["Ready for first Atom"]
+    H --> I["Deterministic plan preview + validation"]
+    I --> K{"Learner confirms phase?"}
+    K -->|"yes"| L["Plan import + traceability gate"]
+    L --> M{"Learner confirms first Atom?"}
+    M -->|"yes"| J["Activate exactly one first Atom"]
 ```
 
-The wizard calls the existing subsystem engines directly. Course, intake, and RAG files remain canonical. Its small `.atomlearn/start.yaml` checkpoint contains orchestration stage and task summaries only, so interruption recovery does not require replaying mutations.
+The wizard calls the existing subsystem engines directly. Course, intake, and RAG files remain canonical. Its `.atomlearn/start.yaml` checkpoint contains the orchestration stage and exact current typed action, so interruption recovery replays work without replaying mutations.
 
 ## Design choices
 
@@ -31,12 +34,14 @@ The wizard calls the existing subsystem engines directly. Course, intake, and RA
 - Outline strings become stable coverage IDs and a locatable inline outline source.
 - Topic discovery sources are registered from provenance-checked Web evidence.
 - The wizard does not fabricate a semantic course DAG. It returns an explicit harness plan task, then validates and imports the result through the canonical plan engine.
-- The same command handles initial capture, corrective retrieval rounds, and final plan submission.
+- Typed action and submission JSON Schemas bind harness work to action ID, wizard revision, and idempotency key. Stale submissions fail closed.
+- The default console is bilingual and human-readable; `--json` exposes the complete harness protocol.
+- The same command handles initial capture, corrective retrieval rounds, plan preview, phase confirmation, and first-Atom confirmation.
 
 ## Safety and consistency
 
-Schema validation occurs before filesystem mutation. Existing manual workspaces are not converted implicitly. Coverage and plan imports retain their own revision and evidence gates. Private material is never copied into Skill assets or wizard checkpoints. All generated views are derived and may be regenerated from canonical state.
+Schema validation occurs before filesystem mutation. Existing manual workspaces are not converted implicitly. Coverage and plan imports retain their own revision and evidence gates. A plan preview does not import Atoms, and importing a confirmed plan does not activate its first Atom until a second confirmation. Private material is never copied into Skill assets or wizard checkpoints. All generated views are derived and may be regenerated from canonical state.
 
 ## Verification
 
-Automated tests cover the shortest topic path, one-payload source initialization, resumable plan import, schema rejection before mutation, and schema printing. Subsystem RAG tests separately cover correction rounds and candidate-bound evidence.
+Automated tests cover the shortest topic path, bilingual console, explicit assumptions and clarification, one-payload source initialization, exact action replay, typed plan/confirmation/activation submissions, stale-result rejection, schema rejection before mutation, and schema printing. Subsystem RAG tests separately cover correction rounds and candidate-bound evidence.

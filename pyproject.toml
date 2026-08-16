@@ -24,8 +24,10 @@ package-dir = {"" = "atom-learn/scripts"}
 py-modules = [
   "atomlearn",
   "wizard",
+  "workflow",
   "intake",
   "rag",
+  "document_ir",
   "adaptation",
   "evolution",
   "research",

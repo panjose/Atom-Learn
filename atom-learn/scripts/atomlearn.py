@@ -2972,11 +2972,12 @@ def run(args: argparse.Namespace) -> None:
     if args.command == "start":
         from intake import IntakeError
         from rag import RagError
+        from workflow import WorkflowError
         from wizard import WizardError, run as run_wizard
 
         try:
             run_wizard(["--help"] if args.start_help else args.start_args)
-        except (WizardError, IntakeError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+        except (WizardError, WorkflowError, IntakeError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
     if args.command == "lineage":

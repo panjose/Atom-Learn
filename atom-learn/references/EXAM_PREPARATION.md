@@ -29,8 +29,8 @@ Keep exam revision independent from course, RAG, and adaptation revisions. Impor
 Accept PDF, DOCX, text, Markdown, image-derived text, or a user-created structured question list. For document inputs:
 
 1. initialize RAG and ingest the source in the learner workspace;
-2. retain a stable `source_id` and per-question locator;
-3. use structure-aware extraction and OCR supplied by the harness when the document is scanned;
+2. inspect the shared [Document IR](DOCUMENT_IR.md) when structure or OCR quality matters;
+3. retain a stable `source_id`, source revision, IR block identity, and per-question locator;
 4. retrieve the relevant marking scheme, syllabus, or solution source when available;
 5. use corrective Web Search only for missing official context, then ingest bounded evidence with provenance.
 
@@ -44,6 +44,7 @@ Read [EXAM_SCHEMA.md](EXAM_SCHEMA.md). For extracted question/answer/marking doc
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py exam init <workspace> --title <title> [--target-date YYYY-MM-DD]
+python <SKILL_DIR>/scripts/atomlearn.py exam process-source <workspace> --source-id <source-id> --paper-id <paper-id> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam process <workspace> --input <exam-process.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam review-mappings <workspace> --input <exam-mapping-review.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-import.yaml> --expected-exam-revision <revision>
@@ -57,7 +58,7 @@ For every question, record:
 - one or more knowledge-point mappings whose weights total `1.0`;
 - an existing Atom ID when the course graph covers the point, or `null` when it does not.
 
-The processor automatically splits stable question numbers, associates matching answers and marking sections by number, derives locators, and proposes mappings/difficulty. Inspect its diagnostics and review queue. Use the same knowledge-point ID, label, and Atom mapping throughout the corpus. Do not force a weak mapping to obtain 100% coverage. Preserve it as an explicit coverage gap.
+`process-source` is the preferred path for an indexed paper: it consumes the active shared Document IR, preserves owning block IDs in each question locator, and does not create another full-text copy. `process` remains available when question, answer, and marking artifacts must be supplied together. Both paths automatically split stable question numbers, derive locators, and propose mappings/difficulty; `process` also associates matching answer and marking sections by number. Inspect diagnostics and the review queue. Use the same knowledge-point ID, label, and Atom mapping throughout the corpus. Do not force a weak mapping to obtain 100% coverage. Preserve it as an explicit coverage gap.
 
 ## Determine difficulty
 

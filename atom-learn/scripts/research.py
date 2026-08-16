@@ -29,6 +29,7 @@ from atomlearn import (
     unique,
     write_yaml,
 )
+from rag import RagEngine, RagError
 
 
 PAPER_STATUSES = {
@@ -539,6 +540,31 @@ class ResearchEngine:
             "imported_paper_ids": imported,
             "deduplicated": deduplicated,
             "total_papers": len(self.papers),
+        }
+
+    def attach_source(self, paper_id: str, source_id: str) -> dict[str, Any]:
+        """Bind a paper to the active shared Document IR without copying full text."""
+        paper_id = self.state.get("paper_aliases", {}).get(paper_id, paper_id)
+        paper = self.papers.get(paper_id)
+        if paper is None:
+            raise ResearchError(f"Paper does not exist: {paper_id}")
+        document = RagEngine.load(str(self.workspace.root)).document_ir(source_id)
+        paper["locator"] = f"document-ir:{source_id}@r{document['source_revision']}"
+        verification = paper.setdefault("metadata_verification", {"status": "unverified", "checks": {}})
+        checks = verification.setdefault("checks", {})
+        checks["document_ir"] = {
+            "source_id": source_id,
+            "source_revision": document["source_revision"],
+            "content_sha256": document["content_sha256"],
+            "block_count": len(document["blocks"]),
+        }
+        return {
+            "paper_id": paper_id,
+            "source_id": source_id,
+            "source_revision": document["source_revision"],
+            "content_sha256": document["content_sha256"],
+            "block_count": len(document["blocks"]),
+            "copied_full_text": False,
         }
 
     def _normalize_paper(self, raw: dict[str, Any], existing: dict[str, Any] | None) -> dict[str, Any]:
@@ -1298,6 +1324,11 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--timeout", type=float, default=15.0)
     fetch.add_argument("--mailto", default="")
     add_revision_argument(fetch)
+    attach = sub.add_parser("attach-source", help="Bind a paper to an indexed source through shared Document IR")
+    attach.add_argument("workspace")
+    attach.add_argument("paper_id")
+    attach.add_argument("--source-id", required=True)
+    add_revision_argument(attach)
     mutation_help = {
         "activate": "Activate one eligible paper for critical reading",
         "complete": "Mark the Active Paper read after its critical-note guard passes",
@@ -1377,6 +1408,9 @@ def run(argv: list[str] | None = None) -> None:
     elif args.action == "fetch-metadata":
         result = engine.fetch_metadata(args.provider, args.timeout, args.mailto)
         event_type = "research.metadata_fetched"
+    elif args.action == "attach-source":
+        result = engine.attach_source(args.paper_id, args.source_id)
+        event_type = "research.source_attached"
     elif args.action == "activate":
         result = engine.activate(args.paper_id)
         event_type = "research.paper_activated"
@@ -1420,7 +1454,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run(argv)
         return 0
-    except (ResearchError, AtomLearnError) as exc:
+    except (ResearchError, RagError, AtomLearnError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

@@ -95,11 +95,13 @@ atomlearn study withdraw study-transfer-pilot --confirmed --expected-study-revis
 
 AtomLearn supports three primary input modes: `sources` for complete textbooks or knowledge bases, `outline` for a syllabus or user-created structure, and `topic` when the user supplies only a field keyword, concept, skill, or name. All three produce the same source-traceable Knowledge Atom DAG, but use different discovery and atomization strategies.
 
-The normal first-use path is the resumable `start` wizard. Topic-only users can provide one phrase; source and outline users provide one JSON/YAML document validated by the public JSON Schema. The wizard creates course, intake, and RAG state, indexes supplied content, returns structured Web Search work when coverage is incomplete, and later accepts the generated course plan through the same command.
+The normal first-use path is the resumable `start` wizard. Topic-only users can provide one phrase; for source and outline requests, the harness translates the learner's request into the public start schema. Core returns revision-bound typed actions for clarification, Web Search, coverage, planning, phase confirmation, and first-Atom activation. The learner never edits intermediate YAML, interrupted runs replay the exact current action, and stale submissions cannot mutate newer state.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py start courses/causal --topic "causal inference"
 python atom-learn/scripts/atomlearn.py start courses/calculus --input atom-learn/assets/templates/start-sources.yaml
+python atom-learn/scripts/atomlearn.py start courses/calculus --json
+python atom-learn/scripts/atomlearn.py start courses/calculus --submission workflow-submission.json --json
 python atom-learn/scripts/atomlearn.py start courses/calculus --print-schema
 python atom-learn/scripts/atomlearn.py intake init courses/calculus --input intake.yaml
 python atom-learn/scripts/atomlearn.py intake guidance courses/calculus
@@ -108,15 +110,16 @@ python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input cour
 python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expected-intake-revision 1
 ```
 
-Complete-source mode inventories and reconciles materials; outline mode treats outline items as coverage anchors rather than final Atom boundaries; topic mode performs term disambiguation and authoritative source discovery without asking the learner to invent a syllabus. Intake completion verifies that every non-archived Atom has a source locator. Unified starter payloads are under `atom-learn/assets/templates/start-*.yaml`, and the machine-readable contract is [start.schema.json](atom-learn/assets/schemas/start.schema.json). See [Unified Start Wizard](atom-learn/references/START_WIZARD.md) and [Course Intake Workflows](atom-learn/references/COURSE_INTAKE.md).
+Complete-source mode inventories and reconciles materials; outline mode treats outline items as coverage anchors rather than final Atom boundaries; topic mode performs term disambiguation, records assumptions, and discovers authoritative sources without asking the learner to invent a syllabus. A proposed plan is validated before phase confirmation, and the first eligible Atom is shown before it is activated. Intake completion verifies that every non-archived Atom has a source locator. Unified starter payloads are under `atom-learn/assets/templates/start-*.yaml`, and the machine-readable contracts are [start.schema.json](atom-learn/assets/schemas/start.schema.json) plus the typed action/submission schemas. See [Unified Start Wizard](atom-learn/references/START_WIZARD.md), [Typed Workflow Actions](atom-learn/references/WORKFLOW_ACTIONS.md), and [Course Intake Workflows](atom-learn/references/COURSE_INTAKE.md).
 
 ## RAG and Corrective Web Search
 
-AtomLearn persists a provider-neutral RAG index inside each learner workspace. It preserves HTML and DOCX structure, PDF tables and formulas, and locatable OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval fuses SQLite FTS5 BM25, a default local multilingual hash embedding, and optional provider embeddings, then applies a testable deterministic reranker. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
+AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. It preserves HTML and DOCX structure, PDF tables and formulas, and locatable OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns owning IR block IDs, fuses SQLite FTS5 BM25, a default local multilingual hash embedding, and optional provider embeddings, then applies a testable deterministic reranker. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus
 python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sources.yaml
+python atom-learn/scripts/atomlearn.py rag document-ir courses/calculus calculus-text
 python atom-learn/scripts/atomlearn.py rag search courses/calculus --input query.yaml
 python atom-learn/scripts/atomlearn.py rag requirements courses/calculus
 python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input coverage.yaml
@@ -124,7 +127,7 @@ python atom-learn/scripts/atomlearn.py rag correct courses/calculus --input rag-
 python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag-evaluation.yaml
 ```
 
-`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Without all five thresholds it returns `quality_gate: report_only`; a pass/fail decision is never inferred from permissive defaults. Outline and topic intake cannot become planning-ready until every mandatory anchor has explicit support for the current intake revision. See [Retrieval and Corrective Web Search](atom-learn/references/RAG.md) and [RAG Design](docs/RAG_DESIGN.md).
+`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Without all five thresholds it returns `quality_gate: report_only`; a pass/fail decision is never inferred from permissive defaults. Outline and topic intake cannot become planning-ready until every mandatory anchor has explicit support for the current intake revision. See [Shared Document IR](atom-learn/references/DOCUMENT_IR.md), [Retrieval and Corrective Web Search](atom-learn/references/RAG.md), and [RAG Design](docs/RAG_DESIGN.md).
 
 Research-field discovery uses the same gate with revision-bound anchors for the research question, surveys, method families, evaluations/datasets, and critique/replication evidence. Use `rag requirements --context research` when building a paper-oriented field map.
 
@@ -192,11 +195,12 @@ python atom-learn/scripts/atomlearn.py research init courses/agent-research --fi
 python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
 python atom-learn/scripts/atomlearn.py research reconcile-metadata courses/agent-research --input research-metadata.yaml --expected-research-revision 1
 python atom-learn/scripts/atomlearn.py research fetch-metadata courses/agent-research --provider crossref --expected-research-revision 2
+python atom-learn/scripts/atomlearn.py research attach-source courses/agent-research paper.field.survey --source-id survey-source --expected-research-revision 3
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. Metadata conflicts and unresolved external references remain auditable; a synthesized single-source theme never masquerades as consensus. It does not store complete paper text or claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
+Research mode keeps at most one Active Paper, blocks unread paper prerequisites, surfaces missing Knowledge Atoms, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. An indexed paper can be attached to its shared Document IR revision and hash without copying full text into research state. Metadata conflicts and unresolved external references remain auditable; a synthesized single-source theme never masquerades as consensus. It does not claim novelty without a current literature search. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md).
 
 ## Exam Analysis and Targeted Preparation
 
@@ -204,6 +208,7 @@ AtomLearn can turn supplied past papers, sample exams, mock exams, or question b
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
+python atom-learn/scripts/atomlearn.py exam process-source courses/calculus --source-id past-paper --paper-id paper-2026 --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
 python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
@@ -212,7 +217,7 @@ python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed -
 # For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-The targeted queue combines corpus emphasis, current learner Evidence, calibrated question difficulty, and prerequisite order to recommend `learn`, `remediate`, `review`, or `repair_prerequisites`. Full questions, answers, and marking schemes remain in the private source/RAG layer; canonical exam state keeps concise summaries, associations, and locators. Frequency describes only the supplied corpus and is never presented as a prediction of future questions. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md).
+`exam process-source` consumes the same Document IR used by RAG and retains exact block provenance while canonical exam state keeps only concise summaries, associations, and locators. The targeted queue combines corpus emphasis, current learner Evidence, calibrated question difficulty, and prerequisite order to recommend `learn`, `remediate`, `review`, or `repair_prerequisites`. Full questions, answers, and marking schemes remain in the private source/RAG layer. Frequency describes only the supplied corpus and is never presented as a prediction of future questions. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and [Exam Preparation Design](docs/EXAM_PREPARATION_DESIGN.md).
 
 ## Session-Based Self-Adaptation
 
@@ -290,7 +295,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

@@ -18,6 +18,7 @@ Canonical runtime data lives in `.atomlearn/rag/`:
 
 - `state.yaml`: schema, RAG revision, and chunking configuration;
 - `sources.yaml`: source metadata and immutable revision history;
+- `document-ir/<source-id>.r<revision>.json`: immutable structured blocks for each newly ingested source revision;
 - `index.sqlite3`: active and historical chunks plus the FTS5 index;
 - `events.ndjson`: append-only mutation audit;
 - `query-events.ndjson`: query ID, time, RAG revision, and returned chunk IDs;
@@ -57,7 +58,7 @@ passages:
 
 `authority` is one of `primary`, `official`, `peer_reviewed`, `textbook`, `user`, `secondary`, or `unknown`.
 
-HTML headings, lists, and tables, DOCX headings and tables, and PDF pages, formulas, and detected tables receive distinct locators. PDF OCR first reads a form-feed-separated `.pdf.ocr.txt` or `.ocr.txt` sidecar, then tries the optional PyMuPDF/Tesseract integration. `ocr: required` fails when any image-only page remains unrecovered.
+HTML headings, lists, and tables, DOCX headings and tables, and PDF pages, formulas, and detected tables become typed Document IR blocks with distinct locators. Tables have child cells, OCR pages use `ocr_text`, and every retrieval chunk stores its owning `document_ir_block_ids`. PDF OCR first reads a form-feed-separated `.pdf.ocr.txt` or `.ocr.txt` sidecar, then tries the optional PyMuPDF/Tesseract integration. `ocr: required` fails when any image-only page remains unrecovered. See [DOCUMENT_IR.md](DOCUMENT_IR.md) and its public JSON Schema.
 
 ## Web evidence ingestion
 
@@ -99,7 +100,7 @@ Constraints:
 - source filter: at most 100 IDs;
 - embedding: 1-8192 finite, nonzero numeric values.
 
-The result includes `search_id`, query variants, retrieval metadata, candidate text, provenance, RRF score, component ranks, deterministic reranker score and components, and the harness evidence contract. Every chunk has a default `atomlearn/multilingual-hash-v1` local embedding, so BM25, default-dense, and deterministic reranking work without an API key. Neither the RRF nor reranker score is a confidence probability.
+The result includes `search_id`, query variants, retrieval metadata, candidate text, provenance, `document_ir_block_ids`, RRF score, component ranks, deterministic reranker score and components, and the harness evidence contract. Every chunk has a default `atomlearn/multilingual-hash-v1` local embedding, so BM25, default-dense, and deterministic reranking work without an API key. Neither the RRF nor reranker score is a confidence probability.
 
 ## Corrective Web Search orchestration
 
@@ -185,6 +186,7 @@ python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace> [--context 
 python <SKILL_DIR>/scripts/atomlearn.py rag coverage <workspace> --input <coverage.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag correct <workspace> --input <rag-correction.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag evaluate <workspace> --input <rag-evaluation.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py rag document-ir <workspace> <source-id> [--revision <revision>]
 python <SKILL_DIR>/scripts/atomlearn.py rag status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag validate <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag render <workspace>

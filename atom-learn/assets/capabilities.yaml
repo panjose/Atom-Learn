@@ -190,15 +190,52 @@ capabilities:
 
   - id: documents.shared_ir_v1
     title: Shared layout-preserving Document IR for RAG exam and research ingestion
-    status: planned
-    default_mode: unavailable
-    public_claim: false
-    interfaces: []
-    implementation: []
-    verification: []
-    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    interfaces: [rag document-ir, exam process-source, research attach-source]
+    implementation:
+      - path: atom-learn/scripts/document_ir.py
+        symbol: "def build_document_ir"
+      - path: atom-learn/scripts/rag.py
+        symbol: "def document_ir"
+      - path: atom-learn/scripts/exam.py
+        symbol: "def process_source"
+      - path: atom-learn/scripts/research.py
+        symbol: "def attach_source"
+    verification:
+      - path: tests/test_rag.py
+        symbol: "test_pdf_and_docx_textbook_extractors_preserve_locators"
+      - path: tests/test_exam.py
+        symbol: "test_exam_process_source_consumes_shared_document_ir_and_retains_block_provenance"
+      - path: tests/test_research.py
+        symbol: "test_research_attach_source_binds_shared_document_ir_without_copying_full_text"
+    documentation: [README.md, README.zh-CN.md, atom-learn/references/DOCUMENT_IR.md, docs/V0_14_REMEDIATION_DESIGN.md]
     limitations:
-      - This is a v0.14 implementation target, not a current capability.
+      - PDF table detection is best effort and bounding boxes remain null unless an extractor supplies trustworthy coordinates.
+      - Sources indexed before Document IR remain searchable but must be reingested before exam or research IR consumers can attach them.
+
+  - id: orchestration.typed_start_v1
+    title: Revision-bound harness orchestration from one request to first Atom confirmation
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    interfaces: [start --json, start --submission, start --confirm, start --activate-first]
+    implementation:
+      - path: atom-learn/scripts/workflow.py
+        symbol: "def make_action"
+      - path: atom-learn/scripts/workflow.py
+        symbol: "def validate_submission"
+      - path: atom-learn/scripts/wizard.py
+        symbol: "def apply_submission"
+    verification:
+      - path: tests/test_wizard.py
+        symbol: "test_source_start_accepts_one_payload_then_resumes_with_the_plan"
+      - path: tests/test_wizard.py
+        symbol: "test_start_clarification_submission_reenters_evidence_discovery"
+    documentation: [README.md, README.zh-CN.md, atom-learn/references/START_WIZARD.md, atom-learn/references/WORKFLOW_ACTIONS.md]
+    limitations:
+      - Harness-native Web Search and model reasoning remain harness responsibilities; Core validates submissions and owns state but does not embed another agent.
 
   - id: rag.learned_local_scale_v1
     title: Learned local multilingual embeddings HNSW and cross-encoder reranking

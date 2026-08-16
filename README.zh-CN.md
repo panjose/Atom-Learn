@@ -95,11 +95,13 @@ atomlearn study withdraw study-transfer-pilot --confirmed --expected-study-revis
 
 AtomLearn 支持三种主要输入模式：`sources` 用于完整教材或知识库，`outline` 用于课程大纲或用户自建结构，`topic` 用于用户只提供领域关键词、概念、技能或名词的情况。三种模式最终都会生成同一套来源可追踪的 Knowledge Atom DAG，但采用不同的资料发现和原子化策略。
 
-首次使用通常应走可恢复的 `start` 向导。只提供主题的用户输入一个短语即可；资料和大纲用户只需提供一个经过公开 JSON Schema 校验的 JSON/YAML 文档。向导会创建课程、intake 与 RAG 状态，为资料建立索引，在覆盖不足时返回结构化 Web Search 工作，并在之后通过同一命令接收生成的课程计划。
+首次使用通常应走可恢复的 `start` 向导。只提供主题的用户输入一个短语即可；对于资料和大纲请求，由 harness 把学习者的一次请求转换为公开 start schema。Core 会为澄清、Web Search、覆盖判断、规划、阶段确认和首个 Atom 激活返回绑定 revision 的 typed action。学习者不需要编辑中间 YAML，中断后会原样重放当前 action，过期 submission 不能修改更新后的状态。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py start courses/causal --topic "causal inference"
 python atom-learn/scripts/atomlearn.py start courses/calculus --input atom-learn/assets/templates/start-sources.yaml
+python atom-learn/scripts/atomlearn.py start courses/calculus --json
+python atom-learn/scripts/atomlearn.py start courses/calculus --submission workflow-submission.json --json
 python atom-learn/scripts/atomlearn.py start courses/calculus --print-schema
 python atom-learn/scripts/atomlearn.py intake init courses/calculus --input intake.yaml
 python atom-learn/scripts/atomlearn.py intake guidance courses/calculus
@@ -108,15 +110,16 @@ python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input cour
 python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expected-intake-revision 1
 ```
 
-完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧和权威来源发现，不要求学习者自己编写教学大纲。Intake 完成检查会确保每个非归档 Atom 都有来源 locator。统一起始 payload 位于 `atom-learn/assets/templates/start-*.yaml`，机器可读契约是 [start.schema.json](atom-learn/assets/schemas/start.schema.json)。完整方法见[统一 Start 向导](atom-learn/references/START_WIZARD.md)和[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
+完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧、记录假设并发现权威来源，不要求学习者自己编写教学大纲。候选计划在阶段确认前先经过校验，首个可学 Atom 会在激活前单独展示。Intake 完成检查会确保每个非归档 Atom 都有来源 locator。统一起始 payload 位于 `atom-learn/assets/templates/start-*.yaml`，机器可读契约包括 [start.schema.json](atom-learn/assets/schemas/start.schema.json)和 typed action/submission schema。完整方法见[统一 Start 向导](atom-learn/references/START_WIZARD.md)、[Typed Workflow Actions](atom-learn/references/WORKFLOW_ACTIONS.md)和[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
 
 ## RAG 与纠错式 Web Search
 
-AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，它还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 OCR 输出。检索会融合 SQLite FTS5 BM25、默认本地多语言哈希 embedding 和可选供应商 embedding，再应用可测试的确定性重排器。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
+AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，它还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 OCR 输出。检索会返回所属 IR block ID，融合 SQLite FTS5 BM25、默认本地多语言哈希 embedding 和可选供应商 embedding，再应用可测试的确定性重排器。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus
 python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sources.yaml
+python atom-learn/scripts/atomlearn.py rag document-ir courses/calculus calculus-text
 python atom-learn/scripts/atomlearn.py rag search courses/calculus --input query.yaml
 python atom-learn/scripts/atomlearn.py rag requirements courses/calculus
 python atom-learn/scripts/atomlearn.py rag coverage courses/calculus --input coverage.yaml
@@ -124,7 +127,7 @@ python atom-learn/scripts/atomlearn.py rag correct courses/calculus --input rag-
 python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag-evaluation.yaml
 ```
 
-`rag correct` 会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率；如果没有完整提供五项阈值，它会返回 `quality_gate: report_only`，绝不会用宽松默认值推断通过。只有当前 intake revision 的所有强制锚点都得到显式支持，大纲和主题 intake 才能进入可规划状态。详见[检索与纠错式 Web Search](atom-learn/references/RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
+`rag correct` 会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率；如果没有完整提供五项阈值，它会返回 `quality_gate: report_only`，绝不会用宽松默认值推断通过。只有当前 intake revision 的所有强制锚点都得到显式支持，大纲和主题 intake 才能进入可规划状态。详见[共享 Document IR](atom-learn/references/DOCUMENT_IR.md)、[检索与纠错式 Web Search](atom-learn/references/RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
 
 科研领域发现使用同一质量门禁，并为研究问题、综述、方法谱系、评测/数据集以及批评/复现证据生成绑定 research revision 的锚点。构建论文导向的领域地图时使用 `rag requirements --context research`。
 
@@ -192,11 +195,12 @@ python atom-learn/scripts/atomlearn.py research init courses/agent-research --fi
 python atom-learn/scripts/atomlearn.py research import courses/agent-research --input examples/research-mini/plan.yaml --expected-research-revision 0
 python atom-learn/scripts/atomlearn.py research reconcile-metadata courses/agent-research --input research-metadata.yaml --expected-research-revision 1
 python atom-learn/scripts/atomlearn.py research fetch-metadata courses/agent-research --provider crossref --expected-research-revision 2
+python atom-learn/scripts/atomlearn.py research attach-source courses/agent-research paper.field.survey --source-id survey-source --expected-research-revision 3
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-研究模式最多保留一个 Active Paper，会阻止未完成论文先修的激活、提示缺失的 Knowledge Atom，并生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。元数据冲突与未解析外部引用保持可审计；单一来源的综合主题不会伪装成共识。它不会保存完整论文正文，也不会在缺少最新文献检索时宣称创新性。完整方法见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)。
+研究模式最多保留一个 Active Paper，会阻止未完成论文先修的激活、提示缺失的 Knowledge Atom，并生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。已建立索引的论文可以关联到共享 Document IR 的 revision 和 hash，而不会把全文复制到科研状态。元数据冲突与未解析外部引用保持可审计；单一来源的综合主题不会伪装成共识。它不会在缺少最新文献检索时宣称创新性。完整方法见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)。
 
 ## 试题分析与针对性备考
 
@@ -204,6 +208,7 @@ AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理�
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
+python atom-learn/scripts/atomlearn.py exam process-source courses/calculus --source-id past-paper --paper-id paper-2026 --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
 python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
@@ -212,7 +217,7 @@ python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed -
 # For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-针对性队列会综合语料重点、学习者当前 Evidence、校准后的题目难度和先修顺序，给出 `learn`、`remediate`、`review` 或 `repair_prerequisites` 建议。完整题目、答案与评分细则保留在私有资料/RAG 层；考试规范状态只保存简短摘要、关联和 locator。频率只描述用户提供的样本，绝不会被表述为未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)。
+`exam process-source` 会消费 RAG 共用的同一份 Document IR，并在考试规范状态只保存简短摘要、关联、locator 的同时保留准确 block provenance。针对性队列会综合语料重点、学习者当前 Evidence、校准后的题目难度和先修顺序，给出 `learn`、`remediate`、`review` 或 `repair_prerequisites` 建议。完整题目、答案与评分细则保留在私有资料/RAG 层。频率只描述用户提供的样本，绝不会被表述为未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[试题备考设计](docs/EXAM_PREPARATION_DESIGN.md)。
 
 ## 基于 Session 的自适应
 
@@ -290,7 +295,7 @@ atomlearn-core version
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 快速测试覆盖 CLI/帮助契约、打包、文档、Schema 和确定性辅助逻辑；集成测试覆盖完整的文件系统与子进程工作流。CI 会在 Ubuntu 与 Windows 上使用 Python 3.10、3.11、3.12 和 3.13 运行两层测试。测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

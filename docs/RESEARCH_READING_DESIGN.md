@@ -112,10 +112,12 @@ flowchart LR
 
 完整论文正文不会写入状态。工作区只保存书目信息、稳定 locator 和简短分析，降低版权、隐私和仓库体积风险。
 
+若论文已通过 RAG 建立索引，`research attach-source` 会把论文节点绑定到共享 Document IR 的 source revision、内容 hash 和 block count。该绑定提供跨检索与科研阅读一致的来源身份，但不会把 IR block text 复制到 research state。
+
 ## 8. 命令闭环
 
 ```text
-research init -> research import -> metadata reconcile/fetch -> research next -> research activate
+research init -> research import -> metadata reconcile/fetch -> optional Document IR attach -> research next -> research activate
               -> research note -> research complete -> research synthesize
 ```
 

@@ -24,8 +24,11 @@ Hierarchical and graph retrieval are valuable but should be selective. RAPTOR re
 
 ```mermaid
 flowchart LR
-    A["User sources, outline, or topic"] --> B["Contextual extraction and chunking"]
-    B --> C["Persistent SQLite corpus"]
+    A["User sources, outline, or topic"] --> B["Versioned layout-preserving Document IR"]
+    B --> N["Block-linked contextual chunking"]
+    N --> C["Persistent SQLite corpus"]
+    B --> X["Exam source processor"]
+    B --> P["Research source attachment"]
     Q["Question or coverage anchor"] --> D["Query variants"]
     C --> E["BM25"]
     C --> F["Default multilingual hash embedding"]
@@ -51,7 +54,7 @@ SQLite FTS5 provides a zero-service BM25 index that works inside a Skill workspa
 
 ### 3.2 Contextual, structure-aware chunks
 
-Extractors preserve page, line, paragraph, JSON-path, row, heading, table, formula, OCR-page, and web-section locators. HTML headings, lists, and tables and DOCX paragraphs and tables retain their structure. PDF extraction records text, detected formulas, and `pdfplumber` tables. For image-only pages it first uses an auditable OCR sidecar, then optionally invokes PyMuPDF, Pillow, and Tesseract. `ocr: required` prevents silent loss of any empty page. Each indexed chunk is prefixed with document title, section, and locator. Default chunks target roughly 700 tokens by using a 2,800-character bound and 300-character overlap.
+Extractors first normalize page, line, paragraph, JSON-path, row, heading, table, cell, formula, OCR-page, and web-section structure into the public Document IR. Blocks retain stable IDs, parent relationships, reading order, method, confidence, and page/locator metadata. HTML headings, lists, and tables and DOCX paragraphs and tables retain their structure. PDF extraction records text, detected formulas, and `pdfplumber` tables. For image-only pages it first uses an auditable OCR sidecar, then optionally invokes PyMuPDF, Pillow, and Tesseract. `ocr: required` prevents silent loss of any empty page. Each indexed chunk is prefixed with document title, section, and locator and stores its owning IR block IDs. Default chunks target roughly 700 tokens by using a 2,800-character bound and 300-character overlap.
 
 ### 3.3 Hybrid retrieval and fusion
 
@@ -85,7 +88,7 @@ Initial evaluation returns candidate bodies to the invoking harness for rerankin
 
 ## 4. Source lifecycle and provenance
 
-Re-ingesting a stable source ID creates a new source revision. Old chunks become inactive but remain available for audit. Active search never returns superseded chunks. Source registry entries record revision hashes, versions, origin, authority, URI, retrieval time, and chunk count.
+Re-ingesting a stable source ID creates a new source revision and immutable IR artifact. Old chunks become inactive but remain available for audit, and older IR revisions remain inspectable. Active search never returns superseded chunks. Source registry entries record revision hashes, IR path/hash/block count, versions, origin, authority, URI, retrieval time, and chunk count. Legacy sources remain searchable but require reingestion before an IR consumer can attach them.
 
 Web URLs containing credentials are rejected. Future or timezone-free retrieval dates are rejected. Passage and file bounds limit accidental corpus abuse. Query logs store queries and returned IDs, while source text stays inside the learner workspace and is excluded by repository `.gitignore` rules.
 

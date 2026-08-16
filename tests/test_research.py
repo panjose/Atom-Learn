@@ -457,3 +457,43 @@ def test_research_discloses_provisionally_skipped_concept_assumptions() -> None:
         )
     )
     assert activated["result"]["provisional_knowledge_atom_ids"] == ["calculus.derivative.definition"]
+
+
+def test_research_attach_source_binds_shared_document_ir_without_copying_full_text() -> None:
+    path = workspace("document-ir")
+    imported = import_plan(path)
+    output(invoke("rag", "init", path))
+    source = {
+        "sources": [
+            {
+                "id": "survey-source",
+                "title": "Field survey source",
+                "authority": "peer_reviewed",
+                "text": "# Reliability survey\nThe survey compares verification mechanisms across agent systems.",
+            }
+        ]
+    }
+    output(invoke("rag", "ingest", path, "--input", payload(path, "survey-source.yaml", source)))
+
+    attached = output(
+        invoke(
+            "research",
+            "attach-source",
+            path,
+            "paper.field.survey",
+            "--source-id",
+            "survey-source",
+            "--expected-research-revision",
+            imported["research_revision"],
+        )
+    )
+    assert attached["result"]["copied_full_text"] is False
+    assert attached["result"]["source_revision"] == 1
+    paper = next(
+        item for item in output(invoke("research", "list", path))
+        if item["id"] == "paper.field.survey"
+    )
+    assert paper["locator"] == "document-ir:survey-source@r1"
+    assert paper["metadata_verification"]["checks"]["document_ir"]["block_count"] >= 2
+    assert "full_text" not in paper
+    assert output(invoke("research", "validate", path))["ok"] is True

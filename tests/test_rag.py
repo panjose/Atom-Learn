@@ -60,7 +60,7 @@ def workspace(label: str) -> Path:
 
 
 def write_minimal_pdf(path: Path) -> None:
-    stream = b"BT /F1 12 Tf 72 720 Td (A derivative is an instantaneous rate of change.) Tj ET"
+    stream = b"BT /F1 12 Tf 72 720 Td (A derivative is an instantaneous rate of change. f(x)=x^2.) Tj ET"
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -127,6 +127,9 @@ def test_local_contextual_hybrid_search_and_source_revision() -> None:
     )
     ingested = output(invoke("rag", "ingest", path, "--input", first))
     assert ingested["result"]["chunks"] == 2
+    first_ir = output(invoke("rag", "document-ir", path, "os-text", "--revision", 1))
+    assert first_ir["kind"] == "atomlearn.document-ir"
+    assert first_ir["source_revision"] == 1
 
     query = payload(
         path,
@@ -167,11 +170,20 @@ def test_local_contextual_hybrid_search_and_source_revision() -> None:
     output(invoke("rag", "ingest", path, "--input", second))
     status = output(invoke("rag", "status", path))
     assert status["active_chunks"] == 1
+    assert status["document_ir_sources"] == 1
     assert status["default_embedded_chunks"] == 1
     assert status["default_embedding_profile"]["model"] == "atomlearn/multilingual-hash-v1"
     replacement_query = payload(path, "replacement-query.yaml", {"query": "lottery tickets", "top_k": 2})
     replaced = output(invoke("rag", "search", path, "--input", replacement_query))
     assert replaced["results"][0]["chunk_id"].startswith("os-text.r2.")
+    second_ir = output(invoke("rag", "document-ir", path, "os-text"))
+    assert second_ir["source_revision"] == 2
+    assert {item["block_id"] for item in first_ir["blocks"]}.isdisjoint(
+        {item["block_id"] for item in second_ir["blocks"]}
+    )
+    assert set(replaced["results"][0]["document_ir_block_ids"]) <= {
+        item["block_id"] for item in second_ir["blocks"]
+    }
     assert output(invoke("validate", path))["ok"] is True
 
 
@@ -270,6 +282,29 @@ def test_pdf_and_docx_textbook_extractors_preserve_locators() -> None:
     html_result = output(invoke("rag", "search", path, "--input", html_query))
     assert html_result["results"][0]["source_id"] == "optimization-html"
     assert html_result["results"][0]["section"] == "Optimization"
+
+    pdf_ir = output(invoke("rag", "document-ir", path, "calculus-pdf"))
+    assert {block["kind"] for block in pdf_ir["blocks"]} >= {"heading", "paragraph", "formula"}
+    assert all(block["page"] == 1 for block in pdf_ir["blocks"])
+    assert all(block["extraction_method"] == "pdf_text" for block in pdf_ir["blocks"])
+
+    docx_ir = output(invoke("rag", "document-ir", path, "calculus-docx"))
+    docx_by_id = {block["block_id"]: block for block in docx_ir["blocks"]}
+    docx_tables = [block for block in docx_ir["blocks"] if block["kind"] == "table"]
+    assert len(docx_tables) == 1
+    assert docx_by_id[docx_tables[0]["parent_id"]]["kind"] == "heading"
+    assert len([block for block in docx_ir["blocks"] if block["parent_id"] == docx_tables[0]["block_id"]]) == 4
+
+    html_ir = output(invoke("rag", "document-ir", path, "optimization-html"))
+    html_tables = [block for block in html_ir["blocks"] if block["kind"] == "table"]
+    assert len(html_tables) == 1
+    assert len([block for block in html_ir["blocks"] if block["parent_id"] == html_tables[0]["block_id"]]) == 4
+    assert set(table_result["results"][0]["document_ir_block_ids"]) <= {
+        block["block_id"] for block in docx_ir["blocks"]
+    }
+    assert set(html_result["results"][0]["document_ir_block_ids"]) <= {
+        block["block_id"] for block in html_ir["blocks"]
+    }
 
 
 def test_corrective_web_ingestion_requires_provenance_and_explicit_coverage_verdicts() -> None:
@@ -463,6 +498,12 @@ def test_ocr_sidecar_recovers_image_only_pdf_with_page_locator() -> None:
     query = payload(path, "scan-query.yaml", {"query": "finite tree edges vertices"})
     result = output(invoke("rag", "search", path, "--input", query))
     assert result["results"][0]["locator"] == "page 1 [OCR]"
+    document_ir = output(invoke("rag", "document-ir", path, "scan"))
+    ocr_blocks = [block for block in document_ir["blocks"] if block["kind"] == "ocr_text"]
+    assert len(ocr_blocks) == 1
+    assert ocr_blocks[0]["extraction_method"] == "ocr"
+    assert ocr_blocks[0]["confidence"] < 1.0
+    assert result["results"][0]["document_ir_block_ids"] == [ocr_blocks[0]["block_id"]]
 
 
 def test_correct_command_emits_web_tasks_then_closes_the_loop() -> None:

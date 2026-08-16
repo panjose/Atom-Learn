@@ -45,6 +45,8 @@ Import normalizes DOI forms and merges exact DOI/title duplicates before validat
 
 Treat a provisionally skipped concept as a disclosed assumption, returned under `provisional_knowledge_atom_ids`, rather than a proven competency. Deferred and otherwise unsatisfied concepts remain `knowledge_gap_atom_ids`. If paper comprehension exposes a skipped-concept gap, backtrack without losing the Active Paper.
 
+When a full paper or user knowledge-base item has already been indexed by RAG, bind the imported paper to the active shared [Document IR](DOCUMENT_IR.md) with `research attach-source`. Research state records only the source revision, content hash, block count, and locator; it does not copy the paper body. Reingest a legacy source first if it predates Document IR.
+
 If a required concept has a detailed expansion, complete its ordered children and parent integration check before treating the paper's Knowledge Atom dependency as mastered. Keep the Active Paper state separate from the one Active learning Atom.
 
 Do not use citation count as evidence quality. Mark why each paper is in scope and what role it plays.
@@ -95,6 +97,7 @@ python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field
 python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research reconcile-metadata <workspace> --input <research-metadata.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref
+python <SKILL_DIR>/scripts/atomlearn.py research attach-source <workspace> <paper-id> --source-id <source-id>
 python <SKILL_DIR>/scripts/atomlearn.py research status <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py research next <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py research activate <workspace> <paper-id>
