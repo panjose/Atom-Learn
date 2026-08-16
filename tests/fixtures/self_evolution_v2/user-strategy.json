@@ -11,7 +11,9 @@
     "feedback.style": {
       "value": "direct",
       "experiment_id": "exp-feedback-direct-001",
-      "activated_revision": 2
+      "activated_revision": 2,
+      "analysis_version": "strategy-bootstrap-v1",
+      "qualification_hash": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
     }
   }
 }

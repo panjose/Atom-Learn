@@ -1,6 +1,6 @@
 {
   "kind": "atomlearn.strategy-experiment",
-  "schema_version": 1,
+  "schema_version": 2,
   "revision": 1,
   "id": "exp-example-first-001",
   "scope": "user",
@@ -17,16 +17,31 @@
     "episode_types": ["new_learning"]
   },
   "metrics": {
-    "primary": ["first_transfer_score", "delayed_review_score"],
-    "guardrails": ["misconception_recurrence", "blocking_backtrack_rate"]
+    "primary_learning": ["near_transfer_score", "delayed_retention_score"],
+    "learning": ["near_transfer_score", "delayed_retention_score"],
+    "process": ["mastery_attempts", "blocking_backtrack_rate"],
+    "ux": ["override_rate"],
+    "guardrails": ["misconception_recurrence", "mastery_failure_rate"]
   },
-  "minimums": {
-    "distinct_atoms": 5,
-    "delayed_outcomes": 2
-  },
+  "minimums": {"outcomes_per_arm": 10, "distinct_episodes": 20, "delayed_outcomes_per_arm": 5},
   "thresholds": {
-    "minimum_quality_delta": 0.02,
-    "maximum_quality_degradation": 0.02,
+    "minimum_learning_effect": 0.02,
+    "maximum_learning_degradation": 0.02,
     "maximum_guardrail_delta": 0.05
+  },
+  "eligibility": {
+    "measurement_kinds": ["near_transfer", "delayed_retention"],
+    "quality_tiers": ["A", "B"],
+    "grader_ids": ["atomlearn/human-adjudication-v1"]
+  },
+  "analysis": {
+    "version": "strategy-bootstrap-v1",
+    "method": "stratified_bootstrap",
+    "seed": 20260816,
+    "bootstrap_resamples": 1000,
+    "confidence_level": 0.95,
+    "max_outcomes_per_arm": 100,
+    "stop_for_harm": true,
+    "stop_at_max_without_effect": true
   }
 }

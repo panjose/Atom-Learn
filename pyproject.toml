@@ -36,6 +36,8 @@ py-modules = [
   "user_profile",
   "effective_policy",
   "strategy",
+  "strategy_analysis",
+  "learning_study",
   "capsule",
   "measurement",
 ]

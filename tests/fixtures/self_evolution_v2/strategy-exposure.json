@@ -9,6 +9,7 @@
   "atom_ref": "atom-0123456789abcdef01234567",
   "episode_ref": "episode-0123456789abcdef01234567",
   "arm": "candidate",
+  "assigned_arm": "candidate",
   "assigned_value": "example_first",
   "chosen_value": "example_first",
   "context": "teaching",

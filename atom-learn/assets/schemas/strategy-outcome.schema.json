@@ -6,8 +6,9 @@
   "additionalProperties": false,
   "required": [
     "kind", "schema_version", "id", "exposure_id", "experiment_id",
-    "evidence_ref", "atom_ref", "evidence_kind", "result", "score",
-    "attempts", "delayed", "blocking_backtrack", "workspace_valid", "recorded_at"
+    "evidence_ref", "atom_ref", "episode_ref", "evidence_kind", "measurement_kind",
+    "quality_tier", "grader_id", "result", "score", "attempts", "delayed",
+    "retention_delay_days", "outcome_eligible", "blocking_backtrack", "workspace_valid", "recorded_at"
   ],
   "properties": {
     "kind": {"const": "atomlearn.strategy-outcome"},
@@ -17,6 +18,7 @@
     "experiment_id": {"type": "string", "pattern": "^exp-[A-Za-z0-9._-]{1,96}$"},
     "evidence_ref": {"type": "string", "pattern": "^ev-[A-Za-z0-9._:-]{1,96}$"},
     "atom_ref": {"type": "string", "pattern": "^atom-[a-f0-9]{24}$"},
+    "episode_ref": {"type": "string", "pattern": "^episode-[a-f0-9]{24}$"},
     "evidence_kind": {"type": "string", "minLength": 1, "maxLength": 64},
     "measurement_kind": {"enum": ["immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"]},
     "quality_tier": {"enum": ["A", "B", "C", "legacy"]},
@@ -25,6 +27,8 @@
     "score": {"type": "number", "minimum": 0, "maximum": 1},
     "attempts": {"type": "integer", "minimum": 1},
     "delayed": {"type": "boolean"},
+    "retention_delay_days": {"type": ["integer", "null"], "minimum": 1},
+    "outcome_eligible": {"type": "boolean"},
     "blocking_backtrack": {"type": "boolean"},
     "workspace_valid": {"type": "boolean"},
     "recorded_at": {"type": "string", "format": "date-time"}

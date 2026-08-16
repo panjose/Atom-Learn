@@ -69,13 +69,15 @@ Core `0.13.0` 新增只读兼容性 manifest 和确定性迁移规划。`atomlea
 
 跨课程个性化默认关闭，只有学习者明确运行 `atomlearn profile enable <workspace>` 后才启用。全局画像只包含白名单枚举信号，不自动导入旧 workspace 历史，并可在不删除审计记录的情况下停用、退役、导出或重置。`atomlearn policy effective|explain` 会合并当前轮、workspace、全局、策略和 Core 层，并给出逐值来源。详见[用户画像](atom-learn/references/USER_PROFILE.md)和[Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md)。
 
-教学策略实验需要通过 `atomlearn strategy enable-experiments` 再次独立选择加入。候选在实时使用前必须先经过 shadow；分组按 Atom episode 确定性生成；显式偏好会把该次 exposure 排除出比较；只有已评估且具备资格的 Evidence 才能成为 outcome。晋升必须具有可比层、延迟复习、质量提升并通过 guardrail；暂停会移除 overlay，但不会改写学习历史。详见[策略实验](atom-learn/references/STRATEGY_EXPERIMENTS.md)。
+教学策略实验需要通过 `atomlearn strategy enable-experiments` 再次独立选择加入。候选在实时使用前必须经过 shadow 和确定性重放；只有与 episode 匹配、预注册且达到 A/B 级的 Evidence 才能成为 outcome。学习、过程、UX 和 guardrail 指标始终分层报告。晋升至少需要每组 10 个可比 outcome、20 个 episode、每组 5 个延迟 outcome、固定种子的 95% 区间、所有主要延迟/迁移学习指标的区间下界超过最小效应，并且所有不良 guardrail 的区间上界不超过容忍度。小样本、宽区间、即时表现、速度或满意度都不能单独触发晋升。详见[策略实验](atom-learn/references/STRATEGY_EXPERIMENTS.md)。
 
 ## Evidence v2 与学习测量
 
 Evidence v2 不再把模型给出的数字直接当作掌握证明。每条新记录都携带测量题与 episode 身份、评分器/rubric/校准来源、独立性、本地答案哈希、从 Active Atom 派生出的必需维度分数、质量等级，以及相互独立的 mastery/strategy 资格。Core 内置的确定性精确选择和数值/单位评分器可以生成 A 级 Evidence；注册并经过校准的评分器、真正独立的双评或声明的人工裁决可以取得 B 级资格。未注册、未校准、不独立以及现在才提交的 legacy 分数只能用于反馈，不能独立让 Atom 达到 mastered，也不能进入策略 outcome。
 
 即时掌握、延迟保持、近迁移和远迁移共用一份版本化题库契约。保持与迁移题必须处于 held-out 且上下文隔离。开放题评分器版本需要使用有人工参考分数的版本化校准集，生成可复现的 MAE、偏差、一致率、弃答率、人工复核率、版本漂移、混淆统计和分层报告。独立的 benchmark 协议禁止把工程测试或评分校准宣传成学习增益；学习增益需要经过同意的对照研究以及延迟与迁移测量。详见[Evidence v2 与学习测量](atom-learn/references/MEASUREMENT.md)。
+
+真实学习效果记录需要另一份明确 opt-in。`atomlearn study` 会预注册对照条件、分配方式、缺失数据策略、即时/7 天/30 天/近迁移/远迁移测量和分层；只接受不透明引用与最小化本地观察；禁止原始答案和内容正文；绝不自动导出；撤回后会把所有保留记录排除出分析。仅有记录契约本身绝不会声称存在学习增益。详见[真实学习效果研究](atom-learn/references/LEARNING_EFFECT_STUDY.md)。
 
 ```powershell
 atomlearn measure registry
@@ -84,6 +86,9 @@ atomlearn measure validate-bank --input measurement-bank.yaml
 atomlearn measure calibrate --input calibration-set.yaml --output calibration-report.json
 atomlearn measure validate-protocol
 atomlearn migrate-evidence courses/calculus --confirmed --expected-revision 7
+atomlearn study enroll study-transfer-pilot --input enrollment.yaml
+atomlearn study status study-transfer-pilot
+atomlearn study withdraw study-transfer-pilot --confirmed --expected-study-revision 2
 ```
 
 ## 灵活课程输入
@@ -285,7 +290,7 @@ atomlearn-core version
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 快速测试覆盖 CLI/帮助契约、打包、文档、Schema 和确定性辅助逻辑；集成测试覆盖完整的文件系统与子进程工作流。CI 会在 Ubuntu 与 Windows 上使用 Python 3.10、3.11、3.12 和 3.13 运行两层测试。测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

@@ -183,7 +183,16 @@ def _user_strategy(data_root: Path, profile_id: str | None) -> tuple[list[dict[s
         return [], revision
     candidates = []
     for dimension, item in sorted(active.items()):
-        if isinstance(item, dict) and _valid_value(dimension, item.get("value")):
+        qualification_hash = item.get("qualification_hash") if isinstance(item, dict) else None
+        if (
+            isinstance(item, dict)
+            and item.get("analysis_version") == "strategy-bootstrap-v1"
+            and isinstance(qualification_hash, str)
+            and len(qualification_hash) == 71
+            and qualification_hash.startswith("sha256:")
+            and all(character in "0123456789abcdef" for character in qualification_hash[7:])
+            and _valid_value(dimension, item.get("value"))
+        ):
             candidates.append(
                 {
                     "dimension": dimension,

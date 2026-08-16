@@ -135,20 +135,40 @@ capabilities:
       - Adaptation changes presentation only and cannot weaken mastery, grounding, prerequisites, or safety.
 
   - id: evolution.strategy_experiments_v1
-    title: Opt-in shadow-first deterministic teaching-strategy experiments
-    status: experimental
+    title: Outcome-eligible uncertainty-gated teaching-strategy experiments
+    status: implemented
     default_mode: opt_in
     public_claim: true
-    interfaces: [strategy enable-experiments, strategy exposure, strategy record-outcome, strategy monitor]
+    interfaces: [strategy enable-experiments, strategy replay-shadow, strategy record-outcome, strategy monitor, strategy migrate-v2]
     implementation:
       - path: atom-learn/scripts/strategy.py
         symbol: "def record_outcome"
+      - path: atom-learn/scripts/strategy_analysis.py
+        symbol: "def analyze"
     verification:
       - path: tests/test_strategy.py
         symbol: "test_opt_in_shadow_replay_override_and_real_outcome_linkage"
+      - path: tests/test_strategy.py
+        symbol: "test_fixed_window_with_no_learning_effect_is_rejected"
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/STRATEGY_EXPERIMENTS.md]
     limitations:
-      - Current promotion logic lacks calibrated uncertainty intervals and minimum detectable effect checks.
+      - Operational within-user comparisons are not universal causal evidence and never substitute for a consented learning-effect study.
+
+  - id: learning.learning_effect_study_v1
+    title: Explicitly consented privacy-minimized local learning-effect study contract
+    status: implemented
+    default_mode: opt_in
+    public_claim: true
+    interfaces: [study enroll, study record, study status, study withdraw, study validate]
+    implementation:
+      - path: atom-learn/scripts/learning_study.py
+        symbol: "class LearningStudyEngine"
+    verification:
+      - path: tests/test_learning_study.py
+        symbol: "test_explicit_local_study_consent_minimization_and_withdrawal"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/LEARNING_EFFECT_STUDY.md]
+    limitations:
+      - The contract records local minimized observations but does not automatically aggregate, export, or establish a learning-gain claim.
 
   - id: release.signed_side_by_side_v1
     title: Legacy manifest v1 signed side-by-side update compatibility

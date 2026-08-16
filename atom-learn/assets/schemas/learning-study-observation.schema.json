@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/learning-study-observation.schema.json",
+  "title": "AtomLearn minimized learning-effect observation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "id", "study_id", "participant_ref", "episode_ref",
+    "assignment", "measurement_kind", "score", "missing_reason", "completed",
+    "duration_bucket", "prompt_count", "domain_bucket", "prior_knowledge_bucket",
+    "included_in_analysis", "recorded_at"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.learning-study-observation"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^obs-[a-f0-9]{24}$"},
+    "study_id": {"type": "string", "pattern": "^study-[A-Za-z0-9._-]{1,80}$"},
+    "participant_ref": {"type": "string", "pattern": "^participant-[a-f0-9]{24}$"},
+    "episode_ref": {"type": "string", "pattern": "^episode-[a-f0-9]{24}$"},
+    "assignment": {"enum": ["control", "candidate"]},
+    "measurement_kind": {"enum": [
+      "immediate_mastery", "delayed_retention_7d", "delayed_retention_30d",
+      "near_transfer", "far_transfer", "completion", "withdrawal", "total_time", "prompt_burden"
+    ]},
+    "score": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "missing_reason": {"type": ["string", "null"], "enum": [null, "not_due", "missed", "withdrawn", "technical_failure"]},
+    "completed": {"type": "boolean"},
+    "duration_bucket": {"enum": ["under_5m", "5_to_15m", "15_to_30m", "30_to_60m", "over_60m", "unknown"]},
+    "prompt_count": {"type": "integer", "minimum": 0, "maximum": 1000},
+    "domain_bucket": {"type": "string", "pattern": "^[A-Za-z0-9._-]{1,48}$"},
+    "prior_knowledge_bucket": {"enum": ["novice", "developing", "advanced", "unknown"]},
+    "ux": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["satisfaction", "burden"],
+      "properties": {
+        "satisfaction": {"type": "integer", "minimum": 1, "maximum": 5},
+        "burden": {"type": "integer", "minimum": 1, "maximum": 5}
+      }
+    },
+    "included_in_analysis": {"type": "boolean"},
+    "recorded_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"score": {"type": "null"}}, "required": ["score"]},
+      "then": {"properties": {"missing_reason": {"type": "string"}}},
+      "else": {"properties": {"missing_reason": {"type": "null"}}}
+    }
+  ]
+}

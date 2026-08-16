@@ -2745,6 +2745,9 @@ def build_parser() -> argparse.ArgumentParser:
     strategy_parser = sub.add_parser("strategy", help="Run opt-in, replayable teaching-strategy experiments", add_help=False)
     strategy_parser.add_argument("-h", "--help", action="store_true", dest="strategy_help")
     strategy_parser.add_argument("strategy_args", nargs=argparse.REMAINDER)
+    study_parser = sub.add_parser("study", help="Manage explicit privacy-safe real learning-effect studies", add_help=False)
+    study_parser.add_argument("-h", "--help", action="store_true", dest="study_help")
+    study_parser.add_argument("study_args", nargs=argparse.REMAINDER)
     measure_parser = sub.add_parser("measure", help="Grade and calibrate versioned learning measurements", add_help=False)
     measure_parser.add_argument("-h", "--help", action="store_true", dest="measure_help")
     measure_parser.add_argument("measure_args", nargs=argparse.REMAINDER)
@@ -2947,6 +2950,15 @@ def run(args: argparse.Namespace) -> None:
         try:
             run_strategy(["--help"] if args.strategy_help else args.strategy_args)
         except (StrategyError, UserProfileError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
+    if args.command == "study":
+        from learning_study import LearningStudyError, run as run_learning_study
+        from platform_state import PlatformStateError
+
+        try:
+            run_learning_study(["--help"] if args.study_help else args.study_args)
+        except (LearningStudyError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
     if args.command == "measure":

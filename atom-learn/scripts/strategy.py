@@ -9,15 +9,24 @@ import json
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import yaml
 from jsonschema import Draft202012Validator
 
-from atomlearn import iso, load_workspace
+from atomlearn import iso, load_workspace, parse_time
 from effective_policy import POLICY_DIMENSION_CONTEXTS, POLICY_GUIDANCE, POLICY_VALUES, effective_for_workspace
 from platform_state import CORE_ROOT, FileLock, PlatformStateError, atomic_text, atomic_yaml, core_version, resolve_user_data_root
 from user_profile import UserProfileEngine, UserProfileError, json_lines, load_yaml, serialize_json_lines
+from strategy_analysis import (
+    ANALYSIS_VERSION,
+    GUARDRAIL_METRICS,
+    LEARNING_METRICS,
+    PROCESS_METRICS,
+    UX_METRICS,
+    StrategyAnalysisError,
+    analyze,
+)
 
 
 STATE_SCHEMA = CORE_ROOT / "assets" / "schemas" / "user-strategy.schema.json"
@@ -34,9 +43,6 @@ EXPERIMENT_DIMENSIONS = {
 }
 EXPERIMENT_CONTEXTS = {"orientation", "teaching", "review", "exam"}
 EPISODE_TYPES = {"new_learning", "remediation", "review"}
-QUALITY_METRICS = {"first_transfer_score", "delayed_review_score"}
-PRIMARY_METRICS = QUALITY_METRICS | {"mastery_attempts"}
-GUARDRAIL_METRICS = {"misconception_recurrence", "blocking_backtrack_rate", "mastery_failure_rate"}
 EXPLICIT_SOURCES = {"current_turn", "workspace_explicit", "user_global_explicit"}
 
 
@@ -61,11 +67,6 @@ def _schema_errors(value: dict[str, Any], path: Path) -> list[str]:
 def _digest(prefix: str, *parts: str, length: int = 24) -> str:
     canonical = "\x1f".join(parts).encode("utf-8")
     return prefix + hashlib.sha256(canonical).hexdigest()[:length]
-
-
-def _mean(values: Iterable[float]) -> float | None:
-    items = list(values)
-    return round(sum(items) / len(items), 6) if items else None
 
 
 def _events(path: Path) -> list[dict[str, Any]]:
@@ -214,6 +215,7 @@ class StrategyEngine:
         details: dict[str, Any],
         *,
         experiment: dict[str, Any] | None = None,
+        experiments: list[dict[str, Any]] | None = None,
         exposures: list[dict[str, Any]] | None = None,
         outcomes: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
@@ -231,6 +233,16 @@ class StrategyEngine:
             if experiment_errors:
                 raise StrategyError("Refusing to write invalid experiment:\n- " + "\n- ".join(experiment_errors))
             atomic_yaml(self.experiments_dir / f"{experiment['id']}.yaml", experiment)
+        if experiments is not None:
+            all_errors: list[str] = []
+            for item in experiments:
+                all_errors.extend(
+                    f"{item.get('id')}: {error}" for error in _schema_errors(item, EXPERIMENT_SCHEMA)
+                )
+            if all_errors:
+                raise StrategyError("Refusing to write invalid experiments:\n- " + "\n- ".join(all_errors))
+            for item in experiments:
+                atomic_yaml(self.experiments_dir / f"{item['id']}.yaml", item)
         if exposures is not None:
             atomic_text(self.exposures_path, serialize_json_lines(exposures))
         if outcomes is not None:
@@ -241,6 +253,158 @@ class StrategyEngine:
         # State is the commit marker and is intentionally written last.
         atomic_yaml(self.state_path, value)
         return value
+
+    @staticmethod
+    def _v2_learning_metric(name: str) -> str | None:
+        return {
+            "first_transfer_score": "near_transfer_score",
+            "delayed_review_score": "delayed_retention_score",
+            "immediate_mastery_score": "immediate_mastery_score",
+            "near_transfer_score": "near_transfer_score",
+            "far_transfer_score": "far_transfer_score",
+            "delayed_retention_score": "delayed_retention_score",
+        }.get(name)
+
+    def _migrate_experiment_v2(self, experiment: dict[str, Any]) -> dict[str, Any]:
+        old_metrics = experiment.get("metrics", {})
+        old_primary = old_metrics.get("primary", []) if isinstance(old_metrics, dict) else []
+        learning = [
+            mapped for name in old_primary
+            if isinstance(name, str) and (mapped := self._v2_learning_metric(name)) is not None
+        ]
+        learning = list(dict.fromkeys(learning))
+        if not learning:
+            learning = ["near_transfer_score", "delayed_retention_score"]
+        primary = list(learning)
+        if not set(primary).intersection({"near_transfer_score", "far_transfer_score", "delayed_retention_score"}):
+            primary.append("delayed_retention_score")
+            learning.append("delayed_retention_score")
+        old_guards = old_metrics.get("guardrails", []) if isinstance(old_metrics, dict) else []
+        guardrails = [name for name in old_guards if name in GUARDRAIL_METRICS]
+        if "mastery_failure_rate" not in guardrails:
+            guardrails.append("mastery_failure_rate")
+        process = ["mastery_attempts"]
+        if "blocking_backtrack_rate" in old_guards:
+            process.append("blocking_backtrack_rate")
+        old_thresholds = experiment.get("thresholds", {})
+        migrated = dict(experiment)
+        migrated.update(
+            {
+                "schema_version": 2,
+                "revision": int(experiment.get("revision", 0)) + 1,
+                "status": "needs_review",
+                "shadow_mode": True,
+                "metrics": {
+                    "primary_learning": primary,
+                    "learning": learning,
+                    "process": process,
+                    "ux": ["override_rate"],
+                    "guardrails": guardrails,
+                },
+                "minimums": {
+                    "outcomes_per_arm": 10,
+                    "distinct_episodes": 20,
+                    "delayed_outcomes_per_arm": 5,
+                },
+                "thresholds": {
+                    "minimum_learning_effect": float(old_thresholds.get("minimum_quality_delta", 0.02)),
+                    "maximum_learning_degradation": float(old_thresholds.get("maximum_quality_degradation", 0.02)),
+                    "maximum_guardrail_delta": float(old_thresholds.get("maximum_guardrail_delta", 0.05)),
+                },
+                "eligibility": {
+                    "measurement_kinds": sorted({LEARNING_METRICS[name] for name in learning}),
+                    "quality_tiers": ["A", "B"],
+                    "grader_ids": ["atomlearn/migration-requires-new-qualified-outcomes-v1"],
+                },
+                "analysis": {
+                    "version": ANALYSIS_VERSION,
+                    "method": "stratified_bootstrap",
+                    "seed": int(hashlib.sha256(str(experiment.get("id", "")).encode("utf-8")).hexdigest()[:8], 16) % 2147483648,
+                    "bootstrap_resamples": 1000,
+                    "confidence_level": 0.95,
+                    "max_outcomes_per_arm": 100,
+                    "stop_for_harm": True,
+                    "stop_at_max_without_effect": True,
+                },
+            }
+        )
+        return migrated
+
+    def migrate_v2(self, confirmed: bool, expected: int | None = None) -> dict[str, Any]:
+        """Conservatively migrate v1 experiment records without qualifying old outcomes."""
+        if not confirmed:
+            raise StrategyError("Strategy v2 migration requires --confirmed")
+        with FileLock(self.lock_path):
+            self.expect_revision(expected)
+            experiments = self.experiments()
+            legacy_experiment_ids = {
+                str(item.get("id")) for item in experiments if item.get("schema_version") != 2
+            }
+            state = self.state()
+            legacy_active = any(
+                not isinstance(item, dict)
+                or item.get("analysis_version") != ANALYSIS_VERSION
+                or not isinstance(item.get("qualification_hash"), str)
+                for item in state.get("active", {}).values()
+            )
+            outcomes = self.outcomes()
+            legacy_outcomes = [item for item in outcomes if "outcome_eligible" not in item]
+            if not legacy_experiment_ids and not legacy_outcomes and not legacy_active:
+                return {
+                    "strategy_revision": state["revision"],
+                    "migrated_experiments": 0,
+                    "excluded_outcomes": 0,
+                    "already_current": True,
+                }
+            migrated_experiments = [
+                self._migrate_experiment_v2(item) if str(item.get("id")) in legacy_experiment_ids else item
+                for item in experiments
+            ]
+            exposure_by_id = {item.get("id"): item for item in self.exposures()}
+            migrated_outcomes: list[dict[str, Any]] = []
+            excluded_outcomes = 0
+            for item in outcomes:
+                value = dict(item)
+                if "outcome_eligible" not in value:
+                    exposure = exposure_by_id.get(value.get("exposure_id"), {})
+                    value.update(
+                        {
+                            "episode_ref": exposure.get("episode_ref"),
+                            "measurement_kind": "delayed_retention" if value.get("delayed") else "immediate_mastery",
+                            "quality_tier": "legacy",
+                            "grader_id": "atomlearn/migrated-unqualified-v1",
+                            "retention_delay_days": None,
+                            "outcome_eligible": False,
+                        }
+                    )
+                    excluded_outcomes += 1
+                migrated_outcomes.append(value)
+            errors: list[str] = []
+            for item in migrated_experiments:
+                errors.extend(f"experiment {item.get('id')}: {error}" for error in _schema_errors(item, EXPERIMENT_SCHEMA))
+            for item in migrated_outcomes:
+                errors.extend(f"outcome {item.get('id')}: {error}" for error in _schema_errors(item, OUTCOME_SCHEMA))
+            if errors:
+                raise StrategyError("Strategy v2 migration preview is invalid:\n- " + "\n- ".join(errors))
+            value = dict(state)
+            value["active"] = {}
+            committed = self._commit_locked(
+                value,
+                "strategy.v2_migrated",
+                {
+                    "migrated_experiments": len(legacy_experiment_ids),
+                    "excluded_outcomes": excluded_outcomes,
+                    "cleared_legacy_overlays": len(state.get("active", {})),
+                },
+                experiments=migrated_experiments,
+                outcomes=migrated_outcomes,
+            )
+            return {
+                "strategy_revision": committed["revision"],
+                "migrated_experiments": len(legacy_experiment_ids),
+                "excluded_outcomes": excluded_outcomes,
+                "already_current": False,
+            }
 
     def _set_enabled_locked(self, enabled: bool, expected: int | None) -> dict[str, Any]:
         self.expect_revision(expected)
@@ -278,9 +442,46 @@ class StrategyEngine:
         for context in contexts if isinstance(contexts, list) else []:
             if context not in POLICY_DIMENSION_CONTEXTS.get(str(dimension), set()):
                 errors.append(f"dimension {dimension!r} is not permitted in context {context!r}")
-        primary = experiment.get("metrics", {}).get("primary", []) if isinstance(experiment.get("metrics"), dict) else []
-        if not QUALITY_METRICS.intersection(primary):
-            errors.append("at least one quality metric is required; effort or speed alone cannot justify promotion")
+        metrics = experiment.get("metrics", {}) if isinstance(experiment.get("metrics"), dict) else {}
+        learning = metrics.get("learning", []) if isinstance(metrics.get("learning"), list) else []
+        primary = metrics.get("primary_learning", []) if isinstance(metrics.get("primary_learning"), list) else []
+        process = metrics.get("process", []) if isinstance(metrics.get("process"), list) else []
+        ux = metrics.get("ux", []) if isinstance(metrics.get("ux"), list) else []
+        guardrails = metrics.get("guardrails", []) if isinstance(metrics.get("guardrails"), list) else []
+        if not primary or not set(primary) <= set(learning):
+            errors.append("primary_learning must be a non-empty subset of the preregistered learning metrics")
+        if not set(primary).intersection({
+            "delayed_retention_score", "near_transfer_score", "far_transfer_score"
+        }):
+            errors.append("promotion requires a delayed-retention or transfer primary learning metric")
+        if set(learning) - set(LEARNING_METRICS):
+            errors.append("learning metrics contain an unsupported value")
+        if set(process) - PROCESS_METRICS:
+            errors.append("process metrics contain an unsupported value")
+        if set(ux) - UX_METRICS:
+            errors.append("UX metrics contain an unsupported value")
+        if set(guardrails) - GUARDRAIL_METRICS:
+            errors.append("guardrail metrics contain an unsupported value")
+        eligibility = experiment.get("eligibility", {})
+        if isinstance(eligibility, dict):
+            needed_kinds = {LEARNING_METRICS[name] for name in learning if name in LEARNING_METRICS}
+            measurement_kinds = (
+                eligibility.get("measurement_kinds", [])
+                if isinstance(eligibility.get("measurement_kinds"), list)
+                else []
+            )
+            if not needed_kinds <= set(measurement_kinds):
+                errors.append("measurement eligibility must cover every preregistered learning metric")
+        analysis = experiment.get("analysis", {})
+        minimums = experiment.get("minimums", {}) if isinstance(experiment.get("minimums"), dict) else {}
+        outcome_floor = minimums.get("outcomes_per_arm")
+        if (
+            isinstance(analysis, dict)
+            and isinstance(analysis.get("max_outcomes_per_arm"), int)
+            and isinstance(outcome_floor, int)
+            and analysis["max_outcomes_per_arm"] < outcome_floor
+        ):
+            errors.append("analysis window cannot be smaller than the per-arm sample floor")
         return errors
 
     def _workspace_reference_ids(self, workspace: Any) -> set[str]:
@@ -298,7 +499,7 @@ class StrategyEngine:
             experiment.update(
                 {
                     "kind": "atomlearn.strategy-experiment",
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "revision": 1,
                     "scope": "user",
                     "status": "candidate",
@@ -374,15 +575,63 @@ class StrategyEngine:
             shadows = [item for item in self.exposures() if item["experiment_id"] == experiment_id and item["status"] == "shadow"]
             if not shadows:
                 raise StrategyError("At least one replayable shadow exposure is required before live assignment")
+            replay = self._shadow_replay(experiment, shadows)
+            if replay["mismatch_count"]:
+                raise StrategyError("Shadow replay failed; repair immutable exposure records before live assignment")
             experiment["shadow_mode"] = False
             experiment["revision"] += 1
             committed = self._commit_locked(
                 self.state(),
                 "strategy.live_assignment_enabled",
-                {"experiment_id": experiment_id, "shadow_exposures": len(shadows)},
+                {
+                    "experiment_id": experiment_id,
+                    "shadow_exposures": len(shadows),
+                    "shadow_replay_hash": replay["replay_hash"],
+                },
                 experiment=experiment,
             )
             return {"strategy_revision": committed["revision"], "experiment": experiment}
+
+    def _shadow_replay(self, experiment: dict[str, Any], shadows: list[dict[str, Any]]) -> dict[str, Any]:
+        checks = []
+        for exposure in sorted(shadows, key=lambda item: item["id"]):
+            assignment_hash = hashlib.sha256(
+                f"{experiment['id']}|{exposure['atom_ref']}|{exposure['stratum']}".encode("utf-8")
+            ).digest()
+            expected_arm = "candidate" if assignment_hash[0] % 2 else "baseline"
+            expected_value = experiment[expected_arm]
+            checks.append(
+                {
+                    "exposure_id": exposure["id"],
+                    "expected_arm": expected_arm,
+                    "recorded_arm": exposure.get("assigned_arm", exposure.get("arm")),
+                    "expected_value": expected_value,
+                    "recorded_value": exposure.get("assigned_value"),
+                    "match": (
+                        exposure.get("assigned_arm", exposure.get("arm")) == expected_arm
+                        and exposure.get("assigned_value") == expected_value
+                    ),
+                }
+            )
+        canonical = json.dumps(checks, sort_keys=True, separators=(",", ":"))
+        return {
+            "experiment_id": experiment["id"],
+            "analysis_version": ANALYSIS_VERSION,
+            "shadow_count": len(checks),
+            "mismatch_count": sum(not item["match"] for item in checks),
+            "checks": checks,
+            "replay_hash": "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+        }
+
+    def replay_shadow(self, experiment_id: str) -> dict[str, Any]:
+        experiment = self.experiment(experiment_id)
+        shadows = [
+            item for item in self.exposures()
+            if item.get("experiment_id") == experiment_id and item.get("status") == "shadow"
+        ]
+        if not shadows:
+            raise StrategyError("Experiment has no shadow exposures to replay")
+        return self._shadow_replay(experiment, shadows)
 
     def _refs(self, workspace: Any, atom_id: str, episode_key: str) -> tuple[str, str, str]:
         workspace_ref = _digest("ws-", self.profile_id, str(workspace.root))
@@ -489,6 +738,7 @@ class StrategyEngine:
                 "atom_ref": atom_ref,
                 "episode_ref": episode_ref,
                 "arm": arm,
+                "assigned_arm": assigned_arm,
                 "assigned_value": assigned_value,
                 "chosen_value": chosen_value,
                 "context": context,
@@ -545,6 +795,22 @@ class StrategyEngine:
                 raise StrategyError(
                     "Outcome requires Evidence explicitly qualified for strategy use by the scorer registry"
                 )
+            experiment = self.experiment(exposure["experiment_id"])
+            measurement_kind = evidence.get("measurement_kind")
+            quality_tier = evidence.get("quality_tier")
+            grader_id = evidence.get("assessment", {}).get("grader_id")
+            eligibility = experiment["eligibility"]
+            if measurement_kind not in eligibility["measurement_kinds"]:
+                raise StrategyError("Evidence measurement kind was not preregistered for this experiment")
+            if quality_tier not in eligibility["quality_tiers"]:
+                raise StrategyError("Evidence quality tier was not preregistered for this experiment")
+            if grader_id not in eligibility["grader_ids"]:
+                raise StrategyError("Evidence grader was not preregistered for this experiment")
+            outcomes = self.outcomes()
+            if any(item["evidence_ref"] == evidence_id for item in outcomes):
+                raise StrategyError(f"Evidence {evidence_id} is already linked to a strategy exposure")
+            if any(item["exposure_id"] == exposure_id for item in outcomes):
+                raise StrategyError(f"Exposure {exposure_id} already has an outcome")
             workspace_events = _events(workspace.meta / "events.ndjson")
             evidence_event = next(
                 (
@@ -560,14 +826,14 @@ class StrategyEngine:
             atom_id = evidence.get("atom_id")
             if atom_id not in workspace.atoms:
                 raise StrategyError("Evidence references an unknown Atom")
-            _, atom_ref, _ = self._refs(workspace, atom_id, "placeholder")
+            evidence_episode = evidence.get("episode_id")
+            if not isinstance(evidence_episode, str) or not evidence_episode:
+                raise StrategyError("Evidence has no v2 episode identity")
+            _, atom_ref, evidence_episode_ref = self._refs(workspace, atom_id, evidence_episode)
             if atom_ref != exposure["atom_ref"]:
                 raise StrategyError("Evidence does not belong to the Atom exposed by this episode")
-            outcomes = self.outcomes()
-            if any(item["evidence_ref"] == evidence_id for item in outcomes):
-                raise StrategyError(f"Evidence {evidence_id} is already linked to a strategy exposure")
-            if any(item["exposure_id"] == exposure_id for item in outcomes):
-                raise StrategyError(f"Exposure {exposure_id} already has an outcome")
+            if evidence_episode_ref != exposure["episode_ref"]:
+                raise StrategyError("Evidence does not belong to the same Atom episode as the exposure")
             required_dimensions = workspace.atoms[atom_id].get("mastery", {}).get("required_dimensions", [])
             if not isinstance(required_dimensions, list) or not required_dimensions:
                 raise StrategyError("Exposed Atom has no required mastery dimensions")
@@ -584,6 +850,20 @@ class StrategyEngine:
                     raise StrategyError(f"Evidence outcome dimension {dimension} is not numeric")
                 scores.append(float(value))
             assessed_at = str(evidence.get("assessed_at") or evidence.get("created_at") or "")
+            retention_delay_days = None
+            if measurement_kind == "delayed_retention":
+                review = next(
+                    (
+                        item for item in workspace.reviews.get("items", [])
+                        if item.get("evidence_id") == evidence_id and item.get("status") == "completed"
+                    ),
+                    None,
+                )
+                if not review:
+                    raise StrategyError("Delayed-retention outcome requires a completed due Review linked to Evidence")
+                if parse_time(review.get("completed_at")) < parse_time(review.get("due_at")):
+                    raise StrategyError("Delayed-retention Review was completed before its preregistered due window")
+                retention_delay_days = int(review["interval_days"])
             backtracked = False
             for event in workspace_events:
                 if event.get("type") != "session.backtracked" or str(event.get("at", "")) < exposure["created_at"]:
@@ -602,6 +882,7 @@ class StrategyEngine:
                 "experiment_id": exposure["experiment_id"],
                 "evidence_ref": evidence_id,
                 "atom_ref": atom_ref,
+                "episode_ref": evidence_episode_ref,
                 "evidence_kind": str(evidence.get("kind")),
                 "measurement_kind": str(evidence.get("measurement_kind")),
                 "quality_tier": str(evidence.get("quality_tier")),
@@ -609,7 +890,9 @@ class StrategyEngine:
                 "result": evidence["result"],
                 "score": round(sum(scores) / len(scores), 6),
                 "attempts": int(workspace.atoms[atom_id].get("attempts", 1)),
-                "delayed": evidence.get("kind") == "review",
+                "delayed": measurement_kind == "delayed_retention",
+                "retention_delay_days": retention_delay_days,
+                "outcome_eligible": True,
                 "blocking_backtrack": backtracked,
                 "workspace_valid": True,
                 "recorded_at": iso(),
@@ -627,85 +910,10 @@ class StrategyEngine:
             return {"strategy_revision": committed["revision"], "outcome": outcome}
 
     def _comparison(self, experiment: dict[str, Any]) -> dict[str, Any]:
-        exposure_by_id = {
-            item["id"]: item
-            for item in self.exposures()
-            if item["experiment_id"] == experiment["id"] and item["status"] == "exposed"
-        }
-        all_outcomes = [item for item in self.outcomes() if item["experiment_id"] == experiment["id"]]
-        outcomes = [
-            item
-            for item in all_outcomes
-            if item["exposure_id"] in exposure_by_id
-        ]
-        strata_arms: dict[str, set[str]] = defaultdict(set)
-        for item in outcomes:
-            exposure = exposure_by_id[item["exposure_id"]]
-            strata_arms[exposure["stratum"]].add(exposure["arm"])
-        comparable_strata = sorted(key for key, arms in strata_arms.items() if arms == {"baseline", "candidate"})
-        comparable = [item for item in outcomes if exposure_by_id[item["exposure_id"]]["stratum"] in comparable_strata]
-        by_arm = {
-            arm: [item for item in comparable if exposure_by_id[item["exposure_id"]]["arm"] == arm]
-            for arm in ["baseline", "candidate"]
-        }
-        distinct_atoms = len({item["atom_ref"] for item in comparable})
-        delayed_outcomes = sum(bool(item["delayed"]) for item in comparable)
-        metrics: dict[str, Any] = {}
-        for metric in experiment["metrics"]["primary"]:
-            values: dict[str, float | None] = {}
-            for arm, items in by_arm.items():
-                if metric == "first_transfer_score":
-                    values[arm] = _mean(item["score"] for item in items if not item["delayed"])
-                elif metric == "delayed_review_score":
-                    values[arm] = _mean(item["score"] for item in items if item["delayed"])
-                elif metric == "mastery_attempts":
-                    values[arm] = _mean(float(item["attempts"]) for item in items)
-            baseline, candidate = values.get("baseline"), values.get("candidate")
-            improvement = None
-            if baseline is not None and candidate is not None:
-                improvement = round((baseline - candidate) if metric == "mastery_attempts" else (candidate - baseline), 6)
-            metrics[metric] = {**values, "improvement": improvement}
-        guardrails: dict[str, Any] = {}
-        for metric in experiment["metrics"]["guardrails"]:
-            values = {}
-            for arm, items in by_arm.items():
-                if metric == "misconception_recurrence":
-                    values[arm] = _mean(float(item["result"] != "mastered") for item in items if item["delayed"])
-                elif metric == "blocking_backtrack_rate":
-                    values[arm] = _mean(float(item["blocking_backtrack"]) for item in items)
-                elif metric == "mastery_failure_rate":
-                    values[arm] = _mean(float(item["result"] != "mastered") for item in items)
-            baseline, candidate = values.get("baseline"), values.get("candidate")
-            delta = round(candidate - baseline, 6) if baseline is not None and candidate is not None else None
-            guardrails[metric] = {**values, "candidate_minus_baseline": delta}
-        return {
-            "comparable_strata": comparable_strata,
-            "samples": {
-                "baseline": len(by_arm["baseline"]),
-                "candidate": len(by_arm["candidate"]),
-                "distinct_atoms": distinct_atoms,
-                "delayed_outcomes": delayed_outcomes,
-                "pending_delayed": max(0, experiment["minimums"]["delayed_outcomes"] - delayed_outcomes),
-            },
-            "metrics": metrics,
-            "guardrails": guardrails,
-            "hard_gates": {
-                "invalid_workspace_outcomes": sum(not item["workspace_valid"] for item in all_outcomes),
-                "unlinked_or_nonlive_outcomes": sum(
-                    item["exposure_id"] not in exposure_by_id for item in all_outcomes
-                ),
-                "linkage_mismatches": sum(
-                    item["exposure_id"] in exposure_by_id
-                    and (
-                        item["atom_ref"] != exposure_by_id[item["exposure_id"]]["atom_ref"]
-                        or item["experiment_id"] != exposure_by_id[item["exposure_id"]]["experiment_id"]
-                    )
-                    for item in all_outcomes
-                ),
-                "duplicate_evidence_links": len(all_outcomes)
-                - len({item["evidence_ref"] for item in all_outcomes}),
-            },
-        }
+        try:
+            return analyze(experiment, self.exposures(), self.outcomes())
+        except StrategyAnalysisError as exc:
+            raise StrategyError(str(exc)) from exc
 
     def monitor(self, experiment_id: str, expected: int | None = None) -> dict[str, Any]:
         with FileLock(self.lock_path):
@@ -720,52 +928,81 @@ class StrategyEngine:
             if enum_errors:
                 decision = "needs_review"
                 reasons.extend(enum_errors)
+            elif experiment["status"] == "paused":
+                decision = "paused"
+                reasons.append("experiment is paused; run strategy start to resume shadow monitoring")
             elif experiment["shadow_mode"]:
                 reasons.append("experiment is still in shadow mode; shadow exposures never count as outcomes")
             samples = report["samples"]
-            if samples["distinct_atoms"] < experiment["minimums"]["distinct_atoms"]:
-                reasons.append("insufficient distinct comparable Atoms")
-            if samples["delayed_outcomes"] < experiment["minimums"]["delayed_outcomes"]:
-                reasons.append("delayed outcomes are still pending")
-            if min(samples["baseline"], samples["candidate"]) < 2:
-                reasons.append("each arm needs at least two outcomes in comparable strata")
-            missing_metrics = [name for name, value in report["metrics"].items() if value["improvement"] is None]
-            missing_guards = [name for name, value in report["guardrails"].items() if value["candidate_minus_baseline"] is None]
-            if missing_metrics:
-                reasons.append("primary metrics are incomplete: " + ", ".join(missing_metrics))
+            minimums = experiment["minimums"]
+            floor_reasons: list[str] = []
+            if min(samples["baseline"], samples["candidate"]) < minimums["outcomes_per_arm"]:
+                floor_reasons.append("each arm needs at least the preregistered comparable outcome floor")
+            if samples["distinct_episodes"] < minimums["distinct_episodes"]:
+                floor_reasons.append("insufficient distinct comparable Atom episodes")
+            delayed = samples["delayed_by_arm"]
+            if min(delayed["baseline"], delayed["candidate"]) < minimums["delayed_outcomes_per_arm"]:
+                floor_reasons.append("each arm still needs qualified delayed-retention outcomes")
+            if min(samples["transfer_or_delayed_by_arm"].values()) < 1:
+                floor_reasons.append("each arm needs transfer or delayed-retention measurement")
+            reasons.extend(floor_reasons)
+            learning = report["metric_layers"]["learning"]
+            primary_names = experiment["metrics"]["primary_learning"]
+            missing_primary = [
+                name for name in primary_names
+                if learning[name]["interval"]["lower"] is None or learning[name]["interval"]["upper"] is None
+            ]
+            if missing_primary:
+                reasons.append("primary learning intervals are incomplete: " + ", ".join(missing_primary))
+            guards = report["metric_layers"]["guardrails"]
+            missing_guards = [
+                name for name, value in guards.items()
+                if value["interval"]["lower"] is None or value["interval"]["upper"] is None
+            ]
             if missing_guards:
-                reasons.append("guardrail metrics are incomplete: " + ", ".join(missing_guards))
+                reasons.append("guardrail intervals are incomplete: " + ", ".join(missing_guards))
             hard_gate_failed = any(report["hard_gates"].values())
             if hard_gate_failed:
                 reasons.append("a hard integrity gate failed")
             thresholds = experiment["thresholds"]
-            degraded = any(
-                value["improvement"] is not None
-                and value["improvement"] < -float(thresholds["maximum_quality_degradation"])
-                for value in report["metrics"].values()
+            learning_degraded = any(
+                value["interval"]["upper"] is not None
+                and value["interval"]["upper"] < -float(thresholds["maximum_learning_degradation"])
+                for value in learning.values()
             )
-            guardrail_degraded = any(
-                value["candidate_minus_baseline"] is not None
-                and value["candidate_minus_baseline"] > float(thresholds["maximum_guardrail_delta"])
-                for value in report["guardrails"].values()
+            guardrail_harm = any(
+                value["interval"]["lower"] is not None
+                and value["interval"]["lower"] > float(thresholds["maximum_guardrail_delta"])
+                for value in guards.values()
             )
-            quality_improved = any(
-                name in QUALITY_METRICS
-                and value["improvement"] is not None
-                and value["improvement"] >= float(thresholds["minimum_quality_delta"])
-                for name, value in report["metrics"].items()
+            guardrails_safe = bool(guards) and all(
+                value["interval"]["upper"] is not None
+                and value["interval"]["upper"] <= float(thresholds["maximum_guardrail_delta"])
+                for value in guards.values()
             )
-            sufficient = not reasons
-            if decision != "needs_review" and (degraded or guardrail_degraded or hard_gate_failed):
+            learning_improved = bool(primary_names) and all(
+                learning[name]["interval"]["lower"] is not None
+                and learning[name]["interval"]["lower"] > float(thresholds["minimum_learning_effect"])
+                for name in primary_names
+            )
+            if not guardrails_safe and not missing_guards:
+                reasons.append("guardrail adverse interval upper bound is not below its tolerance")
+            sufficient = not floor_reasons and not missing_primary and not missing_guards and not hard_gate_failed
+            if decision not in {"needs_review", "paused"} and (
+                learning_degraded or guardrail_harm or hard_gate_failed
+            ):
                 decision = "paused"
-                if degraded:
-                    reasons.append("a primary quality metric degraded beyond its preregistered threshold")
-                if guardrail_degraded:
-                    reasons.append("a guardrail degraded beyond its preregistered threshold")
-            elif decision != "needs_review" and sufficient and quality_improved:
+                if learning_degraded:
+                    reasons.append("a learning metric adverse interval crossed the preregistered harm boundary")
+                if guardrail_harm:
+                    reasons.append("a guardrail adverse interval crossed the preregistered harm boundary")
+            elif decision not in {"needs_review", "paused"} and sufficient and learning_improved and guardrails_safe:
                 decision = "active"
-            elif decision != "needs_review" and sufficient and not quality_improved:
-                reasons.append("no preregistered quality metric improved enough; effort alone cannot promote")
+            elif decision not in {"needs_review", "paused"} and samples["window_reached"]:
+                decision = "rejected"
+                reasons.append("fixed analysis window ended without a qualifying learning effect")
+            elif decision not in {"needs_review", "paused"} and sufficient and not learning_improved:
+                reasons.append("primary learning interval lower bound did not exceed the minimum effect")
             state = self.state()
             changed = experiment["status"] != decision
             if changed:
@@ -773,10 +1010,23 @@ class StrategyEngine:
                 experiment["revision"] += 1
                 active = dict(state["active"])
                 if decision == "active":
+                    qualification_payload = {
+                        "experiment_id": experiment_id,
+                        "experiment_revision": experiment["revision"],
+                        "analysis_version": report["analysis_version"],
+                        "samples": report["samples"],
+                        "learning": report["metric_layers"]["learning"],
+                        "guardrails": report["metric_layers"]["guardrails"],
+                    }
+                    qualification_hash = "sha256:" + hashlib.sha256(
+                        json.dumps(qualification_payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+                    ).hexdigest()
                     active[experiment["dimension"]] = {
                         "value": experiment["candidate"],
                         "experiment_id": experiment_id,
                         "activated_revision": state["revision"] + 1,
+                        "analysis_version": report["analysis_version"],
+                        "qualification_hash": qualification_hash,
                     }
                 elif active.get(experiment["dimension"], {}).get("experiment_id") == experiment_id:
                     active.pop(experiment["dimension"], None)
@@ -798,6 +1048,7 @@ class StrategyEngine:
                     "limitations": [
                         "This is a within-user operational comparison, not a universal causal claim.",
                         "Only outcomes in strata containing both arms are compared.",
+                        "UX and process metrics are reported separately and never justify promotion.",
                         "Explicit learner preferences always override an active strategy.",
                     ],
                 }
@@ -896,6 +1147,8 @@ class StrategyEngine:
                     errors.append(f"outcome {outcome_id} disagrees with its exposure experiment")
                 if outcome.get("atom_ref") != exposure.get("atom_ref"):
                     errors.append(f"outcome {outcome_id} disagrees with its exposure Atom")
+                if outcome.get("episode_ref") != exposure.get("episode_ref"):
+                    errors.append(f"outcome {outcome_id} disagrees with its exposure episode")
             if outcome.get("evidence_ref") in evidence_refs:
                 errors.append(f"Evidence is linked more than once: {outcome.get('evidence_ref')}")
             evidence_refs.add(str(outcome.get("evidence_ref")))
@@ -1002,6 +1255,13 @@ def build_parser() -> argparse.ArgumentParser:
     live.add_argument("experiment_id")
     live.add_argument("--profile", default="default")
     live.add_argument("--expected-strategy-revision", type=int)
+    replay = sub.add_parser("replay-shadow", help="Recompute immutable shadow assignments and report mismatches")
+    replay.add_argument("experiment_id")
+    replay.add_argument("--profile", default="default")
+    migrate = sub.add_parser("migrate-v2", help="Migrate legacy experiments and conservatively exclude old outcomes")
+    migrate.add_argument("--profile", default="default")
+    migrate.add_argument("--confirmed", action="store_true")
+    migrate.add_argument("--expected-strategy-revision", type=int)
     exposure = sub.add_parser("exposure", help="Record or replay an immutable Atom-episode assignment")
     exposure.add_argument("workspace")
     exposure.add_argument("atom_id")
@@ -1034,7 +1294,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def run(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
-    if args.action in {"status", "list", "preview", "enable-experiments", "start", "set-live", "monitor", "pause", "explain", "validate"}:
+    if args.action in {"status", "list", "preview", "enable-experiments", "start", "set-live", "replay-shadow", "migrate-v2", "monitor", "pause", "explain", "validate"}:
         engine = _engine_for_profile(args.profile, args.data_dir)
     if args.action == "status":
         result = engine.status()
@@ -1061,6 +1321,10 @@ def run(argv: list[str] | None = None) -> None:
         result = engine.start(args.experiment_id, args.expected_strategy_revision)
     elif args.action == "set-live":
         result = engine.set_live(args.experiment_id, args.expected_strategy_revision)
+    elif args.action == "replay-shadow":
+        result = engine.replay_shadow(args.experiment_id)
+    elif args.action == "migrate-v2":
+        result = engine.migrate_v2(args.confirmed, args.expected_strategy_revision)
     elif args.action == "exposure":
         engine, workspace = _engine_for_workspace(args.workspace, args.data_dir)
         overrides = load_yaml(Path(args.overrides)) if args.overrides else {}

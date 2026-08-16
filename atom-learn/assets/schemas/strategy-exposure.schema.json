@@ -21,6 +21,7 @@
     "atom_ref": {"type": "string", "pattern": "^atom-[a-f0-9]{24}$"},
     "episode_ref": {"type": "string", "pattern": "^episode-[a-f0-9]{24}$"},
     "arm": {"enum": ["baseline", "candidate", "overridden"]},
+    "assigned_arm": {"enum": ["baseline", "candidate"]},
     "assigned_value": {"type": "string", "minLength": 1, "maxLength": 64},
     "chosen_value": {"type": "string", "minLength": 1, "maxLength": 64},
     "context": {"enum": ["orientation", "teaching", "review", "exam"]},

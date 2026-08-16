@@ -21,11 +21,13 @@
     "strata",
     "metrics",
     "minimums",
-    "thresholds"
+    "thresholds",
+    "eligibility",
+    "analysis"
   ],
   "properties": {
     "kind": {"const": "atomlearn.strategy-experiment"},
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "revision": {"type": "integer", "minimum": 0},
     "id": {"type": "string", "pattern": "^exp-[A-Za-z0-9._-]{1,96}$"},
     "scope": {"enum": ["course", "user"]},
@@ -59,30 +61,70 @@
     "metrics": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["primary", "guardrails"],
+      "required": ["primary_learning", "learning", "process", "ux", "guardrails"],
       "properties": {
-        "primary": {"type": "array", "minItems": 1, "items": {"enum": ["first_transfer_score", "mastery_attempts", "delayed_review_score"]}, "uniqueItems": true},
-        "guardrails": {"type": "array", "minItems": 1, "items": {"enum": ["misconception_recurrence", "blocking_backtrack_rate", "mastery_failure_rate"]}, "uniqueItems": true}
+        "primary_learning": {"$ref": "#/$defs/learningMetrics"},
+        "learning": {"$ref": "#/$defs/learningMetrics"},
+        "process": {"type": "array", "uniqueItems": true, "items": {"enum": ["mastery_attempts", "blocking_backtrack_rate"]}},
+        "ux": {"type": "array", "uniqueItems": true, "items": {"enum": ["override_rate"]}},
+        "guardrails": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["misconception_recurrence", "mastery_failure_rate"]}}
       }
     },
     "minimums": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["distinct_atoms", "delayed_outcomes"],
+      "required": ["outcomes_per_arm", "distinct_episodes", "delayed_outcomes_per_arm"],
       "properties": {
-        "distinct_atoms": {"type": "integer", "minimum": 5},
-        "delayed_outcomes": {"type": "integer", "minimum": 2}
+        "outcomes_per_arm": {"type": "integer", "minimum": 10},
+        "distinct_episodes": {"type": "integer", "minimum": 20},
+        "delayed_outcomes_per_arm": {"type": "integer", "minimum": 5}
       }
     },
     "thresholds": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["minimum_quality_delta", "maximum_quality_degradation", "maximum_guardrail_delta"],
+      "required": ["minimum_learning_effect", "maximum_learning_degradation", "maximum_guardrail_delta"],
       "properties": {
-        "minimum_quality_delta": {"type": "number", "minimum": 0, "maximum": 1},
-        "maximum_quality_degradation": {"type": "number", "minimum": 0, "maximum": 1},
+        "minimum_learning_effect": {"type": "number", "exclusiveMinimum": 0, "maximum": 1},
+        "maximum_learning_degradation": {"type": "number", "minimum": 0, "maximum": 1},
         "maximum_guardrail_delta": {"type": "number", "minimum": 0, "maximum": 1}
       }
+    },
+    "eligibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["measurement_kinds", "quality_tiers", "grader_ids"],
+      "properties": {
+        "measurement_kinds": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"]}},
+        "quality_tiers": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"enum": ["A", "B"]}},
+        "grader_ids": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 3, "maxLength": 128}}
+      }
+    },
+    "analysis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version", "method", "seed", "bootstrap_resamples", "confidence_level",
+        "max_outcomes_per_arm", "stop_for_harm", "stop_at_max_without_effect"
+      ],
+      "properties": {
+        "version": {"const": "strategy-bootstrap-v1"},
+        "method": {"const": "stratified_bootstrap"},
+        "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647},
+        "bootstrap_resamples": {"type": "integer", "minimum": 500, "maximum": 10000},
+        "confidence_level": {"enum": [0.9, 0.95, 0.99]},
+        "max_outcomes_per_arm": {"type": "integer", "minimum": 10, "maximum": 10000},
+        "stop_for_harm": {"const": true},
+        "stop_at_max_without_effect": {"const": true}
+      }
+    }
+  },
+  "$defs": {
+    "learningMetrics": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"enum": ["immediate_mastery_score", "delayed_retention_score", "near_transfer_score", "far_transfer_score"]}
     }
   }
 }

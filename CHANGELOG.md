@@ -6,6 +6,7 @@
 - RAG evaluation now reports metrics without claiming pass when thresholds are absent, rejects partial threshold sets, and strategy outcomes ignore non-required Evidence dimensions.
 - Phase 1 adds manifest v2, a fixed Manager-owned Codex bridge, signed offline wheelhouse recipes, release-specific runtimes, runtime content verification, capability-aware release smoke tests, a published fingerprinted trust bundle with signed rotation and break-glass recovery, and credential-bounded private GitHub Release transport.
 - Phase 2 adds Evidence v2 scorer provenance and eligibility gates, deterministic exact-choice and numeric/unit grading, held-out mastery/retention/transfer item banks, reproducible stratified open-response calibration reports, legacy migration and strategy exclusion, and an explicit three-layer learning benchmark claim protocol.
+- Phase 3 adds outcome-eligible strategy experiments with deterministic stratified uncertainty intervals, minimum effects, sample floors, delayed/transfer requirements, fixed stopping rules, replayed shadow assignments, conservative v1 migration, and a separately consented local-only learning-effect study contract with withdrawal and privacy minimization.
 
 ## 0.13.0 - release-ready
 
