@@ -297,6 +297,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 ## Design Documentation
 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
+- [v0.15 Product-Readiness Remediation Design](docs/V0_15_PRODUCT_READINESS_REMEDIATION_DESIGN.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 Exam and Research Implementation](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 Adaptive Review Implementation](docs/V0_14_PHASE7_IMPLEMENTATION.md)

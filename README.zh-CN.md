@@ -297,6 +297,7 @@ atomlearn-core version
 ## 设计文档
 
 - [产品与技术设计](docs/PRODUCT_DESIGN.md)
+- [v0.15 产品就绪修复设计](docs/V0_15_PRODUCT_READINESS_REMEDIATION_DESIGN.md)
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 考试与科研实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 自适应复习实施记录](docs/V0_14_PHASE7_IMPLEMENTATION.md)
