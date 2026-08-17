@@ -42,12 +42,13 @@ The phase includes pure adapter invariants and end-to-end CLI coverage for the b
 
 Local release verification on 2026-08-17:
 
-- fast contract/property/documentation suite after the Linux runtime fix: `59 passed`, `147 deselected` in 97.07 seconds;
+- fast contract/property/documentation suite for the 0.14.1 candidate: `60 passed`, `147 deselected` in 24.87 seconds;
 - complete integration suite before the additional runtime-link regression test was added: `145 passed`, `1 skipped`, `59 deselected` in 1076.28 seconds;
 - the single skip is the expected optional USearch HNSW path when the local `scale` dependency is absent; the release workflow retains its dedicated Ubuntu/Python 3.12 scale job;
-- Skill release validation: passed for Core `0.14.0`, with 15 implemented, 1 experimental, and 0 planned capabilities;
+- Skill release validation: passed for Core `0.14.1`, with 15 implemented, 1 experimental, and 0 planned capabilities;
 - targeted Phase 7 adapter/CLI tests: `5 passed`;
 - installed-runtime capability smoke now runs `review benchmark` and verifies both a current result and the fixed default;
 - a clean `atom_learn-0.14.0-py3-none-any.whl` was installed into an isolated venv, where `version`, workspace initialization, and `review benchmark` passed using only the packaged asset tree;
 - the stable release builder now rejects any runtime Core wheel that omits the review scheduler, asset resolver, memory benchmark, policy schema, or Core manifest when `review` is required by the smoke matrix.
 - targeted Manager upgrade/migration and runtime-link regression tests: `3 passed`; the link test proves both acceptance of the canonical contained venv alias and rejection of a differently named alias.
+- the tag workflow reads the installed distribution version through Python 3.10-compatible `importlib.metadata`; a fast contract rejects regressions to the Python 3.11-only `tomllib` import.

@@ -36,7 +36,7 @@ from platform_state import (  # noqa: E402
 
 def test_core_manifest_matches_package_and_declares_all_v2_namespaces() -> None:
     manifest = load_core_manifest()
-    assert manifest["core_version"] == "0.14.0" == core_version()
+    assert manifest["core_version"] == "0.14.1" == core_version()
     assert manifest["release_channel"] == "development"
     assert manifest["feature_defaults"] == {
         "global_personalization": False,
@@ -142,7 +142,7 @@ def test_installed_version_and_migration_status_are_read_only(tmp_path: Path) ->
     )
     assert version.returncode == 0, version.stderr
     assert status.returncode == 0, status.stderr
-    assert json.loads(version.stdout)["core_version"] == "0.14.0"
+    assert json.loads(version.stdout)["core_version"] == "0.14.1"
     assert json.loads(status.stdout)["data_root_exists"] is False
     assert not data_root.exists()
     assert tree_fingerprint(CORE_ROOT) == before

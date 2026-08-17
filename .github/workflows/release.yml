@@ -50,7 +50,7 @@ jobs:
       - name: Build complete offline runtime wheelhouse and deterministic bundle
         shell: pwsh
         run: |
-          $version = python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])"
+          $version = python -c "import importlib.metadata as metadata; print(metadata.version('atom-learn'))"
           New-Item -ItemType Directory -Path core-wheel, runtime-wheelhouse, runtime-dist | Out-Null
           python -m build . --wheel --outdir core-wheel
           $coreWheel = Get-ChildItem core-wheel -Filter 'atom_learn-*.whl' | Select-Object -First 1

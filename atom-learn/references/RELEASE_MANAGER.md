@@ -62,8 +62,8 @@ Use an immutable signed release-manifest URL or a previously downloaded local ma
 
 ```powershell
 atomlearn-manager update check --manifest <MANIFEST_PATH_OR_HTTPS_URL> --channel stable
-atomlearn-manager update plan 0.14.0 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE>
-atomlearn-manager update apply 0.14.0 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE> --confirmed
+atomlearn-manager update plan 0.14.1 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE>
+atomlearn-manager update apply 0.14.1 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE> --confirmed
 atomlearn-manager update status
 ```
 

@@ -1,6 +1,8 @@
 # Changelog
 
-## 0.14.0 - release-ready
+## 0.14.1 - release-ready
+
+- Patch release `0.14.1` preserves the complete Phase 0–7 feature set and replaces the Python 3.11-only `tomllib` call in the tag workflow with Python 3.10-compatible installed-package metadata. The `v0.14.0` tag failed before publishing a GitHub Release or stable assets and remains unmoved as an auditable failed release attempt.
 
 - Phase 0 makes Manager transport failures typed and assertion-free, makes the uploaded and embedded release gate report byte-identical canonical JSON, and adds a release-gated capability/implementation ledger.
 - RAG evaluation now reports metrics without claiming pass when thresholds are absent, rejects partial threshold sets, and strategy outcomes ignore non-required Evidence dimensions.
@@ -12,7 +14,7 @@
 - Phase 6 adds joint question/answer/rubric exam processing, reviewed mappings and item families, source-located empirical difficulty, capacity-checked exam calendars, protocol-bound Crossref/OpenAlex/harness research discovery, citation expansion, integrity refresh, Document IR claim locators, and reviewed structured cross-paper synthesis.
 - Phase 7 adds qualified per-Atom D/S/R memory, fixed/shadow/benchmark-and-opt-in active scheduling, exam target windows, a capacity-aware unified daily queue, deterministic replay validation, observational non-promoting pilot reports, installed-runtime review smoke coverage, and constrained hashing for CPython's contained Linux venv `lib64 -> lib` alias.
 
-See [0.14.0 release notes](docs/releases/v0.14.0.md) for compatibility, review gates, limitations, and verification scope.
+See [0.14.1 release notes](docs/releases/v0.14.1.md) for compatibility, review gates, limitations, and verification scope.
 
 ## 0.13.0 - release-ready
 

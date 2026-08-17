@@ -1,6 +1,6 @@
 kind: atomlearn.release-upgrade-fixture
 schema_version: 1
-target_core_version: 0.14.0
+target_core_version: 0.14.1
 schema_edges: []
 schema_edge_reason: All published v2 namespaces still use schema version 1; no data transform is required.
 upgrade_paths:

@@ -1,6 +1,6 @@
 kind: atomlearn.capability-ledger
 schema_version: 1
-core_version: 0.14.0
+core_version: 0.14.1
 required_smoke: [core, bridge, documents, rag, exam, research, review]
 capabilities:
   - id: learning.atomic_state_machine

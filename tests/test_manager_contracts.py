@@ -36,7 +36,7 @@ def test_capability_ledger_is_strict_versioned_and_truthful() -> None:
     ledger = yaml.safe_load((ROOT / "atom-learn" / "assets" / "capabilities.yaml").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(ledger)
-    assert ledger["core_version"] == "0.14.0"
+    assert ledger["core_version"] == "0.14.1"
     identifiers = [item["id"] for item in ledger["capabilities"]]
     assert len(identifiers) == len(set(identifiers))
     for capability in ledger["capabilities"]:
@@ -73,6 +73,13 @@ def test_every_manager_release_and_launcher_argument_has_help() -> None:
 
     for parser in [builder.build_parser(), cli.build_parser(), launcher.build_parser(), runtime.build_parser()]:
         require_help(parser)
+
+
+def test_release_workflow_reads_version_on_python_310() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "import importlib.metadata as metadata" in workflow
+    assert "metadata.version('atom-learn')" in workflow
+    assert "import tomllib" not in workflow
 
 
 def test_course_runtime_has_no_update_apply_command() -> None:
@@ -122,7 +129,7 @@ def test_release_gate_report_requires_attested_ci_and_never_overwrites(tmp_path:
         str(ROOT / "release" / "gate.py"),
         "write",
         "--tag",
-        "v0.14.0",
+        "v0.14.1",
         "--commit-sha",
         "b" * 40,
         "--output",
