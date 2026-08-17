@@ -36,15 +36,48 @@ def test_capability_ledger_is_strict_versioned_and_truthful() -> None:
     ledger = yaml.safe_load((ROOT / "atom-learn" / "assets" / "capabilities.yaml").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(ledger)
+    assert ledger["schema_version"] == 2
     assert ledger["core_version"] == "0.14.2"
+    assert ledger["claim_policy"] == {
+        "stable_runtime_profiles": ["base"],
+        "developer_extras": ["ocr", "scale", "semantic"],
+        "engineering": "verified",
+        "harness_behavior": "not_evaluated",
+        "learning_effect": "not_established",
+        "causal_learning_claims_allowed": False,
+    }
     identifiers = [item["id"] for item in ledger["capabilities"]]
     assert len(identifiers) == len(set(identifiers))
     for capability in ledger["capabilities"]:
+        availability = capability["availability"]
         if capability["status"] == "planned":
             assert capability["default_mode"] == "unavailable"
             assert capability["public_claim"] is False
             assert capability["implementation"] == []
             assert capability["verification"] == []
+            assert availability == {
+                "level": "planned",
+                "runtime": "none",
+                "artifact": "not_distributed",
+                "user_entrypoint": False,
+            }
+        if availability["level"] == "stable":
+            assert capability["status"] == "implemented"
+            assert availability["user_entrypoint"] is True
+            assert (availability["runtime"], availability["artifact"]) in {
+                ("base", "core_runtime"),
+                ("manager", "manager_distribution"),
+            }
+        if availability["runtime"] == "optional_extra":
+            assert availability["level"] in {"developer", "experimental"}
+            assert availability["artifact"] == "not_distributed"
+    learned = next(item for item in ledger["capabilities"] if item["id"] == "rag.learned_local_scale_v1")
+    assert learned["availability"] == {
+        "level": "developer",
+        "runtime": "optional_extra",
+        "artifact": "not_distributed",
+        "user_entrypoint": True,
+    }
 
 
 def test_manager_is_a_separate_distribution_and_console_surface() -> None:

@@ -1,8 +1,10 @@
 # Learned semantic and scale RAG
 
-AtomLearn keeps the deterministic BM25 plus multilingual hash path enabled for every workspace. Learned embeddings, HNSW, and cross-encoder reranking are independent opt-ins. None of them downloads a model, contacts a hosted provider, or weakens the requirement-level evidence gate.
+AtomLearn keeps the deterministic BM25 plus multilingual hash path enabled for every workspace. Learned embeddings, HNSW, and cross-encoder reranking are independent opt-ins. In `v0.14.2`, these local learned/scale paths are developer/source capabilities installed from optional extras; they are not present in the signed stable `base` runtime. None of them downloads a model, contacts a hosted provider, or weakens the requirement-level evidence gate.
 
 ## Optional dependencies
+
+Use these commands only in an editable developer/source installation:
 
 ```powershell
 python -m pip install -e ".[scale]"

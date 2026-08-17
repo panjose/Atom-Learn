@@ -75,6 +75,18 @@ def _validate_capability_ledger(core_version: str) -> dict[str, int]:
     _validate(ledger, CAPABILITY_SCHEMA, "Capability ledger")
     if ledger["core_version"] != core_version:
         raise GateError("Capability ledger and Core manifest versions disagree")
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    optional_dependencies = set(project.get("project", {}).get("optional-dependencies", {})) - {"dev"}
+    claim_policy = ledger["claim_policy"]
+    if claim_policy["stable_runtime_profiles"] != ["base"]:
+        raise GateError("This release line may claim only the signed base runtime profile as stable")
+    if set(claim_policy["developer_extras"]) != optional_dependencies:
+        raise GateError("Every non-development optional dependency group must be disclosed as a developer extra")
+    effect_established = claim_policy["learning_effect"] == "established"
+    if claim_policy["causal_learning_claims_allowed"] != effect_established:
+        raise GateError("Causal learning claims must match the declared product learning-effect evidence")
+    if effect_established and claim_policy["harness_behavior"] != "verified":
+        raise GateError("A product learning-effect claim requires verified harness behavior")
     identifiers: set[str] = set()
     counts = {"implemented": 0, "experimental": 0, "planned": 0}
     for capability in ledger["capabilities"]:
@@ -83,15 +95,41 @@ def _validate_capability_ledger(core_version: str) -> dict[str, int]:
             raise GateError(f"Capability ledger contains a duplicate id: {identifier}")
         identifiers.add(identifier)
         status = capability["status"]
+        availability = capability["availability"]
         counts[status] += 1
         if status == "planned":
             if capability["default_mode"] != "unavailable" or capability["public_claim"]:
                 raise GateError(f"Planned capability {identifier} must be unavailable and excluded from public claims")
             if capability["implementation"] or capability["verification"]:
                 raise GateError(f"Planned capability {identifier} cannot cite completed implementation or verification")
+            if availability != {
+                "level": "planned",
+                "runtime": "none",
+                "artifact": "not_distributed",
+                "user_entrypoint": False,
+            }:
+                raise GateError(f"Planned capability {identifier} must declare planned, undistributed availability")
         else:
             if not capability["implementation"] or not capability["verification"]:
                 raise GateError(f"{status.title()} capability {identifier} needs implementation and verification evidence")
+            if availability["level"] == "planned":
+                raise GateError(f"Non-planned capability {identifier} cannot declare planned availability")
+        if status == "experimental" and availability["level"] == "stable":
+            raise GateError(f"Experimental capability {identifier} cannot be advertised as stable")
+        if availability["level"] == "stable":
+            if status != "implemented" or not availability["user_entrypoint"]:
+                raise GateError(f"Stable capability {identifier} needs implemented code and a user entrypoint")
+            expected_artifact = {
+                "base": "core_runtime",
+                "manager": "manager_distribution",
+            }.get(availability["runtime"])
+            if expected_artifact is None or availability["artifact"] != expected_artifact:
+                raise GateError(f"Stable capability {identifier} is not included in its declared runtime artifact")
+        if availability["runtime"] == "optional_extra":
+            if availability["level"] not in {"developer", "experimental"}:
+                raise GateError(f"Optional-extra capability {identifier} cannot be advertised as stable")
+            if availability["artifact"] != "not_distributed":
+                raise GateError(f"Optional-extra capability {identifier} must disclose that it is not distributed")
         for evidence in capability["implementation"] + capability["verification"]:
             path = (ROOT / evidence["path"]).resolve()
             try:

@@ -11,7 +11,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 
 - Start from complete textbooks or knowledge bases, a user outline, or only a topic name
 - Index local sources and correct coverage gaps with harness Web Search
-- Fuse BM25, a default local multilingual hash projection, optional provider or approved local learned embeddings, crash-safe HNSW generations, and benchmark-gated reranking
+- Fuse BM25 and a default local multilingual hash projection in the stable base runtime, accept provider vectors, and expose local learned embeddings, HNSW, and reranking only in developer/source installs
 - Require explicit evidence verdicts and stable source locators before sparse-input planning
 - Generate a Knowledge Atom DAG from textbooks, PDFs, notes, or multiple sources
 - Map roots, learning spines, branches, hubs, derivations, historical development, contrasts, applications, and each concept's lineage
@@ -31,9 +31,11 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Analyze learning evidence and propose bounded, approval-gated course evolution
 - Generate learning, research, personalization, and evolution views from canonical YAML state
 
-The release source of truth is the machine-readable [capability ledger](atom-learn/assets/capabilities.yaml). It separates implemented, experimental, and planned work, binds implemented claims to code and tests, and prevents planned v0.14 work from being marketed as already available.
+The release source of truth is the machine-readable [capability ledger](atom-learn/assets/capabilities.yaml). Implemented describes repository code status, not stable release delivery. The ledger separately records delivery level, runtime, artifact, entrypoint, engineering verification, harness-behavior evidence, and learning-effect evidence. The signed `v0.14.2` runtime exposes only the `base` profile; `ocr`, `scale`, and `semantic` are developer/source extras and are not included in that stable runtime. No AtomLearn learning-gain effect has been established. Engineering checks, scorer calibration, local strategy experiments, and the study-recording contract must never be presented as that evidence.
 
 ## Installation
+
+The commands in this section are the developer/source setup, not the stable Manager onboarding path. Do not combine a copied or linked source Skill with a Manager-owned bridge; Manager correctly refuses to overwrite a foreign Skill. A unified stable bootstrap and conservative source-copy migration remain planned for v0.15.
 
 AtomLearn requires Python 3.10+, PyYAML, pypdf, and python-docx:
 
@@ -44,7 +46,7 @@ atomlearn --help
 
 The editable install exposes the short `atomlearn` console command. Direct `python atom-learn/scripts/atomlearn.py ...` invocation remains supported inside a copied Skill directory.
 
-The deterministic small-corpus RAG path needs no model runtime. Install `.[scale]` only for USearch HNSW generations and `.[semantic]` only for explicitly approved local Sentence Transformers models.
+The deterministic small-corpus RAG path needs no model runtime. In a developer/source environment, install `.[ocr]` for the automatic OCR adapter, `.[scale]` for USearch HNSW generations, or `.[semantic]` for explicitly approved local Sentence Transformers models. These extras are not present in signed `v0.14.2` base runtimes and therefore are not stable release capabilities yet. Sidecar OCR and provider-supplied vector attachment remain available through the base path.
 
 Copy or link the repository's `atom-learn` directory into your personal Codex Skills directory, for example:
 
@@ -132,7 +134,7 @@ Complete-source mode inventories and reconciles materials; outline mode treats o
 
 ## RAG and Corrective Web Search
 
-AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. It preserves HTML and DOCX structure, PDF tables and formulas, and locatable OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns exact supporting IR block IDs plus bounded parent context, fuses SQLite FTS5 BM25, a default local multilingual hash vector, and optional provider or explicitly approved local learned embeddings. Small corpora keep the dependency-light path; large dense retrieval uses a verified USearch HNSW generation or skips that component with zero scanned chunks. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
+AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. The stable base preserves HTML and DOCX structure, PDF tables and formulas, plus locatable sidecar OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns exact supporting IR block IDs plus bounded parent context and fuses SQLite FTS5 BM25 with a default local multilingual hash vector; provider-supplied vectors can also be attached. Automatic OCR, approved local learned embeddings, USearch HNSW, and cross-encoder reranking are implemented developer/source paths, not signed `v0.14.2` base-runtime capabilities. Small corpora keep the dependency-light path; without an installed and verified HNSW generation, large dense retrieval skips that component with zero scanned chunks. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus

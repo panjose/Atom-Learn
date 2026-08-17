@@ -77,6 +77,17 @@ def test_adaptive_review_sections_are_bilingual_and_command_aligned() -> None:
     assert all(command in english and command in chinese for command in review_commands)
 
 
+def test_public_claims_disclose_delivery_and_learning_evidence_boundaries() -> None:
+    english = (ROOT / "README.md").read_text(encoding="utf-8")
+    chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    assert "Implemented describes repository code status, not stable release delivery." in english
+    assert "`ocr`, `scale`, and `semantic` are developer/source extras" in english
+    assert "No AtomLearn learning-gain effect has been established." in english
+    assert "“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。" in chinese
+    assert "`ocr`、`scale` 和 `semantic` 是开发者/源码 extras" in chinese
+    assert "AtomLearn 尚未建立任何学习增益效果结论。" in chinese
+
+
 def test_repository_markdown_has_no_broken_relative_links() -> None:
     missing: list[str] = []
     for path in ROOT.rglob("*.md"):

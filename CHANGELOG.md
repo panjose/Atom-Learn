@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased - v0.15
+
+- Phase 0 upgrades the capability ledger to schema v2 and separates repository implementation from stable delivery. The release gate now attests the stable runtime profile, developer-only extras, artifact/entrypoint availability, harness-behavior evidence, and product learning-effect evidence. The signed `v0.14.2` line truthfully exposes only `base`; `ocr`, `scale`, and `semantic` remain developer/source extras until immutable signed runtime profiles ship.
+- Public documentation now labels source installation separately from Manager onboarding, distinguishes sidecar OCR and provider vectors from optional automatic OCR/local learned retrieval, and states that engineering tests, calibration, local experiments, and the study contract do not establish a causal AtomLearn learning-gain result.
+
 ## 0.14.2 - release-ready
 
 - Patch release `0.14.2` preserves the complete Phase 0–7 feature set and adds `review` to the release-manifest-v2 smoke-capability contract. A regression test now proves every capability required by the ledger is accepted by the signed release schema.
@@ -17,7 +22,7 @@ See [0.14.2 release notes](docs/releases/v0.14.2.md) for the patch boundary and 
 - Phase 2 adds Evidence v2 scorer provenance and eligibility gates, deterministic exact-choice and numeric/unit grading, held-out mastery/retention/transfer item banks, reproducible stratified open-response calibration reports, legacy migration and strategy exclusion, and an explicit three-layer learning benchmark claim protocol.
 - Phase 3 adds outcome-eligible strategy experiments with deterministic stratified uncertainty intervals, minimum effects, sample floors, delayed/transfer requirements, fixed stopping rules, replayed shadow assignments, conservative v1 migration, and a separately consented local-only learning-effect study contract with withdrawal and privacy minimization.
 - Phase 4 adds a revision-bound typed harness action/submission protocol, bilingual no-YAML start console, explicit phase and first-Atom confirmation, and a versioned layout-preserving Document IR shared by RAG, exam source processing, and research source attachment.
-- Phase 5 adds explicitly approved local learned embedding and cross-encoder adapters, crash-contained USearch HNSW generations with incremental rebuilds, child-grounded parent context, strict provider-profile replacement, and a bundled multilingual/multidomain/multistructure retrieval gate that cannot pass through empty thresholds.
+- Phase 5 adds developer/source adapters for explicitly approved local learned embeddings and cross-encoders, crash-contained USearch HNSW generations with incremental rebuilds, child-grounded parent context, strict provider-profile replacement, and a bundled multilingual/multidomain/multistructure retrieval gate that cannot pass through empty thresholds. These optional adapters are implemented but are not included in the signed `v0.14.2` base runtime.
 - Phase 6 adds joint question/answer/rubric exam processing, reviewed mappings and item families, source-located empirical difficulty, capacity-checked exam calendars, protocol-bound Crossref/OpenAlex/harness research discovery, citation expansion, integrity refresh, Document IR claim locators, and reviewed structured cross-paper synthesis.
 - Phase 7 adds qualified per-Atom D/S/R memory, fixed/shadow/benchmark-and-opt-in active scheduling, exam target windows, a capacity-aware unified daily queue, deterministic replay validation, observational non-promoting pilot reports, installed-runtime review smoke coverage, and constrained hashing for CPython's contained Linux venv `lib64 -> lib` alias.
 

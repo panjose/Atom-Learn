@@ -1,6 +1,13 @@
 kind: atomlearn.capability-ledger
-schema_version: 1
+schema_version: 2
 core_version: 0.14.2
+claim_policy:
+  stable_runtime_profiles: [base]
+  developer_extras: [ocr, scale, semantic]
+  engineering: verified
+  harness_behavior: not_evaluated
+  learning_effect: not_established
+  causal_learning_claims_allowed: false
 required_smoke: [core, bridge, documents, rag, exam, research, review]
 capabilities:
   - id: learning.atomic_state_machine
@@ -8,6 +15,11 @@ capabilities:
     status: implemented
     default_mode: enabled
     public_claim: true
+    availability: &stable_core
+      level: stable
+      runtime: base
+      artifact: core_runtime
+      user_entrypoint: true
     interfaces: [activate, record-evidence, assess, status, validate]
     implementation:
       - path: atom-learn/scripts/atomlearn.py
@@ -26,6 +38,7 @@ capabilities:
     status: implemented
     default_mode: enabled
     public_claim: true
+    availability: *stable_core
     interfaces: [expand, route-concept]
     implementation:
       - path: atom-learn/scripts/atomlearn.py
@@ -46,6 +59,7 @@ capabilities:
     status: implemented
     default_mode: enabled
     public_claim: true
+    availability: *stable_core
     interfaces: [rag ingest, rag search, rag coverage, rag correct, rag evaluate]
     implementation:
       - path: atom-learn/scripts/rag.py
@@ -67,6 +81,7 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability: *stable_core
     interfaces: [rag attach-embeddings, rag search]
     implementation:
       - path: atom-learn/scripts/rag.py
@@ -83,6 +98,7 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability: *stable_core
     interfaces:
       - exam process-source
       - exam process
@@ -119,6 +135,7 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability: *stable_core
     interfaces:
       - research set-protocol
       - research discover
@@ -160,6 +177,7 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability: *stable_core
     interfaces: [adapt observe-session, adapt guidance, profile enable, policy effective]
     implementation:
       - path: atom-learn/scripts/adaptation.py
@@ -178,6 +196,7 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability: *stable_core
     interfaces: [strategy enable-experiments, strategy replay-shadow, strategy record-outcome, strategy monitor, strategy migrate-v2]
     implementation:
       - path: atom-learn/scripts/strategy.py
@@ -198,6 +217,7 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability: *stable_core
     interfaces: [study enroll, study record, study status, study withdraw, study validate]
     implementation:
       - path: atom-learn/scripts/learning_study.py
@@ -214,6 +234,11 @@ capabilities:
     status: experimental
     default_mode: opt_in
     public_claim: true
+    availability:
+      level: experimental
+      runtime: manager
+      artifact: manager_distribution
+      user_entrypoint: true
     interfaces: [atomlearn-manager update, atomlearn-manager rollback, atomlearn-core]
     implementation:
       - path: manager/atomlearn_manager/manager.py
@@ -232,6 +257,7 @@ capabilities:
     status: implemented
     default_mode: enabled
     public_claim: true
+    availability: *stable_core
     interfaces: [rag document-ir, exam process-source, research attach-source]
     implementation:
       - path: atom-learn/scripts/document_ir.py
@@ -252,6 +278,7 @@ capabilities:
     documentation: [README.md, README.zh-CN.md, atom-learn/references/DOCUMENT_IR.md, docs/V0_14_REMEDIATION_DESIGN.md]
     limitations:
       - PDF table detection is best effort and bounding boxes remain null unless an extractor supplies trustworthy coordinates.
+      - Sidecar OCR is available in the base runtime; automatic PyMuPDF/Tesseract OCR is a developer extra and is not distributed in the signed v0.14.2 base runtime.
       - Sources indexed before Document IR remain searchable but must be reingested before exam or research IR consumers can attach them.
 
   - id: orchestration.typed_start_v1
@@ -259,6 +286,7 @@ capabilities:
     status: implemented
     default_mode: enabled
     public_claim: true
+    availability: *stable_core
     interfaces: [start --json, start --submission, start --confirm, start --activate-first]
     implementation:
       - path: atom-learn/scripts/workflow.py
@@ -281,6 +309,11 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability:
+      level: developer
+      runtime: optional_extra
+      artifact: not_distributed
+      user_entrypoint: true
     interfaces:
       - rag embed-local
       - rag index-build
@@ -315,7 +348,7 @@ capabilities:
       - docs/V0_14_REMEDIATION_DESIGN.md
     limitations:
       - Models are user-supplied local directories; AtomLearn never silently downloads them and rejects pickle-capable weights or custom model code.
-      - USearch and sentence-transformers remain optional extras; the zero-provider deterministic path stays available for small corpora.
+      - USearch and sentence-transformers remain developer/source optional extras and are not distributed in the signed v0.14.2 base runtime; the zero-provider deterministic path stays available for small corpora.
       - Cross-encoders are activated only from a passing, current bundled benchmark profile and can be bypassed per query.
 
   - id: mastery.calibrated_evidence_v2
@@ -323,6 +356,7 @@ capabilities:
     status: implemented
     default_mode: enabled
     public_claim: true
+    availability: *stable_core
     interfaces:
       - atomlearn measure registry
       - atomlearn measure grade
@@ -363,6 +397,11 @@ capabilities:
     status: implemented
     default_mode: opt_in
     public_claim: true
+    availability:
+      level: stable
+      runtime: manager
+      artifact: manager_distribution
+      user_entrypoint: true
     interfaces:
       - atomlearn-manager init
       - atomlearn-manager trust
@@ -404,6 +443,7 @@ capabilities:
     status: implemented
     default_mode: enabled
     public_claim: true
+    availability: *stable_core
     interfaces:
       - review status
       - review configure

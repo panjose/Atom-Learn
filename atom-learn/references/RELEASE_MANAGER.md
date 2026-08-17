@@ -10,7 +10,7 @@ The AtomLearn Release Manager is a separate, stable distribution. It installs si
 - Stable artifacts must use an exact immutable GitHub tagged-release URL. Branch archives, HTTP, decorated URLs, prerelease versions on the stable channel, and cross-repository assets are rejected.
 - Manifest v2 binds the artifact filename, byte size, SHA-256, normalized content-tree hash, embedded Core manifest, package version, schema declarations, commit, tag, CI gate report, Skill entry-point hash/protocol, capability ledger, smoke fixtures, trust-bundle version, and target-specific runtime recipe.
 - New artifact code is not executed until signature, archive structure, hashes, and embedded identities have been verified.
-- A runtime bundle contains a complete wheelhouse and canonical recipe, never a copied virtual environment. Manager installs it with `pip --no-index` into a release-specific environment.
+- A runtime bundle contains the complete wheelhouse and canonical recipe for its declared runtime profile, never a copied virtual environment. Manager installs it with `pip --no-index` into a release-specific environment. The `v0.14.2` stable line declares only `base`; source extras such as `ocr`, `scale`, and `semantic` are not silently implied by that bundle.
 
 The manager root must be isolated from both the AtomLearn user-data root and every course workspace. Trust initialization never overwrites an existing trust root.
 
@@ -124,7 +124,7 @@ Public assets are fetched without a credential. On GitHub 401/403/404, Manager m
 
 `atomlearn-release` is a maintainer command. It requires the exact canonical JSON bytes emitted by `release/gate.py` for the tag/commit, a stable or prerelease channel, an Ed25519 private key, and the local public trust bundle. The builder refuses a key ID, public key, fingerprint, status, bundle version, or repository mismatch, so a release cannot be signed with a key that users have no declared path to trust. The same gate-report bytes are uploaded and embedded in the ZIP. It creates a deterministic ZIP and a signed manifest without overwriting existing outputs.
 
-The builder also requires the already-built universal `atomlearn-manager` wheel and one deterministic runtime bundle for every stable matrix coordinate. Each CI coordinate builds the Core wheel, downloads its complete binary dependency set, and emits a canonical runtime ZIP. The publish job refuses a partial Windows/Linux Python 3.10-3.13 amd64 matrix. Manager identity, runtime recipes, asset hashes, and capability-smoke identities are included in the same Ed25519-signed manifest.
+The builder also requires the already-built universal `atomlearn-manager` wheel and one deterministic runtime bundle for every stable matrix coordinate. Each CI coordinate builds the Core wheel, downloads the complete dependency set for the declared `base` profile, and emits a canonical runtime ZIP. Optional source extras are not stable delivery merely because their code has a separate CI job. The publish job refuses a partial Windows/Linux Python 3.10-3.13 amd64 matrix. Manager identity, runtime recipes, asset hashes, and capability-smoke identities are included in the same Ed25519-signed manifest.
 
 Stable publication is allowed only after the cross-platform release gates described in [Self-Evolution v2 Implementation Plan](../../docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md) pass. Building an artifact does not publish it.
 

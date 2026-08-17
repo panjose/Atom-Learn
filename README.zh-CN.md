@@ -11,7 +11,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 - 支持从完整教材或知识库、用户大纲，或仅一个主题名词开始
 - 为本地资料建立索引，并用 harness Web Search 补齐覆盖缺口
-- 融合 BM25、默认本地多语言哈希投影、可选供应商或显式批准的本地学习型 embedding、可恢复 HNSW generation 与 benchmark 门控重排
+- 在稳定 base runtime 中融合 BM25 与默认本地多语言哈希投影，接受供应商向量，并且只在开发者/源码安装中提供本地学习型 embedding、HNSW 与重排
 - 在稀疏输入进入课程规划前，要求显式证据判定和稳定来源定位
 - 从教材、PDF、笔记或多份资料生成 Knowledge Atom DAG
 - 梳理知识根节点、学习主干、分支、枢纽、推导、历史演进、对比、应用及单点来龙去脉
@@ -31,9 +31,11 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 分析学习证据，并生成有边界、需审批的课程进化提案
 - 从规范化 YAML 状态生成学习、科研、个性化和进化视图
 
-发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。它明确区分已实现、实验性与规划中能力，把已实现声明绑定到代码和测试，并阻止尚未完成的 v0.14 工作被宣传为当前可用。
+发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。账本会分别记录交付等级、runtime、artifact、用户入口、工程验证、harness 行为证据和学习效果证据。签名 `v0.14.2` runtime 只交付 `base` profile；`ocr`、`scale` 和 `semantic` 是开发者/源码 extras，不包含在该稳定 runtime 中。AtomLearn 尚未建立任何学习增益效果结论。工程检查、评分器校准、本地策略实验和 study 记录契约都不得被描述成这种证据。
 
 ## 安装
+
+本节命令属于开发者/源码安装，而不是稳定 Manager 的普通用户入口。不要把复制或链接的源码 Skill 与 Manager 所有的 bridge 混用；Manager 会正确拒绝覆盖外部 Skill。统一稳定 bootstrap 与保守源码副本迁移仍属于 v0.15 计划。
 
 AtomLearn 需要 Python 3.10+、PyYAML、pypdf 和 python-docx：
 
@@ -44,7 +46,7 @@ atomlearn --help
 
 可编辑安装会提供更短的 `atomlearn` 控制台命令；把 Skill 目录单独复制后，仍支持直接运行 `python atom-learn/scripts/atomlearn.py ...`。
 
-确定性小语料 RAG 路径不需要模型运行时。只有需要 USearch HNSW generation 时才安装 `.[scale]`，需要显式批准的本地 Sentence Transformers 模型时才安装 `.[semantic]`。
+确定性小语料 RAG 路径不需要模型运行时。在开发者/源码环境中，需要自动 OCR adapter 时安装 `.[ocr]`，需要 USearch HNSW generation 时安装 `.[scale]`，需要显式批准的本地 Sentence Transformers 模型时安装 `.[semantic]`。这些 extras 不存在于签名 `v0.14.2` base runtime 中，因此目前还不是稳定发行能力。sidecar OCR 与供应商生成向量的 attachment 仍可通过 base 路径使用。
 
 将仓库中的 `atom-learn` 目录复制或链接到个人 Codex Skills 目录，例如：
 
@@ -132,7 +134,7 @@ python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expect
 
 ## RAG 与纠错式 Web Search
 
-AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，它还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 OCR 输出。检索会返回精确支持证据的 IR block ID 与有界 parent context，融合 SQLite FTS5 BM25、默认本地多语言哈希向量，以及可选供应商或经显式批准的本地学习型 embedding。小语料继续使用轻依赖路径；大语料 dense 检索使用已验证的 USearch HNSW generation，否则以零扫描分块的方式跳过该分量。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
+AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，稳定 base 还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 sidecar OCR 输出。检索会返回精确支持证据的 IR block ID 与有界 parent context，融合 SQLite FTS5 BM25 与默认本地多语言哈希向量，并可 attachment 供应商生成的向量。自动 OCR、显式批准的本地学习型 embedding、USearch HNSW 和 cross-encoder 重排是已实现的开发者/源码路径，不属于签名 `v0.14.2` base runtime 能力。小语料继续使用轻依赖路径；没有已安装且通过验证的 HNSW generation 时，大语料 dense 检索会以零扫描分块的方式跳过该分量。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus

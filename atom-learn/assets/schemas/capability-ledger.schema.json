@@ -1,14 +1,39 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://atomlearn.dev/schemas/capability-ledger.schema.json",
-  "title": "AtomLearn capability and implementation ledger",
+  "title": "AtomLearn capability implementation, delivery, and claim ledger",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "schema_version", "core_version", "required_smoke", "capabilities"],
+  "required": ["kind", "schema_version", "core_version", "claim_policy", "required_smoke", "capabilities"],
   "properties": {
     "kind": {"const": "atomlearn.capability-ledger"},
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "core_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$"},
+    "claim_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stable_runtime_profiles", "developer_extras", "engineering",
+        "harness_behavior", "learning_effect", "causal_learning_claims_allowed"
+      ],
+      "properties": {
+        "stable_runtime_profiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"}
+        },
+        "developer_extras": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,31}$"}
+        },
+        "engineering": {"enum": ["verified", "partial", "not_verified"]},
+        "harness_behavior": {"enum": ["verified", "not_evaluated"]},
+        "learning_effect": {"enum": ["established", "not_established"]},
+        "causal_learning_claims_allowed": {"type": "boolean"}
+      }
+    },
     "required_smoke": {
       "type": "array",
       "minItems": 1,
@@ -22,13 +47,24 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "id", "title", "status", "default_mode", "public_claim",
+          "id", "title", "status", "availability", "default_mode", "public_claim",
           "interfaces", "implementation", "verification", "documentation", "limitations"
         ],
         "properties": {
           "id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,95}$"},
           "title": {"type": "string", "minLength": 3, "maxLength": 160},
           "status": {"enum": ["implemented", "experimental", "planned"]},
+          "availability": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["level", "runtime", "artifact", "user_entrypoint"],
+            "properties": {
+              "level": {"enum": ["stable", "experimental", "developer", "planned"]},
+              "runtime": {"enum": ["base", "manager", "optional_extra", "none"]},
+              "artifact": {"enum": ["core_runtime", "manager_distribution", "not_distributed"]},
+              "user_entrypoint": {"type": "boolean"}
+            }
+          },
           "default_mode": {"enum": ["enabled", "opt_in", "unavailable"]},
           "public_claim": {"type": "boolean"},
           "interfaces": {
