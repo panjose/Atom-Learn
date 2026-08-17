@@ -71,7 +71,7 @@
           "type": "array",
           "minItems": 1,
           "uniqueItems": true,
-          "items": {"enum": ["core", "bridge", "documents", "rag", "exam", "research"]}
+          "items": {"enum": ["core", "bridge", "documents", "rag", "exam", "research", "review"]}
         }
       }
     },

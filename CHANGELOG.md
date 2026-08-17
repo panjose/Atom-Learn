@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.2 - release-ready
+
+- Patch release `0.14.2` preserves the complete Phase 0–7 feature set and adds `review` to the release-manifest-v2 smoke-capability contract. A regression test now proves every capability required by the ledger is accepted by the signed release schema.
+- The immutable `v0.14.1` tag passed all Windows/Linux Python 3.10–3.13 release gates but failed closed during final manifest validation, before publishing a GitHub Release or stable asset. Its tag remains unmoved as an auditable failed release attempt.
+
+See [0.14.2 release notes](docs/releases/v0.14.2.md) for the patch boundary and release invariants.
+
 ## 0.14.1 - release-ready
 
 - Patch release `0.14.1` preserves the complete Phase 0–7 feature set and replaces the Python 3.11-only `tomllib` call in the tag workflow with Python 3.10-compatible installed-package metadata. The `v0.14.0` tag failed before publishing a GitHub Release or stable assets and remains unmoved as an auditable failed release attempt.

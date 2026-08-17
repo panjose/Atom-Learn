@@ -67,7 +67,7 @@ atomlearn status courses/calculus --json
 
 每次课程渲染都会写出五份英文视图和对齐的 `*.zh-CN.md` 中文生成视图，包括 `LEARNING_MAP.zh-CN.md`、`CURRENT.zh-CN.md` 与 `PROGRESS.zh-CN.md`。Atom 标题和学习者内容保持原样；导航标签、状态和操作文字会本地化。完整命令流程和教学行为见 [SKILL.md](atom-learn/SKILL.md)，结构化输入格式见 [SCHEMA.md](atom-learn/references/SCHEMA.md)。运行时课程状态存放在学习者选择的课程工作区，而不是 Skill 安装目录。
 
-Core `0.14.1` 保留只读兼容性与确定性迁移规划，并加入下文所述的修复门禁。`atomlearn migrate status|plan|validate` 不会应用迁移；仅查看状态也不会创建平台用户数据目录。详见 [Core 版本与迁移](atom-learn/references/MIGRATIONS.md)。
+Core `0.14.2` 保留只读兼容性与确定性迁移规划，并加入下文所述的修复门禁。`atomlearn migrate status|plan|validate` 不会应用迁移；仅查看状态也不会创建平台用户数据目录。详见 [Core 版本与迁移](atom-learn/references/MIGRATIONS.md)。
 
 跨课程个性化默认关闭，只有学习者明确运行 `atomlearn profile enable <workspace>` 后才启用。全局画像只包含白名单枚举信号，不自动导入旧 workspace 历史，并可在不删除审计记录的情况下停用、退役、导出或重置。`atomlearn policy effective|explain` 会合并当前轮、workspace、全局、策略和 Core 层，并给出逐值来源。详见[用户画像](atom-learn/references/USER_PROFILE.md)和[Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md)。
 
@@ -292,7 +292,7 @@ atomlearn-core version
 
 公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。指纹核验、密钥轮换、bridge 修复、更新计划、runtime 构建、恢复、回滚和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
 
-所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.14.1 Release Notes](docs/releases/v0.14.1.md)和[Changelog](CHANGELOG.md)。
+所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.14.2 Release Notes](docs/releases/v0.14.2.md)和[Changelog](CHANGELOG.md)。
 
 ## 设计文档
 
@@ -317,7 +317,7 @@ atomlearn-core version
 - [签名 Release Manager 操作说明](atom-learn/references/RELEASE_MANAGER.md)
 - [自进化 v2 操作与恢复](docs/SELF_EVOLUTION_V2_OPERATIONS.md)
 - [0.13.0 Release Notes](docs/releases/v0.13.0.md)
-- [0.14.1 Release Notes](docs/releases/v0.14.1.md)
+- [0.14.2 Release Notes](docs/releases/v0.14.2.md)
 
 ## 开发验证
 

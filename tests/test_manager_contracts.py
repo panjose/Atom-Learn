@@ -36,7 +36,7 @@ def test_capability_ledger_is_strict_versioned_and_truthful() -> None:
     ledger = yaml.safe_load((ROOT / "atom-learn" / "assets" / "capabilities.yaml").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(ledger)
-    assert ledger["core_version"] == "0.14.1"
+    assert ledger["core_version"] == "0.14.2"
     identifiers = [item["id"] for item in ledger["capabilities"]]
     assert len(identifiers) == len(set(identifiers))
     for capability in ledger["capabilities"]:
@@ -100,6 +100,11 @@ def test_stable_manifest_contract_requires_signature_and_immutable_release_sourc
     v2 = json.loads((SCHEMAS / "release-manifest-v2.schema.json").read_text(encoding="utf-8"))
     assert v2["properties"]["manifest_version"]["const"] == 2
     assert {"skill_protocol", "runtime_bundles", "capabilities", "smoke_fixture_sha256", "trust"} <= set(v2["required"])
+    supported_smoke = set(
+        v2["properties"]["capabilities"]["properties"]["required_smoke"]["items"]["enum"]
+    )
+    ledger = yaml.safe_load((ROOT / "atom-learn" / "assets" / "capabilities.yaml").read_text(encoding="utf-8"))
+    assert set(ledger["required_smoke"]) <= supported_smoke
 
 
 def test_release_gate_fixture_attests_every_phase6_boundary() -> None:
@@ -129,7 +134,7 @@ def test_release_gate_report_requires_attested_ci_and_never_overwrites(tmp_path:
         str(ROOT / "release" / "gate.py"),
         "write",
         "--tag",
-        "v0.14.1",
+        "v0.14.2",
         "--commit-sha",
         "b" * 40,
         "--output",

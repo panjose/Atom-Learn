@@ -67,7 +67,7 @@ atomlearn status courses/calculus --json
 
 Every course render writes the five English views plus aligned `*.zh-CN.md` generated views, including `LEARNING_MAP.zh-CN.md`, `CURRENT.zh-CN.md`, and `PROGRESS.zh-CN.md`. Atom titles and learner content stay unchanged; navigation labels, statuses, and operational text are localized. See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teaching behavior, and [SCHEMA.md](atom-learn/references/SCHEMA.md) for structured input formats. Runtime course state is stored in the learner's selected course workspace, not in the Skill installation directory.
 
-Core `0.14.1` retains read-only compatibility and deterministic migration planning while adding the remediation gates documented below. `atomlearn migrate status|plan|validate` never applies a migration; checking status does not create the platform user-data directory. See [Core Version and Migrations](atom-learn/references/MIGRATIONS.md).
+Core `0.14.2` retains read-only compatibility and deterministic migration planning while adding the remediation gates documented below. `atomlearn migrate status|plan|validate` never applies a migration; checking status does not create the platform user-data directory. See [Core Version and Migrations](atom-learn/references/MIGRATIONS.md).
 
 Cross-course personalization remains off until the learner explicitly runs `atomlearn profile enable <workspace>`. Global profiles contain only allowlisted enum signals, never import old workspace history automatically, and can be disabled, retired, exported, or reset without deleting their audit trail. `atomlearn policy effective|explain` merges current-turn, workspace, global, strategy, and Core layers with per-value provenance. See [User Profiles](atom-learn/references/USER_PROFILE.md) and [Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md).
 
@@ -292,7 +292,7 @@ atomlearn-core version
 
 Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for fingerprint verification, key rotation, bridge repair, update planning, runtime construction, recovery, rollback, and transport boundaries.
 
-All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.14.1 Release Notes](docs/releases/v0.14.1.md), and [Changelog](CHANGELOG.md).
+All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.14.2 Release Notes](docs/releases/v0.14.2.md), and [Changelog](CHANGELOG.md).
 
 ## Design Documentation
 
@@ -317,7 +317,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 - [Signed Release Manager Operations](atom-learn/references/RELEASE_MANAGER.md)
 - [Self-Evolution v2 Operations and Recovery](docs/SELF_EVOLUTION_V2_OPERATIONS.md)
 - [0.13.0 Release Notes](docs/releases/v0.13.0.md)
-- [0.14.1 Release Notes](docs/releases/v0.14.1.md)
+- [0.14.2 Release Notes](docs/releases/v0.14.2.md)
 
 ## Development Validation
 

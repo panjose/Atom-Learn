@@ -768,7 +768,7 @@ def test_every_update_persistence_stage_recovers_to_the_old_core(tmp_path: Path)
         assert parsed(launch(stage_root, "version"))["core_version"] == "0.12.0"
 
 
-def test_two_supported_core_upgrade_paths_reach_the_current_signed_core(tmp_path: Path) -> None:
+def test_supported_core_upgrade_paths_reach_the_current_signed_core(tmp_path: Path) -> None:
     private_key, public_key = signing_material(tmp_path)
     catalog = yaml.safe_load(
         (ROOT / "tests" / "fixtures" / "migrations" / "supported-upgrade-paths.yaml").read_text(encoding="utf-8")
@@ -784,7 +784,7 @@ def test_two_supported_core_upgrade_paths_reach_the_current_signed_core(tmp_path
             synthetic_source(tmp_path, old_version),
             old_version,
             private_key,
-            commit_char=str(index + 7),
+            commit_char=format(index + 7, "x"),
         )
         root = init_manager(tmp_path / f"upgrade-{old_version}", public_key)
         parsed(apply(root, old, old_version))
