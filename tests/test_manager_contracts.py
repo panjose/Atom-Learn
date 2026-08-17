@@ -121,6 +121,10 @@ def test_manager_is_a_separate_distribution_and_console_surface() -> None:
     common = (MANAGER_ROOT / "atomlearn_manager" / "common.py").read_text(encoding="utf-8")
     manager = (MANAGER_ROOT / "atomlearn_manager" / "manager.py").read_text(encoding="utf-8")
     assert "from atomlearn" not in common + manager
+    packaged_trust = MANAGER_ROOT / "atomlearn_manager" / "trust" / "atomlearn-trust-bundle.json"
+    assert packaged_trust.read_bytes() == (ROOT / "release" / "atomlearn-trust-bundle.json").read_bytes()
+    assert '"bridge/scripts/resolve.py"' in project
+    assert '"trust/atomlearn-trust-bundle.json"' in project
 
 
 def test_every_manager_release_and_launcher_argument_has_help() -> None:
@@ -317,15 +321,112 @@ def test_private_release_transport_uses_bounded_credential_flow(monkeypatch: pyt
     assert requests[2][1] == "Bearer secret-token"
 
 
+def test_bridge_resolver_passes_the_marker_bound_manager_root_without_a_shell(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import importlib.util
+    from types import SimpleNamespace
+
+    resolver = MANAGER_ROOT / "atomlearn_manager" / "bridge" / "scripts" / "resolve.py"
+    spec = importlib.util.spec_from_file_location("atomlearn_bridge_resolver_test", resolver)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    bridge = tmp_path / "codex home" / "skills" / "atom-learn"
+    script = bridge / "scripts" / "resolve.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("test location", encoding="utf-8")
+    bound_root = (tmp_path / "custom manager root").resolve()
+    (bridge / ".atomlearn-bridge.json").write_text(
+        json.dumps(
+            {
+                "kind": "atomlearn.codex-bridge",
+                "schema_version": 2,
+                "owner": "atomlearn-manager",
+                "manager_root": str(bound_root),
+            }
+        ),
+        encoding="utf-8",
+    )
+    calls: list[tuple[list[str], dict[str, object]]] = []
+    monkeypatch.setattr(module, "__file__", str(script))
+    monkeypatch.setattr(module.shutil, "which", lambda name: "C:/Program Files/AtomLearn/atomlearn-manager.exe")
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda command, **kwargs: calls.append((command, kwargs)) or SimpleNamespace(returncode=0),
+    )
+
+    assert module.main() == 0
+    assert calls == [
+        (
+            [
+                "C:/Program Files/AtomLearn/atomlearn-manager.exe",
+                "--manager-root",
+                str(bound_root),
+                "codex",
+                "resolve",
+                "--json",
+            ],
+            {"check": False},
+        )
+    ]
+
+
+def test_stable_bootstrap_refuses_legacy_or_incompatible_bridge_protocols(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from atomlearn_manager import bootstrap
+    from atomlearn_manager.common import ManagerError
+
+    trust = {"keys": {}}
+    trust_plan = {"ready": True}
+    monkeypatch.setattr(bootstrap, "_trust_plan", lambda *args: (trust, trust_plan))
+    monkeypatch.setattr(bootstrap, "validate_release_manifest", lambda *args, **kwargs: None)
+    legacy = {"manifest_version": 1, "version": "0.13.0"}
+    monkeypatch.setattr(bootstrap, "_manifest_from_source", lambda source: (legacy, source))
+    with pytest.raises(ManagerError, match="manifest v2 bridge protocol"):
+        bootstrap.bootstrap_plan(
+            tmp_path / "manager",
+            "0.13.0",
+            expected_fingerprint="sha256:" + "1" * 64,
+            manifest_source="local.json",
+            home=tmp_path / "codex",
+        )
+
+    incompatible = {
+        "manifest_version": 2,
+        "version": "0.13.0",
+        "skill_protocol": {"bridge_min": 2, "bridge_max": 3},
+    }
+    monkeypatch.setattr(bootstrap, "_manifest_from_source", lambda source: (incompatible, source))
+    with pytest.raises(ManagerError, match="incompatible"):
+        bootstrap.bootstrap_plan(
+            tmp_path / "manager",
+            "0.13.0",
+            expected_fingerprint="sha256:" + "1" * 64,
+            manifest_source="local.json",
+            home=tmp_path / "codex",
+        )
+
+
 def test_trust_bundle_levels_and_owned_codex_bridge(tmp_path: Path) -> None:
     import base64
 
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-    from atomlearn_manager.codex import bridge_status, install_bridge
+    from atomlearn_manager.codex import bridge_status, install_bridge, migrate_source_copy, source_copy_status
     from atomlearn_manager.common import ManagerError
-    from atomlearn_manager.manifest import accept_tofu, break_glass_trust, initialize_trust_bundle, key_fingerprint
+    from atomlearn_manager.manifest import (
+        accept_tofu,
+        break_glass_trust,
+        initialize_trust_bundle,
+        key_fingerprint,
+        pin_trust,
+    )
 
     root = tmp_path / "manager"
     root.mkdir()
@@ -335,6 +436,9 @@ def test_trust_bundle_levels_and_owned_codex_bridge(tmp_path: Path) -> None:
     accepted = accept_tofu(root, fingerprint, True)
     assert accepted["trust_level"] == "verified_tofu"
     assert accepted["revision"] == 2
+    pinned = pin_trust(root, fingerprint, True)
+    assert pinned["trust_level"] == "pinned"
+    assert pinned["revision"] == 3
     replacement_public = base64.b64encode(
         Ed25519PrivateKey.generate().public_key().public_bytes(
             serialization.Encoding.Raw, serialization.PublicFormat.Raw
@@ -366,7 +470,7 @@ def test_trust_bundle_levels_and_owned_codex_bridge(tmp_path: Path) -> None:
     replaced = break_glass_trust(root, replacement_bundle, replacement_fingerprint, True)
     assert replaced["trust_level"] == "pinned"
     assert replaced["bundle_version"] == 2
-    assert replaced["revision"] == 3
+    assert replaced["revision"] == 4
 
     home = tmp_path / "codex"
     foreign = home / "skills" / "atom-learn"
@@ -378,12 +482,65 @@ def test_trust_bundle_levels_and_owned_codex_bridge(tmp_path: Path) -> None:
     clean_home = tmp_path / "clean-codex"
     installed = install_bridge(root, clean_home)
     assert installed["installed"] is True
-    assert bridge_status(root, clean_home)["content_valid"] is True
+    state = bridge_status(root, clean_home)
+    assert state["content_valid"] is True
+    marker = json.loads((clean_home / "skills" / "atom-learn" / ".atomlearn-bridge.json").read_text(encoding="utf-8"))
+    assert marker["schema_version"] == 2
+    assert marker["manager_root"] == str(root.resolve())
+    repeated = install_bridge(root, clean_home)
+    assert repeated["installed"] is False
+    assert repeated["idempotent"] is True
+    assert repeated["previous_bridge"] is None
+    (clean_home / "skills" / "atom-learn" / "unexpected.txt").write_text("extra", encoding="utf-8")
+    assert bridge_status(root, clean_home)["exact_inventory"] is False
+    repaired_extra = install_bridge(root, clean_home, repair=True, confirmed=True)
+    assert Path(repaired_extra["previous_bridge"]).is_dir()
     (clean_home / "skills" / "atom-learn" / "SKILL.md").write_text("damaged", encoding="utf-8")
     assert bridge_status(root, clean_home)["content_valid"] is False
     repaired = install_bridge(root, clean_home, repair=True, confirmed=True)
     assert Path(repaired["previous_bridge"]).is_dir()
     assert bridge_status(root, clean_home)["content_valid"] is True
+
+    unknown_home = tmp_path / "unknown-codex"
+    unknown = unknown_home / "skills" / "atom-learn"
+    unknown.mkdir(parents=True)
+    (unknown / "SKILL.md").write_text("locally modified", encoding="utf-8")
+    classification = source_copy_status(root, unknown_home)
+    assert classification["classification"] == "unknown_or_modified_source_copy"
+    assert classification["migratable"] is False
+    with pytest.raises(ManagerError, match="will not be replaced"):
+        migrate_source_copy(root, unknown_home, confirmed=True)
+    assert (unknown / "SKILL.md").read_text(encoding="utf-8") == "locally modified"
+
+    empty_home = tmp_path / "empty-directory-codex"
+    empty_target = empty_home / "skills" / "atom-learn"
+    (empty_target / "unexpected-empty").mkdir(parents=True)
+    (empty_target / "SKILL.md").write_text("otherwise regular", encoding="utf-8")
+    empty = source_copy_status(root, empty_home)
+    assert empty["classification"] == "unsafe_source_copy"
+    assert empty["migratable"] is False
+
+    linked_home = tmp_path / "linked-codex"
+    linked_target = linked_home / "skills" / "atom-learn"
+    linked_target.parent.mkdir(parents=True)
+    try:
+        linked_target.symlink_to(unknown, target_is_directory=True)
+    except OSError:
+        pass  # Windows may deny unprivileged symlink creation.
+    else:
+        linked = source_copy_status(root, linked_home)
+        assert linked["classification"] == "unsafe_linked_path"
+        assert linked["migratable"] is False
+        with pytest.raises(ManagerError, match="will not be replaced"):
+            migrate_source_copy(root, linked_home, confirmed=True)
+        assert linked_target.resolve() == unknown.resolve()
+        broken_home = tmp_path / "broken-link-codex"
+        broken_target = broken_home / "skills" / "atom-learn"
+        broken_target.parent.mkdir(parents=True)
+        broken_target.symlink_to(tmp_path / "does-not-exist", target_is_directory=True)
+        broken = source_copy_status(root, broken_home)
+        assert broken["classification"] == "unsafe_linked_path"
+        assert broken["migratable"] is False
 
 
 def test_trust_rotation_requires_the_current_key_signature(tmp_path: Path) -> None:

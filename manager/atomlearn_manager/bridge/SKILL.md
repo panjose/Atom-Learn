@@ -5,9 +5,9 @@ description: Resolve and use the currently active signed AtomLearn Core for atom
 
 # AtomLearn Signed Bridge
 
-1. Run `atomlearn-manager codex resolve --json`.
+1. Run `python <SKILL_DIR>/scripts/resolve.py`. The resolver reads only this Manager-owned bridge marker and passes its bound Manager root as an argument without shell interpolation.
 2. Require `ok: true`; never fall back to a repository checkout or an unverified copied Skill.
 3. Read the returned absolute `skill_path` completely, then follow that signed Core Skill and its referenced resources.
 4. If resolution fails, explain that the signed Core or bridge needs repair and stop before reading or changing course state.
 
-This bridge stores no token, private key, workspace path, learner data, or version-specific teaching protocol.
+This bridge stores no token, private key, course workspace path, learner data, or version-specific teaching protocol.

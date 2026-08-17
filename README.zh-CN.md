@@ -35,7 +35,22 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 ## 安装
 
-本节命令属于开发者/源码安装，而不是稳定 Manager 的普通用户入口。不要把复制或链接的源码 Skill 与 Manager 所有的 bridge 混用；Manager 会正确拒绝覆盖外部 Skill。统一稳定 bootstrap 与保守源码副本迁移仍属于 v0.15 计划。
+### 稳定签名安装
+
+先独立安装经过复核的 `atomlearn-manager` wheel，不要从它将管理的 Core 中安装 Manager。然后使用同一组幂等 bootstrap 命令预览并执行 trust 初始化、签名 Core/base runtime、Manager 所有的 Codex bridge 和最终 capability doctor：
+
+```powershell
+python -m pip install <REVIEWED_ATOMLEARN_MANAGER_WHEEL>
+atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap status
+```
+
+`bootstrap plan` 只读，并显示 active key 指纹、目标平台/profile、准确写入位置、Core 动作和 bridge 所有权分类。执行前必须通过独立渠道核对指纹。重复执行相同 apply 是幂等的。如果原有 `~/.codex/skills/atom-learn` 与某个已知签名 release 的文件树完全一致，首次 plan/apply 时通过 `--artifact` 提供该 release 的本地签名 ZIP；Manager 会先把原目录保留为带时间标识的恢复备份，再安装 bridge。未知、已修改、链接或 reparse-point Skill 永远不会被替换。onboarding 中断后运行 `atomlearn-manager bootstrap recover`。
+
+### 开发者/源码安装
+
+这条路径明确属于 unmanaged 开发路径，不能与稳定的 Manager-owned bridge 混用。它只用于仓库开发、可选 extras 或直接迭代 Skill。
 
 AtomLearn 需要 Python 3.10+、PyYAML、pypdf 和 python-docx：
 
@@ -285,18 +300,17 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Runtime recipe v2 会把有限的 profile 名称与能力集合、完整依赖锁、OS/架构/Python ABI、模型策略或显式模型文件锁、原生引擎要求以及目标平台 smoke 报告绑定到签名 release。Manager 会把每个 profile 离线安装到 `runtimes/<core>/<platform>/<profile-hash-prefix>/`，用不可变状态中的完整 hash 验证它，执行 preflight 与 Core smoke，然后才原子切换 active profile 指针。profile 安装失败或中断时旧 profile 仍然 active；Core 回滚与 profile 回滚使用彼此独立的配对事务历史。当前签名 `v0.14.2` 的交付声明仍然只有 `base`：`scale`、`semantic-cpu` 和 `ocr` 在完整签名矩阵通过前仍是候选 recipe，`semantic-gpu` 则是 experimental。
 
 ```powershell
-python -m pip install -e ./manager
-atomlearn-manager init --trust-bundle release/atomlearn-trust-bundle.json --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
-atomlearn-manager codex install
-atomlearn-manager codex status
+atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap status
+atomlearn-manager bootstrap recover
 atomlearn-manager update status
-atomlearn-manager update recover
 atomlearn-manager profile status
 atomlearn-manager doctor
 atomlearn-core version
 ```
 
-`profile plan` 与 `profile apply` 只能选择 active 签名 manifest 已声明的 profile asset。语义 profile 激活时必须提供绝对路径的本地模型目录，其 revision 与每个必要文件 hash 都要匹配签名模型锁；系统绝不会下载模型或启用 remote code。OCR 激活会区分已安装的 Python adapter 与必需的原生引擎。`doctor` 会分别报告 `available`、`declared`、`installed`、`usable` 和 `stable`，并给出有类型的阻塞原因与修复建议。公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。profile 命令、指纹核验、密钥轮换、恢复、回滚和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
+bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root，包括自定义 root。`codex migrate plan` 只读；`codex migrate apply --confirmed` 只接管已知官方 release 的完全一致源码树，并保留源码备份及崩溃恢复日志。`profile plan` 与 `profile apply` 只能选择 active 签名 manifest 已声明的 profile asset。语义 profile 激活时必须提供绝对路径的本地模型目录，其 revision 与每个必要文件 hash 都要匹配签名模型锁；系统绝不会下载模型或启用 remote code。OCR 激活会区分已安装的 Python adapter 与必需的原生引擎。`doctor` 会分别报告 `available`、`declared`、`installed`、`usable` 和 `stable`，并给出有类型的阻塞原因与修复建议。公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。profile 命令、指纹核验、密钥轮换、恢复、回滚、迁移和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
 
 所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.14.2 Release Notes](docs/releases/v0.14.2.md)和[Changelog](CHANGELOG.md)。
 
@@ -304,6 +318,7 @@ atomlearn-core version
 
 - [产品与技术设计](docs/PRODUCT_DESIGN.md)
 - [v0.15 产品就绪修复设计](docs/V0_15_PRODUCT_READINESS_REMEDIATION_DESIGN.md)
+- [v0.15 Phase 4 稳定 Bootstrap 与迁移实施记录](docs/V0_15_PHASE4_IMPLEMENTATION.md)
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 考试与科研实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 自适应复习实施记录](docs/V0_14_PHASE7_IMPLEMENTATION.md)
@@ -332,7 +347,7 @@ atomlearn-core version
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/bootstrap.py manager/atomlearn_manager/codex.py manager/atomlearn_manager/manifest.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 快速测试覆盖 CLI/帮助契约、打包、文档、Schema 和确定性辅助逻辑；集成测试覆盖完整的文件系统与子进程工作流。CI 会在 Ubuntu 与 Windows 上使用 Python 3.10、3.11、3.12 和 3.13 运行两层测试。测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

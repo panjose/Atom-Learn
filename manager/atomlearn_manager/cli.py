@@ -10,8 +10,23 @@ from pathlib import Path
 import yaml
 
 from . import MANAGER_VERSION
+from .bootstrap import (
+    DEFAULT_TRUST_BUNDLE,
+    bootstrap_apply,
+    bootstrap_plan,
+    bootstrap_recover,
+    bootstrap_status,
+)
 from .common import ManagerError, manager_root
-from .codex import bridge_status, codex_home, install_bridge, resolve_core_skill
+from .codex import (
+    bridge_status,
+    codex_home,
+    install_bridge,
+    migrate_source_copy,
+    recover_bridge_migration,
+    resolve_core_skill,
+    source_copy_status,
+)
 from .manager import (
     apply_profile,
     apply_update,
@@ -32,6 +47,7 @@ from .manifest import (
     initialize_trust,
     initialize_trust_bundle,
     load_trust,
+    pin_trust,
     rotate_trust,
 )
 
@@ -53,6 +69,9 @@ def build_parser() -> argparse.ArgumentParser:
     tofu = trust_sub.add_parser("accept-tofu", help="Explicitly accept a displayed first-seen active-key fingerprint")
     tofu.add_argument("--fingerprint", required=True, help="Exact sha256 fingerprint displayed by trust inspect")
     tofu.add_argument("--confirmed", action="store_true", help="Confirm trust-on-first-use rather than out-of-band pinning")
+    pin = trust_sub.add_parser("pin", help="Promote an existing trust root using an out-of-band fingerprint")
+    pin.add_argument("--fingerprint", required=True, help="Exact independently verified active-key sha256 fingerprint")
+    pin.add_argument("--confirmed", action="store_true", help="Confirm the out-of-band fingerprint verification")
     rotate = trust_sub.add_parser("rotate", help="Apply a monotonic bundle signed by a currently trusted key")
     rotate.add_argument("--bundle", required=True, help="Local next-version signed trust bundle")
     rotate.add_argument("--confirmed", action="store_true", help="Confirm the reviewed trust-key rotation")
@@ -71,6 +90,58 @@ def build_parser() -> argparse.ArgumentParser:
     codex_repair = codex_sub.add_parser("repair", help="Atomically replace an owned bridge and retain its previous copy")
     codex_repair.add_argument("--codex-home", help="Absolute Codex home; defaults to CODEX_HOME or ~/.codex")
     codex_repair.add_argument("--confirmed", action="store_true", help="Confirm repair of the manager-owned bridge")
+    codex_migrate = codex_sub.add_parser("migrate", help="Plan apply or recover an exact official source-copy migration")
+    codex_migrate_sub = codex_migrate.add_subparsers(dest="codex_migrate_action", required=True)
+    for action, help_text in [
+        ("plan", "Classify the existing atom-learn Skill without writing"),
+        ("apply", "Back up an exact official source copy and install the bound bridge"),
+        ("recover", "Restore the source copy from the latest interrupted migration"),
+    ]:
+        command = codex_migrate_sub.add_parser(action, help=help_text)
+        command.add_argument("--codex-home", help="Absolute Codex home; defaults to CODEX_HOME or ~/.codex")
+        if action == "apply":
+            command.add_argument("--confirmed", action="store_true", help="Confirm backup and bridge replacement")
+    bootstrap = sub.add_parser("bootstrap", help="Plan apply inspect or recover the stable signed onboarding path")
+    bootstrap_sub = bootstrap.add_subparsers(dest="bootstrap_action", required=True)
+    for action, help_text in [
+        ("plan", "Preview trust Core profile bridge and every write location"),
+        ("apply", "Execute the reviewed idempotent stable onboarding plan"),
+    ]:
+        command = bootstrap_sub.add_parser(action, help=help_text)
+        command.add_argument("version", help="Target signed Core semantic version")
+        command.add_argument(
+            "--trust-bundle",
+            default=str(DEFAULT_TRUST_BUNDLE),
+            help="Local trust bundle; defaults to the Manager-packaged convenience bundle",
+        )
+        command.add_argument(
+            "--expected-fingerprint",
+            help="Independently verified active-key sha256 fingerprint; required for first stable bootstrap",
+        )
+        command.add_argument("--manifest", help="Local or HTTPS signed manifest; defaults to the canonical tagged release URL")
+        command.add_argument("--artifact", help="Local signed Core artifact; omit to download during apply")
+        command.add_argument("--runtime-bundle", help="Local matching runtime profile bundle; omit to download during apply")
+        command.add_argument(
+            "--profile",
+            choices=["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"],
+            default="base",
+            help="Finite signed runtime profile to activate",
+        )
+        command.add_argument(
+            "--allow-experimental",
+            action="store_true",
+            help="Explicitly permit a profile whose signed stability level is experimental",
+        )
+        command.add_argument("--model-dir", help="Absolute local directory matching a signed semantic model lock")
+        command.add_argument("--channel", choices=["stable", "prerelease"], default="stable", help="Required signed channel")
+        command.add_argument("--data-dir", help="Absolute AtomLearn user-data root to copy and validate")
+        command.add_argument("--workspace", action="append", default=[], help="Absolute course workspace; repeat as needed")
+        command.add_argument("--codex-home", help="Absolute Codex home; defaults to CODEX_HOME or ~/.codex")
+        if action == "apply":
+            command.add_argument("--confirmed", action="store_true", help="Confirm the exact bootstrap plan")
+    bootstrap_status_parser = bootstrap_sub.add_parser("status", help="Inspect trust Core and bridge onboarding state")
+    bootstrap_status_parser.add_argument("--codex-home", help="Absolute Codex home; defaults to CODEX_HOME or ~/.codex")
+    bootstrap_sub.add_parser("recover", help="Recover unfinished Core profile and bridge onboarding transactions")
     update = sub.add_parser("update", help="Check plan apply inspect or recover updates")
     update_sub = update.add_subparsers(dest="update_action", required=True)
     check = update_sub.add_parser("check", help="Read and verify one signed release manifest")
@@ -95,6 +166,11 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument(
             "--model-dir",
             help="Absolute local model directory matching the semantic profile's signed model lock",
+        )
+        command.add_argument(
+            "--allow-experimental",
+            action="store_true",
+            help="Explicitly permit a profile whose signed stability level is experimental",
         )
         command.add_argument("--channel", choices=["stable", "prerelease"], default="stable", help="Required signed release channel")
         command.add_argument("--data-dir", help="Absolute AtomLearn user-data root to copy and validate")
@@ -171,7 +247,7 @@ def _optional_absolute(value: str | None, label: str) -> Path | None:
 def run(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     root = manager_root(args.manager_root, create=args.command == "init")
-    if args.command != "init" and not root.is_dir():
+    if args.command not in {"init", "bootstrap"} and not root.is_dir():
         raise ManagerError(f"Manager is not initialized: {root}")
     if args.command == "init":
         direct = bool(args.key_id or args.public_key)
@@ -192,6 +268,9 @@ def run(argv: list[str] | None = None) -> None:
         elif args.trust_action == "accept-tofu":
             trust = accept_tofu(root, args.fingerprint, args.confirmed)
             result = {"ok": True, "trust": trust}
+        elif args.trust_action == "pin":
+            trust = pin_trust(root, args.fingerprint, args.confirmed)
+            result = {"ok": True, "trust": trust}
         elif args.trust_action == "break-glass":
             trust = break_glass_trust(
                 root, Path(args.bundle).resolve(), args.expected_fingerprint, args.confirmed
@@ -203,6 +282,14 @@ def run(argv: list[str] | None = None) -> None:
     elif args.command == "codex":
         if args.codex_action == "resolve":
             result = resolve_core_skill(root)
+        elif args.codex_action == "migrate":
+            home = codex_home(args.codex_home)
+            if args.codex_migrate_action == "plan":
+                result = source_copy_status(root, home)
+            elif args.codex_migrate_action == "apply":
+                result = migrate_source_copy(root, home, confirmed=args.confirmed)
+            else:
+                result = recover_bridge_migration(root)
         else:
             home = codex_home(args.codex_home)
             if args.codex_action == "status":
@@ -211,6 +298,35 @@ def run(argv: list[str] | None = None) -> None:
                 result = install_bridge(root, home)
             else:
                 result = install_bridge(root, home, repair=True, confirmed=args.confirmed)
+    elif args.command == "bootstrap":
+        if args.bootstrap_action == "status":
+            result = bootstrap_status(root, codex_home(args.codex_home))
+        elif args.bootstrap_action == "recover":
+            result = bootstrap_recover(root)
+        else:
+            data_root = _data_path(args.data_dir)
+            workspaces = [_optional_absolute(value, "Course workspace") for value in args.workspace]
+            artifact = Path(args.artifact).resolve() if args.artifact else None
+            runtime_bundle = Path(args.runtime_bundle).resolve() if args.runtime_bundle else None
+            model_dir = _optional_absolute(args.model_dir, "Model directory")
+            common = {
+                "trust_bundle": Path(args.trust_bundle).resolve(),
+                "expected_fingerprint": args.expected_fingerprint,
+                "manifest_source": args.manifest,
+                "artifact": artifact,
+                "runtime_bundle": runtime_bundle,
+                "profile_name": args.profile,
+                "allow_experimental": args.allow_experimental,
+                "model_dir": model_dir,
+                "data_root": data_root,
+                "workspaces": workspaces,
+                "channel": args.channel,
+                "home": codex_home(args.codex_home),
+            }
+            if args.bootstrap_action == "plan":
+                result = bootstrap_plan(root, args.version, **common)
+            else:
+                result = bootstrap_apply(root, args.version, confirmed=args.confirmed, **common)
     elif args.command == "version":
         state = status(root)
         result = {
@@ -274,6 +390,7 @@ def run(argv: list[str] | None = None) -> None:
                 workspaces,
                 args.channel,
                 args.profile,
+                allow_experimental=args.allow_experimental,
             )
         else:
             result = apply_update(
@@ -288,6 +405,7 @@ def run(argv: list[str] | None = None) -> None:
                 args.confirmed,
                 args.profile,
                 _optional_absolute(args.model_dir, "Model directory"),
+                allow_experimental=args.allow_experimental,
             )
     else:  # pragma: no cover
         raise ManagerError("Unhandled manager command")

@@ -22,4 +22,10 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.package-data]
-atomlearn_manager = ["schemas/*.json", "bridge/SKILL.md", "bridge/agents/openai.yaml"]
+atomlearn_manager = [
+  "schemas/*.json",
+  "bridge/SKILL.md",
+  "bridge/agents/openai.yaml",
+  "bridge/scripts/resolve.py",
+  "trust/atomlearn-trust-bundle.json",
+]

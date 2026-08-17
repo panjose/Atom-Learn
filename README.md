@@ -35,7 +35,22 @@ The release source of truth is the machine-readable [capability ledger](atom-lea
 
 ## Installation
 
-The commands in this section are the developer/source setup, not the stable Manager onboarding path. Do not combine a copied or linked source Skill with a Manager-owned bridge; Manager correctly refuses to overwrite a foreign Skill. A unified stable bootstrap and conservative source-copy migration remain planned for v0.15.
+### Stable signed installation
+
+Install a reviewed `atomlearn-manager` wheel independently from the Core it will manage. Then use one idempotent bootstrap command family to preview and apply trust initialization, the signed Core/base runtime, the Manager-owned Codex bridge, and the final capability doctor:
+
+```powershell
+python -m pip install <REVIEWED_ATOMLEARN_MANAGER_WHEEL>
+atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap status
+```
+
+`bootstrap plan` is read-only and displays the active-key fingerprint, target platform/profile, exact write locations, Core action, and bridge ownership classification. Verify the fingerprint through an independent channel before applying. Repeating the same apply is idempotent. If an old `~/.codex/skills/atom-learn` is an exact tree from a known signed release, supply that release's local signed ZIP with `--artifact` during the first plan/apply; Manager retains the original as a timestamped recovery backup before installing the bridge. Unknown, modified, linked, or reparse-point Skills are never replaced. Use `atomlearn-manager bootstrap recover` after an interrupted onboarding.
+
+### Developer/source installation
+
+This path is explicitly unmanaged and must not be mixed with the stable Manager-owned bridge. Use it only for repository development, optional extras, or direct Skill iteration.
 
 AtomLearn requires Python 3.10+, PyYAML, pypdf, and python-docx:
 
@@ -285,18 +300,17 @@ If the learner explicitly chooses to share a product-level finding, `evolve caps
 Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. Runtime recipe v2 binds a finite profile name and capability set, full dependency lock, OS/architecture/Python ABI, model policy or explicit model-file lock, native-engine requirements, and a target-platform smoke report into the signed release. Manager installs each profile offline into `runtimes/<core>/<platform>/<profile-hash-prefix>/`, verifies the full hash in its immutable state, runs preflight and Core smoke, and only then atomically changes the active profile pointer. A failed or interrupted profile install leaves the old profile active; Core rollback and profile rollback retain separate paired transaction histories. The current signed `v0.14.2` delivery claim remains `base` only: `scale`, `semantic-cpu`, and `ocr` are candidate recipes until their complete signed matrices pass, while `semantic-gpu` is experimental.
 
 ```powershell
-python -m pip install -e ./manager
-atomlearn-manager init --trust-bundle release/atomlearn-trust-bundle.json --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
-atomlearn-manager codex install
-atomlearn-manager codex status
+atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap status
+atomlearn-manager bootstrap recover
 atomlearn-manager update status
-atomlearn-manager update recover
 atomlearn-manager profile status
 atomlearn-manager doctor
 atomlearn-core version
 ```
 
-`profile plan` and `profile apply` select only a profile asset declared by the active signed manifest. Semantic activation requires an absolute local model directory whose revision and every required file hash match the signed lock; it never downloads a model or enables remote code. OCR activation distinguishes installed Python adapters from the required native engine. `doctor` reports `available`, `declared`, `installed`, `usable`, and `stable` independently with a typed blocker and remediation. Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for profile commands, fingerprint verification, key rotation, recovery, rollback, and transport boundaries.
+The bridge marker binds its resolver to the exact Manager root selected during bootstrap, including custom roots. `codex migrate plan` is read-only; `codex migrate apply --confirmed` takes over only an exact known official source tree, retains the source backup, and journals crash recovery. `profile plan` and `profile apply` select only a profile asset declared by the active signed manifest. Semantic activation requires an absolute local model directory whose revision and every required file hash match the signed lock; it never downloads a model or enables remote code. OCR activation distinguishes installed Python adapters from the required native engine. `doctor` reports `available`, `declared`, `installed`, `usable`, and `stable` independently with a typed blocker and remediation. Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for profile commands, fingerprint verification, key rotation, recovery, rollback, migration, and transport boundaries.
 
 All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.14.2 Release Notes](docs/releases/v0.14.2.md), and [Changelog](CHANGELOG.md).
 
@@ -304,6 +318,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
 - [v0.15 Product-Readiness Remediation Design](docs/V0_15_PRODUCT_READINESS_REMEDIATION_DESIGN.md)
+- [v0.15 Phase 4 Stable Bootstrap and Migration Implementation](docs/V0_15_PHASE4_IMPLEMENTATION.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 Exam and Research Implementation](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 Adaptive Review Implementation](docs/V0_14_PHASE7_IMPLEMENTATION.md)
@@ -332,7 +347,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/bootstrap.py manager/atomlearn_manager/codex.py manager/atomlearn_manager/manifest.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

@@ -154,8 +154,11 @@ def plan_update(
     workspaces: list[Path],
     channel: str,
     profile_name: str = "base",
+    *,
+    allow_experimental: bool = False,
+    trust_override: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    trust = load_trust(root)
+    trust = trust_override if trust_override is not None else load_trust(root)
     manifest, _ = _manifest_from_source(manifest_source)
     if manifest is None:  # defensive: only explicit check mode may operate without a manifest
         raise ManagerError(
@@ -176,6 +179,12 @@ def plan_update(
         archive = verify_release(manifest, artifact_path)
         verified = True
     selected_runtime = select_runtime(manifest, profile_name)
+    if (
+        selected_runtime is not None
+        and (selected_runtime.get("profile") or {}).get("stability") == "experimental"
+        and not allow_experimental
+    ):
+        raise ManagerError("Experimental runtime profile requires --allow-experimental")
     runtime_verified = False
     if runtime_bundle_path is not None:
         if selected_runtime is None:
@@ -185,7 +194,8 @@ def plan_update(
         inspect_runtime_bundle(runtime_bundle_path, selected_runtime)
         runtime_verified = True
     fake_free = os.environ.get("ATOMLEARN_MANAGER_FAKE_FREE_BYTES")
-    free = int(fake_free) if fake_free is not None else shutil.disk_usage(root).free
+    disk_probe = root if root.exists() else next((parent for parent in root.parents if parent.exists()), root.anchor)
+    free = int(fake_free) if fake_free is not None else shutil.disk_usage(disk_probe).free
     state_bytes = state_copy_size(data_root, workspaces)
     runtime_size = int(selected_runtime["size"]) if selected_runtime else 0
     required = int(manifest["artifact"]["size"]) * 2 + runtime_size * 3 + state_bytes * 2 + 32 * 1024 * 1024
@@ -577,6 +587,8 @@ def apply_update(
     confirmed: bool,
     profile_name: str = "base",
     model_dir: Path | None = None,
+    *,
+    allow_experimental: bool = False,
 ) -> dict[str, Any]:
     if not confirmed:
         raise ManagerError("Update apply requires --confirmed after reviewing update plan")
@@ -605,6 +617,7 @@ def apply_update(
             workspaces,
             channel,
             profile_name,
+            allow_experimental=allow_experimental,
         )
         if not plan["disk"]["sufficient"]:
             raise ManagerError("Insufficient disk space for side-by-side release and state copies")

@@ -155,7 +155,7 @@ def is_reparse_or_symlink(path: Path) -> bool:
     if path.is_symlink():
         return True
     try:
-        attributes = path.stat().st_file_attributes  # type: ignore[attr-defined]
+        attributes = path.lstat().st_file_attributes  # type: ignore[attr-defined]
     except (AttributeError, OSError):
         return False
     return bool(attributes & 0x400)

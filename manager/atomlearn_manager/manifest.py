@@ -72,10 +72,9 @@ def validate_trust_bundle(bundle: dict[str, Any]) -> None:
         raise ManagerError("Trust bundle must retain at least one active key")
 
 
-def initialize_trust_bundle(root: Path, bundle_path: Path, expected_fingerprint: str | None) -> dict[str, Any]:
-    path = root / "trust.yaml"
-    if path.exists():
-        raise ManagerError(f"Trust root already exists and will not be overwritten: {path}")
+def trust_from_bundle(bundle_path: Path, expected_fingerprint: str | None) -> dict[str, Any]:
+    """Validate a local bundle and derive trust state without writing it."""
+
     bundle = read_mapping(bundle_path)
     require_schema(bundle, "trust-bundle")
     validate_trust_bundle(bundle)
@@ -95,6 +94,14 @@ def initialize_trust_bundle(root: Path, bundle_path: Path, expected_fingerprint:
         },
     }
     require_schema(value, "trust-v2")
+    return value
+
+
+def initialize_trust_bundle(root: Path, bundle_path: Path, expected_fingerprint: str | None) -> dict[str, Any]:
+    path = root / "trust.yaml"
+    if path.exists():
+        raise ManagerError(f"Trust root already exists and will not be overwritten: {path}")
+    value = trust_from_bundle(bundle_path, expected_fingerprint)
     atomic_yaml(path, value)
     return value
 
@@ -120,6 +127,29 @@ def accept_tofu(root: Path, fingerprint: str, confirmed: bool) -> dict[str, Any]
     value = copy.deepcopy(current)
     value["revision"] += 1
     value["trust_level"] = "verified_tofu"
+    require_schema(value, "trust-v2")
+    atomic_yaml(root / "trust.yaml", value)
+    return value
+
+
+def pin_trust(root: Path, fingerprint: str, confirmed: bool) -> dict[str, Any]:
+    """Promote an existing versioned trust root using an out-of-band fingerprint."""
+
+    if not confirmed:
+        raise ManagerError("Out-of-band trust pinning requires --confirmed")
+    current = load_trust(root)
+    if current.get("schema_version") != 2:
+        raise ManagerError("Legacy trust roots must be reinitialized before out-of-band pinning")
+    active_fingerprints = {
+        item["fingerprint"] for item in current["keys"].values() if item["status"] == "active"
+    }
+    if fingerprint not in active_fingerprints:
+        raise ManagerError("Pinned fingerprint does not match an active trust key")
+    if current["trust_level"] == "pinned":
+        return current
+    value = copy.deepcopy(current)
+    value["trust_level"] = "pinned"
+    value["revision"] += 1
     require_schema(value, "trust-v2")
     atomic_yaml(root / "trust.yaml", value)
     return value

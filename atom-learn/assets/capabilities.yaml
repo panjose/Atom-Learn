@@ -427,6 +427,8 @@ capabilities:
       - atomlearn-runtime-bundle
       - atomlearn-manager profile
       - atomlearn-manager doctor
+      - atomlearn-manager bootstrap
+      - atomlearn-manager codex migrate
     implementation:
       - path: manager/atomlearn_manager/codex.py
         symbol: "def resolve_core_skill"
@@ -446,6 +448,10 @@ capabilities:
         symbol: "def open_release_asset"
       - path: manager/atomlearn_manager/manifest.py
         symbol: "def rotate_trust"
+      - path: manager/atomlearn_manager/bootstrap.py
+        symbol: "def bootstrap_apply"
+      - path: manager/atomlearn_manager/codex.py
+        symbol: "def migrate_source_copy"
     verification:
       - path: tests/test_manager.py
         symbol: "test_signed_side_by_side_upgrade_and_paired_rollback"
@@ -461,16 +467,22 @@ capabilities:
         symbol: "test_runtime_profile_registry_matches_manager_recipes_and_delivery_claims"
       - path: tests/test_manager_contracts.py
         symbol: "test_release_manifest_network_failures_are_typed_and_never_assert"
+      - path: tests/test_manager.py
+        symbol: "test_stable_bootstrap_is_read_only_idempotent_and_recovers_source_copy_migration"
+      - path: tests/test_manager_contracts.py
+        symbol: "test_trust_bundle_levels_and_owned_codex_bridge"
     documentation:
       - README.md
       - README.zh-CN.md
       - atom-learn/references/RELEASE_MANAGER.md
       - docs/V0_14_REMEDIATION_DESIGN.md
       - docs/V0_15_PRODUCT_READINESS_REMEDIATION_DESIGN.md
+      - docs/V0_15_PHASE4_IMPLEMENTATION.md
     limitations:
       - The published convenience trust bundle is strongly trusted only when its fingerprint is verified through an independent channel.
       - The stable CI runtime matrix currently targets amd64 Windows and Linux; the bundle schema also models arm64 for future release gates.
       - The current v0.14.2 delivery claim remains base-only. Scale, semantic-cpu, and OCR recipes are candidates until signed assets pass their full target-platform matrices; semantic-gpu remains experimental.
+      - Exact first-bootstrap migration of an existing official source copy requires the corresponding local signed Core artifact so identity can be established before installation.
 
   - id: review.adaptive_memory_v1
     title: Qualified per-Atom memory shadow/active review and workload-aware daily queue

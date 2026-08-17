@@ -784,6 +784,110 @@ def apply(root: Path, release_info: dict, version: str, *extra: object, check: b
     )
 
 
+def test_stable_bootstrap_is_read_only_idempotent_and_recovers_source_copy_migration(
+    tmp_path: Path,
+) -> None:
+    version = "0.13.0"
+    private_key, public_key = signing_material(tmp_path)
+    release_info = build(
+        tmp_path,
+        synthetic_source(tmp_path, version),
+        version,
+        private_key,
+        commit_char="8",
+    )
+    trust_bundle = trust_bundle_for_private(tmp_path, private_key)
+    fingerprint = key_fingerprint(public_key)
+    identity = "windows" if os.name == "nt" else "linux"
+    python_minor = f"py{sys.version_info.major}{sys.version_info.minor}"
+    runtime_bundle = next(
+        path
+        for path in release_info["runtime_bundle_paths"]
+        if f"-{identity}-amd64-{python_minor}-base-" in path
+    )
+    manager_root = (tmp_path / "bootstrap-manager").resolve()
+    codex_home = (tmp_path / "bootstrap-codex").resolve()
+    common = [
+        version,
+        "--trust-bundle",
+        trust_bundle,
+        "--expected-fingerprint",
+        fingerprint,
+        "--manifest",
+        release_info["manifest"],
+        "--artifact",
+        release_info["artifact"],
+        "--runtime-bundle",
+        runtime_bundle,
+        "--codex-home",
+        codex_home,
+    ]
+
+    conflicting_root = codex_home / "skills" / "atom-learn"
+    conflict = manager(conflicting_root, "bootstrap", "plan", *common, check=False)
+    assert conflict.returncode == 2
+    assert "must be isolated from the Codex Skill path" in conflict.stderr
+    assert not conflicting_root.exists()
+
+    plan = parsed(manager(manager_root, "bootstrap", "plan", *common))
+    assert plan["ready"] is True
+    assert plan["core_action"] == "install"
+    assert plan["bridge"]["classification"] == "absent"
+    assert plan["trust"]["active_fingerprints"] == [fingerprint]
+    assert not manager_root.exists()
+    assert not codex_home.exists()
+
+    first = parsed(manager(manager_root, "bootstrap", "apply", *common, "--confirmed"))
+    assert first["ok"] is True
+    assert first["idempotent"] is False
+    assert parsed(manager(manager_root, "bootstrap", "status", "--codex-home", codex_home))["ok"] is True
+    second = parsed(manager(manager_root, "bootstrap", "apply", *common, "--confirmed"))
+    assert second["ok"] is True
+    assert second["idempotent"] is True
+    assert list((codex_home / "skills").glob("atom-learn.previous-*")) == []
+
+    source_home = (tmp_path / "source-codex").resolve()
+    source_target = source_home / "skills" / "atom-learn"
+    shutil.copytree(manager_root / "releases" / version / "atom-learn", source_target)
+    migration_plan = parsed(manager(manager_root, "codex", "migrate", "plan", "--codex-home", source_home))
+    assert migration_plan["classification"] == "official_source_copy"
+    assert migration_plan["migratable"] is True
+    interrupted = manager(
+        manager_root,
+        "codex",
+        "migrate",
+        "apply",
+        "--codex-home",
+        source_home,
+        "--confirmed",
+        check=False,
+        env=environment(fail_after="bridge_installed"),
+    )
+    assert interrupted.returncode == 2
+    recovered = parsed(manager(manager_root, "codex", "migrate", "recover"))
+    assert recovered["recovered"] is True
+    restored_plan = parsed(manager(manager_root, "codex", "migrate", "plan", "--codex-home", source_home))
+    assert restored_plan["classification"] == "official_source_copy"
+    assert list((source_home / "skills").glob("atom-learn.failed-bridge-*"))
+
+    migrated = parsed(
+        manager(
+            manager_root,
+            "codex",
+            "migrate",
+            "apply",
+            "--codex-home",
+            source_home,
+            "--confirmed",
+        )
+    )
+    assert migrated["migrated"] is True
+    assert Path(migrated["backup"]).is_dir()
+    bridge = parsed(manager(manager_root, "codex", "status", "--codex-home", source_home))
+    assert bridge["ok"] is True
+    assert bridge["manager_root_matches"] is True
+
+
 def test_signed_side_by_side_upgrade_and_paired_rollback(tmp_path: Path) -> None:
     private_key, public_key = signing_material(tmp_path)
     manager_root = init_manager(tmp_path, public_key)

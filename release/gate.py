@@ -29,6 +29,10 @@ CAPABILITY_LEDGER = ROOT / "atom-learn" / "assets" / "capabilities.yaml"
 CAPABILITY_SCHEMA = ROOT / "atom-learn" / "assets" / "schemas" / "capability-ledger.schema.json"
 RUNTIME_PROFILES = ROOT / "atom-learn" / "assets" / "runtime-profiles.yaml"
 RUNTIME_PROFILE_SCHEMA = ROOT / "atom-learn" / "assets" / "schemas" / "runtime-profile-registry.schema.json"
+PUBLIC_TRUST_BUNDLE = ROOT / "release" / "atomlearn-trust-bundle.json"
+PACKAGED_TRUST_BUNDLE = (
+    ROOT / "manager" / "atomlearn_manager" / "trust" / "atomlearn-trust-bundle.json"
+)
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 REQUIRED_GATES = (
@@ -190,6 +194,10 @@ def validate_skill() -> dict[str, Any]:
     interface = agent.get("interface", {}) if isinstance(agent, dict) else {}
     if interface.get("display_name") != "AtomLearn" or "$atom-learn" not in interface.get("default_prompt", ""):
         raise GateError("agents/openai.yaml is not aligned with the AtomLearn Skill")
+    if not PUBLIC_TRUST_BUNDLE.is_file() or not PACKAGED_TRUST_BUNDLE.is_file():
+        raise GateError("Public and Manager-packaged trust bundles must both exist")
+    if PUBLIC_TRUST_BUNDLE.read_bytes() != PACKAGED_TRUST_BUNDLE.read_bytes():
+        raise GateError("Manager-packaged trust bundle differs from the public release trust bundle")
     manifest = yaml.safe_load(CORE_MANIFEST.read_text(encoding="utf-8"))
     if not isinstance(manifest, dict):
         raise GateError("Core manifest must be a mapping")

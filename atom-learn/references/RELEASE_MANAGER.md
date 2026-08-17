@@ -14,30 +14,57 @@ The AtomLearn Release Manager is a separate, stable distribution. It installs si
 
 The manager root must be isolated from both the AtomLearn user-data root and every course workspace. Trust initialization never overwrites an existing trust root.
 
-## Install the independent distribution
+## Stable bootstrap
 
-From a trusted repository checkout:
+Install a reviewed Manager wheel independently from the signed Core artifact it will manage:
 
 ```powershell
-python -m pip install -e ./manager
+python -m pip install <REVIEWED_ATOMLEARN_MANAGER_WHEEL>
 atomlearn-manager --help
-atomlearn-release --help
 atomlearn-core --help
 ```
 
-Production bootstrap should install a reviewed manager build independently from the Core artifact it manages. Keep the release private key outside the repository and manager host. The repository publishes a convenience trust bundle, but strong trust requires comparing its fingerprint through an independent channel.
+Keep the release private key outside the repository and manager host. Manager carries a byte-identical convenience copy of the public trust bundle, but strong trust still requires comparing the active fingerprint through an independent channel. Preview and apply the complete onboarding through one command family:
 
-Initialize once:
+```powershell
+atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap status
+```
+
+`bootstrap plan` does not create the Manager root, Codex home, or Skill directory. It verifies the trust bundle and signed manifest, inspects any local Core/runtime assets, computes disk needs, classifies the existing Skill, and displays every write location. `bootstrap apply` repeats the full plan under the same arguments before writing; it initializes or pins trust, installs or updates the signed Core/profile, installs or conservatively migrates the bridge, verifies exact bridge contents, and runs capability doctor. Repeating a successful apply is idempotent. Use `--manager-root <absolute-path>` before the subcommand when an explicit isolated root is needed. The root is written into the bridge marker, so resolution never falls back to a different default root.
+
+If onboarding is interrupted, rerun the same apply or recover the individual journals together:
+
+```powershell
+atomlearn-manager bootstrap recover
+atomlearn-manager bootstrap status
+```
+
+The default manifest is the canonical tagged GitHub Release manifest for the requested version. `--manifest`, `--artifact`, and `--runtime-bundle` accept reviewed local assets; omitted artifact/runtime assets are downloaded only during apply from URLs bound by the signed manifest. A non-base experimental profile always requires `--allow-experimental` in both plan and apply.
+
+### Developer/source path
+
+Repository development is an unmanaged path and must not share a Codex Skill location with the stable bridge:
+
+```powershell
+python -m pip install -e "./manager"
+python -m pip install -e ".[dev]"
+atomlearn-manager --help
+atomlearn --help
+```
+
+Use the repository's `atom-learn/SKILL.md` directly or copy/link it only into a separate development Codex home. Do not later point stable bootstrap at that modified tree and expect takeover. Stable bootstrap will fail closed until the foreign tree is moved or reviewed manually.
+
+## Trust lifecycle
+
+Direct `init` remains available for operators who need to stage trust separately:
 
 ```powershell
 atomlearn-manager init --trust-bundle release/atomlearn-trust-bundle.json --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
 atomlearn-manager trust inspect
-atomlearn-manager codex install
-atomlearn-manager codex status
 atomlearn-manager version
 ```
-
-Use `--manager-root <absolute-path>` before the subcommand when an explicit isolated root is needed. Otherwise the manager uses the platform-specific `AtomLearnManager` user-data directory.
 
 Direct `--key-id`/`--public-key` pinning remains available. Bundle initialization without `--expected-fingerprint` is explicitly recorded as `unverified`, not silently described as pinned trust. If an operator deliberately accepts the displayed first-seen fingerprint, `trust accept-tofu --fingerprint <SHA256> --confirmed` records the weaker `verified_tofu` level. Trust state therefore distinguishes `pinned`, `verified_tofu`, and `unverified`; signed release manifests cannot introduce new keys. A normal rotation must increment `bundle_version`, name the previous bundle, and carry a valid signature from a currently non-revoked key:
 
@@ -49,12 +76,28 @@ Revocation or account-compromise recovery is a separate operator procedure. Obta
 
 ## Stable Codex bridge
 
-The installed `atom-learn` Codex Skill is a small Manager-owned bridge, not a second mutable copy of the teaching protocol. It asks Manager to resolve the active signed Core, then returns the exact `SKILL.md` path, Core version, protocol version, hash, and manifest identity. Install never overwrites a foreign Skill. Repair replaces only an owned bridge and retains the previous copy:
+The installed `atom-learn` Codex Skill is a small Manager-owned bridge, not a second mutable copy of the teaching protocol. Its resolver reads the Manager root from its schema-v2 ownership marker and passes that root as a subprocess argument without shell interpolation. Manager then returns the exact signed `SKILL.md` path, Core version, protocol version, hash, and manifest identity. Install is idempotent, exact-inventory verification rejects added or changed files, and repair replaces only an owned bridge while retaining the previous copy:
 
 ```powershell
 atomlearn-manager codex resolve --json
 atomlearn-manager codex repair --confirmed
 ```
+
+An existing Skill without the Manager marker is classified before any takeover:
+
+- An exact file tree from an installed, verified signed release is `official_source_copy` and may be migrated after confirmation.
+- During first bootstrap, pass the corresponding local signed Core ZIP with `--artifact` so plan can establish that identity before Core installation.
+- An unknown, modified, linked, nested-linked, case-colliding, or otherwise unsafe tree is never overwritten.
+
+Preview or execute an exact migration explicitly:
+
+```powershell
+atomlearn-manager codex migrate plan
+atomlearn-manager codex migrate apply --confirmed
+atomlearn-manager codex migrate recover
+```
+
+Apply atomically renames the original to `atom-learn.source-backup-<timestamp>-<transaction>`, installs and verifies the root-bound bridge, and commits a `bmtxn-*` journal. The source backup is retained after success. If the process stops after backup or bridge installation, recovery preserves any failed bridge separately and restores the exact original source fingerprint. No migration recovery path deletes user content.
 
 ## Update workflow
 
