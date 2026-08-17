@@ -17,6 +17,7 @@ This phase does not claim that the adapter improves learning. The bundled benchm
 7. The daily queue combines failures, reviews, prerequisites, new Atoms, and exam practice under declared time and cognitive-load capacity.
 8. Behind-schedule output retains every overdue item and reports the backlog instead of fabricating completion.
 9. The pilot compares fixed and shadow recommendations on qualified workspace history, declares insufficient samples, and always blocks automatic promotion.
+10. Installed-runtime hashing accepts CPython's exact contained top-level `lib64 -> lib` venv alias on Linux, records the alias in the digest, and continues to reject every other symlink or reparse point.
 
 ## FSRS relationship
 
@@ -41,11 +42,12 @@ The phase includes pure adapter invariants and end-to-end CLI coverage for the b
 
 Local release verification on 2026-08-17:
 
-- fast contract/property/documentation suite: `59 passed`, `146 deselected` in 80.51 seconds;
-- complete integration suite: `145 passed`, `1 skipped`, `59 deselected` in 1076.28 seconds;
+- fast contract/property/documentation suite after the Linux runtime fix: `59 passed`, `147 deselected` in 97.07 seconds;
+- complete integration suite before the additional runtime-link regression test was added: `145 passed`, `1 skipped`, `59 deselected` in 1076.28 seconds;
 - the single skip is the expected optional USearch HNSW path when the local `scale` dependency is absent; the release workflow retains its dedicated Ubuntu/Python 3.12 scale job;
 - Skill release validation: passed for Core `0.14.0`, with 15 implemented, 1 experimental, and 0 planned capabilities;
 - targeted Phase 7 adapter/CLI tests: `5 passed`;
 - installed-runtime capability smoke now runs `review benchmark` and verifies both a current result and the fixed default;
 - a clean `atom_learn-0.14.0-py3-none-any.whl` was installed into an isolated venv, where `version`, workspace initialization, and `review benchmark` passed using only the packaged asset tree;
 - the stable release builder now rejects any runtime Core wheel that omits the review scheduler, asset resolver, memory benchmark, policy schema, or Core manifest when `review` is required by the smoke matrix.
+- targeted Manager upgrade/migration and runtime-link regression tests: `3 passed`; the link test proves both acceptance of the canonical contained venv alias and rejection of a differently named alias.

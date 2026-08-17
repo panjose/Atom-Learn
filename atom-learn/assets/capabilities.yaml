@@ -375,6 +375,8 @@ capabilities:
         symbol: "def resolve_core_skill"
       - path: manager/atomlearn_manager/runtime.py
         symbol: "def install_runtime"
+      - path: manager/atomlearn_manager/runtime.py
+        symbol: "def _is_canonical_venv_lib64_alias"
       - path: manager/atomlearn_manager/transport.py
         symbol: "def open_release_asset"
       - path: manager/atomlearn_manager/manifest.py
@@ -384,6 +386,8 @@ capabilities:
         symbol: "test_signed_side_by_side_upgrade_and_paired_rollback"
       - path: tests/test_manager.py
         symbol: "test_every_update_persistence_stage_recovers_to_the_old_core"
+      - path: tests/test_manager.py
+        symbol: "test_runtime_hash_allows_only_canonical_contained_venv_lib64_alias"
       - path: tests/test_manager_contracts.py
         symbol: "test_release_manifest_network_failures_are_typed_and_never_assert"
     documentation:

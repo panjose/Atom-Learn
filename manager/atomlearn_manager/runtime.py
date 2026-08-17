@@ -204,17 +204,41 @@ def _runtime_content_hash(runtime_root: Path) -> str:
         key=lambda path: path.relative_to(runtime_root).as_posix(),
     )
     for path in paths:
+        relative = path.relative_to(runtime_root)
+        if _is_canonical_venv_lib64_alias(path, runtime_root):
+            digest.update(relative.as_posix().encode("utf-8"))
+            digest.update(b"\0symlink\0lib\0")
+            continue
         if is_reparse_or_symlink(path):
             raise ManagerError(f"Installed runtime contains a link or reparse point: {path}")
         if not path.is_file():
             continue
-        digest.update(path.relative_to(runtime_root).as_posix().encode("utf-8"))
+        digest.update(relative.as_posix().encode("utf-8"))
         digest.update(b"\0")
         with path.open("rb") as handle:
             while block := handle.read(1024 * 1024):
                 digest.update(block)
         digest.update(b"\0")
     return "sha256:" + digest.hexdigest()
+
+
+def _is_canonical_venv_lib64_alias(path: Path, runtime_root: Path) -> bool:
+    """Allow only CPython venv's contained top-level ``lib64 -> lib`` alias."""
+
+    try:
+        relative = path.relative_to(runtime_root)
+    except ValueError:
+        return False
+    if relative.as_posix() != "lib64" or not path.is_symlink():
+        return False
+    try:
+        target = os.readlink(path)
+    except OSError:
+        return False
+    if target != "lib":
+        return False
+    library = runtime_root / "lib"
+    return library.is_dir() and not is_reparse_or_symlink(library)
 
 
 def _mark_runtime_read_only(runtime_root: Path) -> None:

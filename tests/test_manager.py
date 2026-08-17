@@ -377,6 +377,29 @@ def test_release_builder_rejects_review_runtime_without_packaged_assets(tmp_path
     _require_capability_runtime_payload(Path(built["path"]), ["core", "bridge"])
 
 
+def test_runtime_hash_allows_only_canonical_contained_venv_lib64_alias(tmp_path: Path) -> None:
+    from atomlearn_manager.common import ManagerError
+    from atomlearn_manager.runtime import _runtime_content_hash
+
+    runtime_root = tmp_path / "runtime"
+    library = runtime_root / "lib"
+    library.mkdir(parents=True)
+    (library / "payload.txt").write_text("signed runtime payload", encoding="utf-8")
+    try:
+        os.symlink("lib", runtime_root / "lib64", target_is_directory=True)
+    except OSError as exc:
+        pytest.skip(f"directory symlinks are unavailable on this test host: {exc}")
+    digest = _runtime_content_hash(runtime_root)
+    assert digest.startswith("sha256:")
+
+    unsafe_root = tmp_path / "unsafe-runtime"
+    unsafe_library = unsafe_root / "lib"
+    unsafe_library.mkdir(parents=True)
+    os.symlink("lib", unsafe_root / "alias", target_is_directory=True)
+    with pytest.raises(ManagerError, match="link or reparse point"):
+        _runtime_content_hash(unsafe_root)
+
+
 def build(
     tmp_path: Path,
     source: Path,
