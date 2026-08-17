@@ -80,6 +80,36 @@ def test_capability_ledger_is_strict_versioned_and_truthful() -> None:
     }
 
 
+def test_runtime_profile_registry_matches_manager_recipes_and_delivery_claims() -> None:
+    from atomlearn_manager.runtime import PROFILE_SPECS
+
+    schema = json.loads(
+        (ROOT / "atom-learn" / "assets" / "schemas" / "runtime-profile-registry.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    registry = yaml.safe_load(
+        (ROOT / "atom-learn" / "assets" / "runtime-profiles.yaml").read_text(encoding="utf-8")
+    )
+    Draft202012Validator.check_schema(schema)
+    Draft202012Validator(schema).validate(registry)
+    assert registry["stable_profiles"] == ["base"]
+    assert set(PROFILE_SPECS) == {"base", "scale", "semantic-cpu", "ocr", "semantic-gpu"}
+    for profile in registry["profiles"]:
+        expected = dict(profile)
+        expected.pop("release_status")
+        name = expected.pop("name")
+        assert expected == PROFILE_SPECS[name]
+    semantic = next(item for item in registry["profiles"] if item["name"] == "semantic-cpu")
+    assert semantic["model_policy"]["silent_download"] is False
+    assert semantic["model_policy"]["trust_remote_code"] is False
+    assert "safetensors" in semantic["model_policy"]["allowed_weight_formats"]
+    ocr = next(item for item in registry["profiles"] if item["name"] == "ocr")
+    assert ocr["native_requirements"] == [
+        {"id": "tesseract", "command": "tesseract", "version_args": ["--version"]}
+    ]
+
+
 def test_manager_is_a_separate_distribution_and_console_surface() -> None:
     project = (MANAGER_ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'name = "atomlearn-manager"' in project
@@ -138,6 +168,9 @@ def test_stable_manifest_contract_requires_signature_and_immutable_release_sourc
     )
     ledger = yaml.safe_load((ROOT / "atom-learn" / "assets" / "capabilities.yaml").read_text(encoding="utf-8"))
     assert set(ledger["required_smoke"]) <= supported_smoke
+    stable_profile_schema = v2["properties"]["capabilities"]["properties"]["stable_runtime_profiles"]
+    assert stable_profile_schema["uniqueItems"] is True
+    assert set(stable_profile_schema["items"]["enum"]) == {"base", "scale", "semantic-cpu", "ocr"}
 
 
 def test_release_gate_fixture_attests_every_phase6_boundary() -> None:

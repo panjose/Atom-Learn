@@ -8,9 +8,9 @@ The AtomLearn Release Manager is a separate, stable distribution. It installs si
 - `atomlearn-manager` owns trust configuration, release directories, transaction journals, and the active pointer.
 - Only Ed25519-signed manifests from an explicitly trusted repository and key are accepted.
 - Stable artifacts must use an exact immutable GitHub tagged-release URL. Branch archives, HTTP, decorated URLs, prerelease versions on the stable channel, and cross-repository assets are rejected.
-- Manifest v2 binds the artifact filename, byte size, SHA-256, normalized content-tree hash, embedded Core manifest, package version, schema declarations, commit, tag, CI gate report, Skill entry-point hash/protocol, capability ledger, smoke fixtures, trust-bundle version, and target-specific runtime recipe.
+- Manifest v2 binds the artifact filename, byte size, SHA-256, normalized content-tree hash, embedded Core manifest, package version, schema declarations, commit, tag, CI gate report, Skill entry-point hash/protocol, capability ledger, runtime-profile registry, smoke fixtures, trust-bundle version, and target-specific runtime recipe.
 - New artifact code is not executed until signature, archive structure, hashes, and embedded identities have been verified.
-- A runtime bundle contains the complete wheelhouse and canonical recipe for its declared runtime profile, never a copied virtual environment. Manager installs it with `pip --no-index` into a release-specific environment. The `v0.14.2` stable line declares only `base`; source extras such as `ocr`, `scale`, and `semantic` are not silently implied by that bundle.
+- A runtime bundle contains the complete wheelhouse, canonical profile recipe, and canonical target-platform smoke report, never a copied virtual environment. Manager installs every locked wheel with `pip --no-index --no-deps`; the base profile never fetches a model or OCR engine. The `v0.14.2` stable line declares only `base`; the signed registry defines `scale`, `semantic-cpu`, and `ocr` as promotion candidates and `semantic-gpu` as experimental without pretending those assets were delivered.
 
 The manager root must be isolated from both the AtomLearn user-data root and every course workspace. Trust initialization never overwrites an existing trust root.
 
@@ -79,6 +79,34 @@ Before every dispatch, `atomlearn-core` validates the active-pointer schema, sig
 
 Repeat `--workspace` for multiple courses. Omitting `--artifact` or `--runtime-bundle` downloads the exact URL bound into the signed manifest. `plan` is read-only: it verifies supplied assets, selects exactly one OS/architecture/Python runtime, calculates disk requirements, and reports compatible, migratable, review-required, or forbidden state documents. Review the plan before using `--confirmed`.
 
+## Immutable runtime profiles and capability doctor
+
+Runtime recipe v2 creates a new side-by-side profile at:
+
+```text
+runtimes/<core-version>/<os>-<arch>-py<abi>/<profile-hash-prefix>/
+```
+
+The directory label is a Windows-safe prefix; `atomlearn-runtime.json`, the signed manifest, and every verification use the full SHA-256 profile identity. A profile hash commits to the finite profile contract, complete wheel dependency lock, optional model lock, and smoke-report hash. The release manifest additionally binds Core version, OS, architecture, Python minor, bundle hash, recipe hash, and asset URL. A prefix collision cannot substitute content: Manager verifies the full identity and fails closed.
+
+Inspect, install, diagnose, recover, and roll back independently of Core updates:
+
+```powershell
+atomlearn-manager profile status
+atomlearn-manager profile plan scale --runtime-bundle <LOCAL_SIGNED_SCALE_ZIP>
+atomlearn-manager profile apply scale --runtime-bundle <LOCAL_SIGNED_SCALE_ZIP> --confirmed
+atomlearn-manager doctor
+atomlearn-manager doctor --capability ocr
+atomlearn-manager profile recover
+atomlearn-manager profile rollback --confirmed
+```
+
+`profile apply` verifies the already trusted active release manifest, selects exactly one matching platform/ABI/profile asset, installs it offline in a short same-volume staging path, validates its immutable state, preflights required Python modules, and runs the Core capability smoke before atomically replacing only the runtime fields of `active.yaml`. Core update transaction identity remains unchanged. The profile transaction has its own `ptxn-*` journal and paired previous-runtime pointer. An interruption before activation leaves active untouched; recovery marks the incomplete transaction closed. Post-activation validation failure immediately restores the previous active document.
+
+Semantic profiles require `--model-dir <ABSOLUTE_LOCAL_PATH>`. The signed model lock names the model and revision, disables `trust_remote_code`, permits only registered safe formats, and binds every required relative file path, size, and SHA-256. Manager does not download the model and rejects pickle-capable weight formats. OCR profiles separately preflight Python adapters and each native executable such as Tesseract; a Python import alone cannot make OCR usable. Experimental profiles additionally require `--allow-experimental`.
+
+`doctor` reports `available`, `declared`, `installed`, `usable`, and `stable` independently for each capability. Typical blockers include `not_declared`, `profile_not_installed`, `inactive_profile`, `python_adapter_missing`, `native_engine_missing`, `model_missing`, and `model_hash_mismatch`. Repository imports, source extras, or a host executable never turn a capability into stable delivery: stability requires a signed profile marked stable plus a passing target-platform smoke report.
+
 Apply performs these journaled stages:
 
 1. Download to same-root staging with a bounded signed size.
@@ -86,7 +114,7 @@ Apply performs these journaled stages:
 3. Copy user profiles, strategy state, and complete `.atomlearn` workspace state.
 4. Run only registered manager migration functions on those copies.
 5. Install the verified Core in a new, read-only version directory.
-6. Verify the signed runtime bundle, materialize its wheelhouse, and install the Core and locked dependencies offline into a new runtime.
+6. Verify the signed runtime profile, materialize its wheelhouse, install every locked wheel offline into a new immutable runtime, and preflight its declared adapters, native engines, and model lock.
 7. Run version/help/migration validation and real workspace `validate`/`status` checks against copied state.
 8. Run capability-declared TXT/HTML/PDF/DOCX extraction, RAG, exam, and research smoke paths using repository-owned fixtures.
 9. Apply migrated state with compare-before-write guards.
@@ -124,7 +152,7 @@ Public assets are fetched without a credential. On GitHub 401/403/404, Manager m
 
 `atomlearn-release` is a maintainer command. It requires the exact canonical JSON bytes emitted by `release/gate.py` for the tag/commit, a stable or prerelease channel, an Ed25519 private key, and the local public trust bundle. The builder refuses a key ID, public key, fingerprint, status, bundle version, or repository mismatch, so a release cannot be signed with a key that users have no declared path to trust. The same gate-report bytes are uploaded and embedded in the ZIP. It creates a deterministic ZIP and a signed manifest without overwriting existing outputs.
 
-The builder also requires the already-built universal `atomlearn-manager` wheel and one deterministic runtime bundle for every stable matrix coordinate. Each CI coordinate builds the Core wheel, downloads the complete dependency set for the declared `base` profile, and emits a canonical runtime ZIP. Optional source extras are not stable delivery merely because their code has a separate CI job. The publish job refuses a partial Windows/Linux Python 3.10-3.13 amd64 matrix. Manager identity, runtime recipes, asset hashes, and capability-smoke identities are included in the same Ed25519-signed manifest.
+The builder also requires the already-built universal `atomlearn-manager` wheel and one deterministic runtime bundle for every coordinate of every profile admitted by the Core registry's `stable_profiles` list. Each profile must have an exact Windows/Linux Python 3.10-3.13 amd64 matrix, and each bundle must carry a passing smoke report for its own OS/architecture/Python ABI. Candidate profiles are rejected from a stable release until the registry and capability ledger promote them together. Manager identity, dependency locks, model policies, runtime recipes, asset hashes, registry hash, and capability-smoke identities are included in the same Ed25519-signed manifest.
 
 Stable publication is allowed only after the cross-platform release gates described in [Self-Evolution v2 Implementation Plan](../../docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md) pass. Building an artifact does not publish it.
 
@@ -136,6 +164,8 @@ Stable publication is allowed only after the cross-platform release gates descri
 - Activation is one atomic pointer replacement, not an in-place Core overwrite.
 - The stable launcher resolves and verifies the active pointer on every invocation.
 - A manifest v2 launcher uses only the selected release runtime; it never inherits Manager's dependency environment.
+- Runtime profile installation never mutates an active environment; activation and paired profile rollback each replace one validated pointer atomically.
+- Base never silently downloads a semantic model or OCR engine, and optional profile preflight never upgrades a delivery claim.
 - The fixed Codex bridge resolves only the exact signed active `SKILL.md` and stores no learner data or credential.
 - At least the paired previous Core and state snapshot remain recoverable.
 - Recovery refuses to overwrite learning created after the failed transaction.

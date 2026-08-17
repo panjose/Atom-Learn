@@ -27,6 +27,8 @@ CORE_SCHEMA = ROOT / "atom-learn" / "assets" / "schemas" / "core-manifest.schema
 GATE_SCHEMA = ROOT / "manager" / "atomlearn_manager" / "schemas" / "release-gate-report.schema.json"
 CAPABILITY_LEDGER = ROOT / "atom-learn" / "assets" / "capabilities.yaml"
 CAPABILITY_SCHEMA = ROOT / "atom-learn" / "assets" / "schemas" / "capability-ledger.schema.json"
+RUNTIME_PROFILES = ROOT / "atom-learn" / "assets" / "runtime-profiles.yaml"
+RUNTIME_PROFILE_SCHEMA = ROOT / "atom-learn" / "assets" / "schemas" / "runtime-profile-registry.schema.json"
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 TAG = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$")
 REQUIRED_GATES = (
@@ -78,6 +80,17 @@ def _validate_capability_ledger(core_version: str) -> dict[str, int]:
     project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     optional_dependencies = set(project.get("project", {}).get("optional-dependencies", {})) - {"dev"}
     claim_policy = ledger["claim_policy"]
+    runtime_profiles = yaml.safe_load(RUNTIME_PROFILES.read_text(encoding="utf-8"))
+    if not isinstance(runtime_profiles, dict):
+        raise GateError("Runtime profile registry must be a mapping")
+    _validate(runtime_profiles, RUNTIME_PROFILE_SCHEMA, "Runtime profile registry")
+    if runtime_profiles["core_version"] != core_version:
+        raise GateError("Runtime profile registry and Core manifest versions disagree")
+    profile_names = [item["name"] for item in runtime_profiles["profiles"]]
+    if len(profile_names) != len(set(profile_names)):
+        raise GateError("Runtime profile registry contains duplicate profile names")
+    if claim_policy["stable_runtime_profiles"] != runtime_profiles["stable_profiles"]:
+        raise GateError("Capability ledger and runtime profile registry disagree on stable delivery")
     if claim_policy["stable_runtime_profiles"] != ["base"]:
         raise GateError("This release line may claim only the signed base runtime profile as stable")
     if set(claim_policy["developer_extras"]) != optional_dependencies:

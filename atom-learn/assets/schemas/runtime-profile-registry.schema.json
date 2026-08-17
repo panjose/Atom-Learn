@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/runtime-profile-registry.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "core_version", "stable_profiles", "profiles"],
+  "properties": {
+    "kind": {"const": "atomlearn.runtime-profile-registry"},
+    "schema_version": {"const": 1},
+    "core_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "stable_profiles": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"enum": ["base", "scale", "semantic-cpu", "ocr"]}
+    },
+    "profiles": {
+      "type": "array", "minItems": 5,
+      "items": {"$ref": "#/$defs/profile"}
+    }
+  },
+  "$defs": {
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name", "release_status", "capabilities", "stability", "python_modules",
+        "native_requirements", "model_policy", "smoke_suites"
+      ],
+      "properties": {
+        "name": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+        "release_status": {"enum": ["stable", "candidate", "experimental"]},
+        "capabilities": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]}
+        },
+        "stability": {"enum": ["stable", "experimental"]},
+        "python_modules": {
+          "type": "array", "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"}
+        },
+        "native_requirements": {
+          "type": "array",
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "command", "version_args"],
+            "properties": {
+              "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,31}$"},
+              "command": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$"},
+              "version_args": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+            }
+          }
+        },
+        "model_policy": {
+          "type": "object", "additionalProperties": false,
+          "required": ["mode", "silent_download"],
+          "properties": {
+            "mode": {"enum": ["none", "pinned_local"]},
+            "silent_download": {"const": false},
+            "trust_remote_code": {"const": false},
+            "allowed_weight_formats": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+            "forbidden_formats": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+          }
+        },
+        "smoke_suites": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale-index", "semantic-retrieval", "ocr-layout", "semantic-gpu"]}
+        }
+      }
+    }
+  }
+}

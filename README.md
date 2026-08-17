@@ -282,7 +282,7 @@ If the learner explicitly chooses to share a product-level finding, `evolve caps
 
 ### Signed Release Manager
 
-Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. Manifest v2 binds the signed Core, fixed Codex bridge protocol, capability smoke contract, complete offline wheelhouse recipe, and one isolated runtime for each supported OS/Python target. The launcher always uses the active release's runtime; activation occurs only after copied-state migration and capability-aware smoke tests pass. Failed or interrupted updates retain the old Core and its runtime, while rollback remains limited to the paired previous release and matching state snapshot.
+Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. Runtime recipe v2 binds a finite profile name and capability set, full dependency lock, OS/architecture/Python ABI, model policy or explicit model-file lock, native-engine requirements, and a target-platform smoke report into the signed release. Manager installs each profile offline into `runtimes/<core>/<platform>/<profile-hash-prefix>/`, verifies the full hash in its immutable state, runs preflight and Core smoke, and only then atomically changes the active profile pointer. A failed or interrupted profile install leaves the old profile active; Core rollback and profile rollback retain separate paired transaction histories. The current signed `v0.14.2` delivery claim remains `base` only: `scale`, `semantic-cpu`, and `ocr` are candidate recipes until their complete signed matrices pass, while `semantic-gpu` is experimental.
 
 ```powershell
 python -m pip install -e ./manager
@@ -291,10 +291,12 @@ atomlearn-manager codex install
 atomlearn-manager codex status
 atomlearn-manager update status
 atomlearn-manager update recover
+atomlearn-manager profile status
+atomlearn-manager doctor
 atomlearn-core version
 ```
 
-Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for fingerprint verification, key rotation, bridge repair, update planning, runtime construction, recovery, rollback, and transport boundaries.
+`profile plan` and `profile apply` select only a profile asset declared by the active signed manifest. Semantic activation requires an absolute local model directory whose revision and every required file hash match the signed lock; it never downloads a model or enables remote code. OCR activation distinguishes installed Python adapters from the required native engine. `doctor` reports `available`, `declared`, `installed`, `usable`, and `stable` independently with a typed blocker and remediation. Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for profile commands, fingerprint verification, key rotation, recovery, rollback, and transport boundaries.
 
 All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.14.2 Release Notes](docs/releases/v0.14.2.md), and [Changelog](CHANGELOG.md).
 

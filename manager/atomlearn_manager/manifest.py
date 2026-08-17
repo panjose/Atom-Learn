@@ -244,9 +244,13 @@ def validate_release_manifest(
     if manifest.get("manifest_version") == 2:
         if manifest["skill_protocol"]["bridge_min"] > manifest["skill_protocol"]["version"] or manifest["skill_protocol"]["bridge_max"] < manifest["skill_protocol"]["version"]:
             raise ManagerError("Release Skill protocol is outside its declared bridge compatibility range")
-        runtime_coordinates: set[tuple[str, str, str]] = set()
+        runtime_coordinates: set[tuple[str, str, str, str]] = set()
+        runtime_profile_names: set[str] = set()
         for runtime in manifest["runtime_bundles"]:
-            coordinate = (runtime["platform"], runtime["architecture"], runtime["python_minor"])
+            profile = runtime.get("profile")
+            profile_name = profile.get("name", "base") if isinstance(profile, dict) else "base"
+            coordinate = (runtime["platform"], runtime["architecture"], runtime["python_minor"], profile_name)
+            runtime_profile_names.add(profile_name)
             if coordinate in runtime_coordinates:
                 raise ManagerError(f"Release has a duplicate runtime coordinate: {coordinate}")
             runtime_coordinates.add(coordinate)
@@ -254,6 +258,25 @@ def validate_release_manifest(
                 f"{version}-{runtime['platform']}-{runtime['architecture']}-py"
                 f"{runtime['python_minor'].replace('.', '')}"
             )
+            if isinstance(profile, dict):
+                if runtime["core_version"] != version:
+                    raise ManagerError("Runtime profile Core version does not match the release")
+                expected_runtime_id += (
+                    f"-{profile_name}-{runtime['profile_hash'].removeprefix('sha256:')[:12]}"
+                )
+                if profile["model_policy"]["silent_download"] is not False:
+                    raise ManagerError("Runtime profile may not permit silent model downloads")
+                if profile["model_policy"]["mode"] == "pinned_local":
+                    model_lock = runtime.get("model_lock")
+                    if not isinstance(model_lock, dict) or model_lock.get("trust_remote_code") is not False:
+                        raise ManagerError("Semantic runtime profile lacks a safe signed model lock")
+                smoke = runtime.get("smoke")
+                if not isinstance(smoke, dict) or smoke.get("profile") != profile_name:
+                    raise ManagerError("Runtime profile smoke identity is missing or inconsistent")
+                if smoke.get("status") == "passed" and (
+                    smoke.get("platform"), smoke.get("architecture"), smoke.get("python_minor")
+                ) != (runtime["platform"], runtime["architecture"], runtime["python_minor"]):
+                    raise ManagerError("Runtime profile smoke target disagrees with its signed runtime coordinate")
             if runtime["id"] != expected_runtime_id or runtime["filename"] != f"atomlearn-runtime-{expected_runtime_id}.zip":
                 raise ManagerError("Runtime ID or filename does not match the release target coordinates")
             if not runtime["core_wheel"]["filename"].startswith(
@@ -266,6 +289,26 @@ def validate_release_manifest(
                 raise ManagerError("Runtime URL must identify an immutable tagged GitHub release asset")
             if runtime_url.query or runtime_url.fragment:
                 raise ManagerError("Decorated runtime URLs are forbidden")
+        stable_profiles = manifest["capabilities"].get("stable_runtime_profiles")
+        if stable_profiles is not None and channel == "stable":
+            expected_profiles = set(stable_profiles)
+            if runtime_profile_names != expected_profiles:
+                raise ManagerError("Stable runtime profile set disagrees with the signed delivery claim")
+            required_matrix = {
+                (system, "amd64", python_minor)
+                for system in ["linux", "windows"]
+                for python_minor in ["3.10", "3.11", "3.12", "3.13"]
+            }
+            for profile_name in expected_profiles:
+                actual_matrix = {
+                    (runtime["platform"], runtime["architecture"], runtime["python_minor"])
+                    for runtime in manifest["runtime_bundles"]
+                    if (runtime.get("profile") or {}).get("name") == profile_name
+                    and runtime.get("smoke", {}).get("status") == "passed"
+                    and runtime.get("smoke", {}).get("platform_verified") is True
+                }
+                if actual_matrix != required_matrix:
+                    raise ManagerError(f"Stable runtime profile matrix or smoke report is incomplete: {profile_name}")
     if channel == "stable" and "-" in version:
         raise ManagerError("Stable channel cannot contain a prerelease version")
     manager_artifact = manifest["manager_artifact"]

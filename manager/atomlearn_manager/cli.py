@@ -12,7 +12,20 @@ import yaml
 from . import MANAGER_VERSION
 from .common import ManagerError, manager_root
 from .codex import bridge_status, codex_home, install_bridge, resolve_core_skill
-from .manager import apply_update, check_release, plan_update, recover_latest, rollback, status
+from .manager import (
+    apply_profile,
+    apply_update,
+    capability_doctor,
+    check_release,
+    plan_update,
+    profile_plan,
+    profile_status,
+    recover_profile,
+    recover_latest,
+    rollback,
+    rollback_profile,
+    status,
+)
 from .manifest import (
     accept_tofu,
     break_glass_trust,
@@ -73,6 +86,16 @@ def build_parser() -> argparse.ArgumentParser:
         command.add_argument("--manifest", required=True, help="Local path or HTTPS signed release-manifest URL")
         command.add_argument("--artifact", help="Local artifact; omit to download the signed URL")
         command.add_argument("--runtime-bundle", help="Local matching signed runtime bundle; omit to download its signed URL")
+        command.add_argument(
+            "--profile",
+            choices=["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"],
+            default="base",
+            help="Signed runtime profile to select for this Core release",
+        )
+        command.add_argument(
+            "--model-dir",
+            help="Absolute local model directory matching the semantic profile's signed model lock",
+        )
         command.add_argument("--channel", choices=["stable", "prerelease"], default="stable", help="Required signed release channel")
         command.add_argument("--data-dir", help="Absolute AtomLearn user-data root to copy and validate")
         command.add_argument("--workspace", action="append", default=[], help="Absolute course workspace; repeat for multiple courses")
@@ -83,6 +106,47 @@ def build_parser() -> argparse.ArgumentParser:
     rollback_parser = sub.add_parser("rollback", help="Restore the paired previous Core and state copy")
     rollback_parser.add_argument("version", help="Paired previous Core version named by the active pointer")
     rollback_parser.add_argument("--confirmed", action="store_true", help="Confirm paired Core and state-snapshot rollback")
+    profile = sub.add_parser("profile", help="Plan install inspect or roll back signed immutable runtime profiles")
+    profile_sub = profile.add_subparsers(dest="profile_action", required=True)
+    profile_sub.add_parser("status", help="List signed profiles for this platform and their installed/active state")
+    for action, help_text in [
+        ("plan", "Verify and preview one signed runtime profile without changing active state"),
+        ("apply", "Install preflight smoke and atomically activate one signed runtime profile"),
+    ]:
+        command = profile_sub.add_parser(action, help=help_text)
+        command.add_argument(
+            "profile_name",
+            choices=["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"],
+            help="Finite capability profile declared by the active signed release",
+        )
+        command.add_argument(
+            "--runtime-bundle",
+            help="Local matching signed profile bundle; omit during apply to download its signed URL",
+        )
+        command.add_argument(
+            "--model-dir",
+            help="Absolute local model directory matching the profile's signed model lock",
+        )
+        command.add_argument(
+            "--allow-experimental",
+            action="store_true",
+            help="Explicitly permit a profile whose signed stability level is experimental",
+        )
+        if action == "apply":
+            command.add_argument("--confirmed", action="store_true", help="Confirm the reviewed profile plan and activation")
+    profile_rollback = profile_sub.add_parser("rollback", help="Atomically restore the paired previous runtime profile")
+    profile_rollback.add_argument("--confirmed", action="store_true", help="Confirm paired runtime-profile rollback")
+    profile_sub.add_parser("recover", help="Recover the latest interrupted runtime-profile transaction")
+    doctor = sub.add_parser("doctor", help="Report available declared installed usable and stable capability states")
+    doctor.add_argument(
+        "--capability",
+        choices=["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"],
+        help="Limit diagnosis to one capability",
+    )
+    doctor.add_argument(
+        "--model-dir",
+        help="Absolute local model directory to verify against a signed semantic model lock",
+    )
     return parser
 
 
@@ -92,6 +156,15 @@ def _data_path(value: str | None) -> Path | None:
     path = Path(value)
     if not path.is_absolute():
         raise ManagerError(f"User-data root must be absolute: {path}")
+    return path.resolve(strict=False)
+
+
+def _optional_absolute(value: str | None, label: str) -> Path | None:
+    if value is None:
+        return None
+    path = Path(value)
+    if not path.is_absolute():
+        raise ManagerError(f"{label} must be absolute: {path}")
     return path.resolve(strict=False)
 
 
@@ -147,6 +220,38 @@ def run(argv: list[str] | None = None) -> None:
         }
     elif args.command == "rollback":
         result = rollback(root, args.version, args.confirmed)
+    elif args.command == "profile":
+        if args.profile_action == "status":
+            result = profile_status(root)
+        elif args.profile_action == "recover":
+            result = recover_profile(root)
+        elif args.profile_action == "rollback":
+            result = rollback_profile(root, confirmed=args.confirmed)
+        else:
+            runtime_bundle = Path(args.runtime_bundle).resolve() if args.runtime_bundle else None
+            model_dir = _optional_absolute(args.model_dir, "Model directory")
+            if args.profile_action == "plan":
+                result = profile_plan(
+                    root,
+                    args.profile_name,
+                    runtime_bundle,
+                    allow_experimental=args.allow_experimental,
+                )
+            else:
+                result = apply_profile(
+                    root,
+                    args.profile_name,
+                    runtime_bundle,
+                    confirmed=args.confirmed,
+                    allow_experimental=args.allow_experimental,
+                    model_dir=model_dir,
+                )
+    elif args.command == "doctor":
+        result = capability_doctor(
+            root,
+            args.capability,
+            model_dir=_optional_absolute(args.model_dir, "Model directory"),
+        )
     elif args.update_action == "check":
         result = check_release(root, args.manifest, args.channel, offline=args.offline)
     elif args.update_action == "status":
@@ -159,7 +264,17 @@ def run(argv: list[str] | None = None) -> None:
         artifact = Path(args.artifact).resolve() if args.artifact else None
         runtime_bundle = Path(args.runtime_bundle).resolve() if args.runtime_bundle else None
         if args.update_action == "plan":
-            result = plan_update(root, args.version, args.manifest, artifact, runtime_bundle, data_root, workspaces, args.channel)
+            result = plan_update(
+                root,
+                args.version,
+                args.manifest,
+                artifact,
+                runtime_bundle,
+                data_root,
+                workspaces,
+                args.channel,
+                args.profile,
+            )
         else:
             result = apply_update(
                 root,
@@ -171,6 +286,8 @@ def run(argv: list[str] | None = None) -> None:
                 workspaces,
                 args.channel,
                 args.confirmed,
+                args.profile,
+                _optional_absolute(args.model_dir, "Model directory"),
             )
     else:  # pragma: no cover
         raise ManagerError("Unhandled manager command")

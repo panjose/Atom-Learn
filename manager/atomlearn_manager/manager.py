@@ -32,7 +32,16 @@ from .common import (
     version_tuple,
 )
 from .manifest import load_trust, validate_release_manifest
-from .runtime import install_runtime, runtime_python, select_runtime, verify_installed_runtime
+from .runtime import (
+    install_runtime,
+    platform_identity,
+    profile_preflight,
+    runtime_for_active,
+    runtime_path,
+    runtime_python,
+    select_runtime,
+    verify_installed_runtime,
+)
 from .statecopy import apply_migrated_files, plan_state, restore_files, snapshot_and_migrate, state_copy_size
 from .transport import download_release_asset, fetch_release_bytes
 from .verify import content_tree_hash, safe_extract, verify_release
@@ -144,6 +153,7 @@ def plan_update(
     data_root: Path | None,
     workspaces: list[Path],
     channel: str,
+    profile_name: str = "base",
 ) -> dict[str, Any]:
     trust = load_trust(root)
     manifest, _ = _manifest_from_source(manifest_source)
@@ -165,7 +175,7 @@ def plan_update(
     if artifact_path is not None:
         archive = verify_release(manifest, artifact_path)
         verified = True
-    selected_runtime = select_runtime(manifest)
+    selected_runtime = select_runtime(manifest, profile_name)
     runtime_verified = False
     if runtime_bundle_path is not None:
         if selected_runtime is None:
@@ -188,6 +198,8 @@ def plan_update(
         "artifact_file_count": archive["file_count"] if archive else None,
         "runtime": {
             "id": selected_runtime["id"] if selected_runtime else None,
+            "profile": profile_name if selected_runtime else None,
+            "profile_hash": selected_runtime.get("profile_hash") if selected_runtime else None,
             "bundle_verified": runtime_verified,
             "isolated": selected_runtime is not None,
         },
@@ -258,14 +270,21 @@ def verify_installed(root: Path, version: str, manifest: dict[str, Any]) -> None
         raise ManagerError(f"Installed release content hash is invalid: {version}")
 
 
-def _smoke(root: Path, version: str, manifest: dict[str, Any], transaction_root: Path | None = None, actual_paths: tuple[Path | None, list[Path]] | None = None) -> None:
+def _smoke(
+    root: Path,
+    version: str,
+    manifest: dict[str, Any],
+    transaction_root: Path | None = None,
+    actual_paths: tuple[Path | None, list[Path]] | None = None,
+    selected_runtime: dict[str, Any] | None = None,
+) -> None:
     core = root / "releases" / version / "atom-learn" / "scripts" / "atomlearn.py"
     environment = os.environ.copy()
     environment["PYTHONUTF8"] = "1"
     environment["PYTHONDONTWRITEBYTECODE"] = "1"
-    selected_runtime = select_runtime(manifest)
+    selected_runtime = selected_runtime if selected_runtime is not None else select_runtime(manifest)
     if selected_runtime is not None:
-        python = runtime_python(root / "runtimes" / selected_runtime["id"])
+        python = runtime_python(runtime_path(root, selected_runtime))
         prefix = [str(python), "-m", "atomlearn"]
     else:
         prefix = [sys.executable, str(core)]
@@ -556,6 +575,8 @@ def apply_update(
     workspaces: list[Path],
     channel: str,
     confirmed: bool,
+    profile_name: str = "base",
+    model_dir: Path | None = None,
 ) -> dict[str, Any]:
     if not confirmed:
         raise ManagerError("Update apply requires --confirmed after reviewing update plan")
@@ -574,14 +595,24 @@ def apply_update(
         previous_active = load_active(root)
         if previous_active and version_tuple(version) <= version_tuple(previous_active["current_version"]):
             raise ManagerError("Update only accepts a newer Core; use rollback for a paired downgrade")
-        plan = plan_update(root, version, manifest_source, artifact_source, runtime_bundle_source, data_root, workspaces, channel)
+        plan = plan_update(
+            root,
+            version,
+            manifest_source,
+            artifact_source,
+            runtime_bundle_source,
+            data_root,
+            workspaces,
+            channel,
+            profile_name,
+        )
         if not plan["disk"]["sufficient"]:
             raise ManagerError("Insufficient disk space for side-by-side release and state copies")
         transaction_id = "txn-" + uuid.uuid4().hex
         transaction_root = root / "staging" / transaction_id.removeprefix("txn-")[:12]
         transaction_root.mkdir(parents=True, exist_ok=False)
         staged_artifact = transaction_root / manifest["artifact"]["filename"]
-        selected_runtime = select_runtime(manifest)
+        selected_runtime = select_runtime(manifest, profile_name)
         staged_runtime_bundle = transaction_root / selected_runtime["filename"] if selected_runtime else None
         transaction = {
             "kind": "atomlearn.manager-transaction",
@@ -642,11 +673,24 @@ def apply_update(
             verify_installed(root, version, manifest)
             if selected_runtime is not None and staged_runtime_bundle is not None:
                 _download_runtime_bundle(selected_runtime, runtime_bundle_source, staged_runtime_bundle)
-                install_runtime(staged_runtime_bundle, selected_runtime, root / "runtimes" / selected_runtime["id"])
+                runtime_root = runtime_path(root, selected_runtime)
+                install_runtime(
+                    staged_runtime_bundle,
+                    selected_runtime,
+                    runtime_root,
+                    root / "wheelhouses",
+                )
+                preflight = profile_preflight(runtime_root, selected_runtime, model_dir=model_dir)
+                if not preflight["ok"]:
+                    raise ManagerError(
+                        f"Runtime profile preflight failed: {preflight['blocked_reason']}",
+                        code="runtime_profile_unusable",
+                        details=preflight,
+                    )
             transaction["stage"] = "runtime_installed"
             save_transaction(root, transaction)
             _maybe_interrupt("runtime_installed")
-            _smoke(root, version, manifest, transaction_root)
+            _smoke(root, version, manifest, transaction_root, selected_runtime=selected_runtime)
             transaction["stage"] = "health_checked"
             save_transaction(root, transaction)
             _maybe_interrupt("health_checked")
@@ -665,6 +709,11 @@ def apply_update(
             if selected_runtime is not None:
                 active["runtime_id"] = selected_runtime["id"]
                 active["skill_protocol_version"] = manifest["skill_protocol"]["version"]
+                if selected_runtime.get("profile_hash"):
+                    active["runtime_profile"] = selected_runtime["profile"]["name"]
+                    active["runtime_profile_hash"] = selected_runtime["profile_hash"]
+                    if model_dir is not None:
+                        active["runtime_model_dir"] = str(model_dir.resolve())
             require_schema(active, "active")
             atomic_yaml(root / "active.yaml", active)
             transaction["pointer_switched"] = True
@@ -694,6 +743,508 @@ def apply_update(
             raise ManagerError(f"Update failed; previous Core remains active: {exc}") from exc
 
 
+def _runtime_pointer(expected: dict[str, Any], model_dir: Path | None = None) -> dict[str, Any]:
+    return {
+        "id": expected["id"],
+        "profile": (expected.get("profile") or {}).get("name", "base"),
+        "profile_hash": expected.get("profile_hash"),
+        "model_dir": str(model_dir.resolve()) if model_dir else None,
+    }
+
+
+def _active_runtime_pointer(active: dict[str, Any], expected: dict[str, Any]) -> dict[str, Any]:
+    model = active.get("runtime_model_dir")
+    return _runtime_pointer(expected, Path(model) if model else None)
+
+
+def _save_profile_transaction(root: Path, transaction: dict[str, Any]) -> None:
+    transaction["updated_at"] = now_iso()
+    require_schema(transaction, "profile-transaction")
+    atomic_yaml(root / "transactions" / f"{transaction['id']}.yaml", transaction)
+
+
+def _active_manifest(root: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    active = load_active(root)
+    if active is None:
+        raise ManagerError("No active signed Core is available for runtime profile management")
+    manifest = read_mapping(root / "manifests" / f"{active['current_version']}.json")
+    validate_release_manifest(manifest, load_trust(root))
+    verify_installed(root, active["current_version"], manifest)
+    return active, manifest
+
+
+def profile_plan(
+    root: Path,
+    profile_name: str,
+    runtime_bundle_path: Path | None,
+    *,
+    allow_experimental: bool = False,
+) -> dict[str, Any]:
+    active, manifest = _active_manifest(root)
+    target = select_runtime(manifest, profile_name)
+    profile = target.get("profile") or {"name": "base", "stability": "legacy", "capabilities": ["base"]}
+    if profile["stability"] == "experimental" and not allow_experimental:
+        raise ManagerError("Experimental runtime profile requires --allow-experimental")
+    if manifest["channel"] == "stable" and target.get("smoke", {}).get("status") != "passed":
+        raise ManagerError("Stable runtime profile lacks a signed passing smoke report")
+    bundle_verified = False
+    if runtime_bundle_path is not None:
+        from .runtime import inspect_runtime_bundle
+
+        inspect_runtime_bundle(runtime_bundle_path, target)
+        bundle_verified = True
+    destination = runtime_path(root, target)
+    installed = False
+    if destination.exists():
+        verify_installed_runtime(destination, target)
+        installed = True
+    current = runtime_for_active(manifest, active)
+    stable_profiles = set(manifest.get("capabilities", {}).get("stable_runtime_profiles", []))
+    return {
+        "ok": True,
+        "core_version": active["current_version"],
+        "current_profile": (current.get("profile") or {}).get("name", "base") if current else None,
+        "target_profile": profile_name,
+        "target_profile_hash": target.get("profile_hash"),
+        "capabilities": profile["capabilities"],
+        "stability": profile["stability"],
+        "release_status": "stable"
+        if profile_name in stable_profiles
+        else "experimental"
+        if profile["stability"] == "experimental"
+        else "candidate",
+        "bundle_verified": bundle_verified,
+        "installed": installed,
+        "destination": str(destination),
+        "activation": "side_by_side_atomic_profile_pointer",
+        "old_profile_retained": current is not None,
+    }
+
+
+def apply_profile(
+    root: Path,
+    profile_name: str,
+    runtime_bundle_source: Path | None,
+    *,
+    confirmed: bool,
+    allow_experimental: bool = False,
+    model_dir: Path | None = None,
+) -> dict[str, Any]:
+    if not confirmed:
+        raise ManagerError("Runtime profile apply requires --confirmed after reviewing the profile plan")
+    with FileLock(root / ".manager.lock"):
+        active, manifest = _active_manifest(root)
+        plan = profile_plan(
+            root,
+            profile_name,
+            runtime_bundle_source,
+            allow_experimental=allow_experimental,
+        )
+        target = select_runtime(manifest, profile_name)
+        current = runtime_for_active(manifest, active)
+        if current is not None and current["id"] == target["id"]:
+            preflight = profile_preflight(
+                runtime_path(root, target),
+                target,
+                model_dir=model_dir or (Path(active["runtime_model_dir"]) if active.get("runtime_model_dir") else None),
+            )
+            return {"ok": preflight["ok"], "already_active": True, "active": active, "preflight": preflight}
+        transaction_id = "ptxn-" + uuid.uuid4().hex
+        transaction_root = root / "staging" / transaction_id.removeprefix("ptxn-")[:12]
+        transaction_root.mkdir(parents=True, exist_ok=False)
+        staged_bundle = transaction_root / target["filename"]
+        previous_pointer = _active_runtime_pointer(active, current) if current else None
+        transaction = {
+            "kind": "atomlearn.profile-transaction",
+            "schema_version": 1,
+            "id": transaction_id,
+            "core_version": active["current_version"],
+            "target_runtime": _runtime_pointer(target, model_dir),
+            "previous_runtime": previous_pointer,
+            "status": "in_progress",
+            "stage": "planned",
+            "bundle_path": str(staged_bundle),
+            "pointer_switched": False,
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+            "error": None,
+        }
+        _save_profile_transaction(root, transaction)
+        try:
+            _download_runtime_bundle(target, runtime_bundle_source, staged_bundle)
+            transaction["stage"] = "downloaded"
+            _save_profile_transaction(root, transaction)
+            destination = runtime_path(root, target)
+            install_runtime(staged_bundle, target, destination, root / "wheelhouses")
+            transaction["stage"] = "installed"
+            _save_profile_transaction(root, transaction)
+            _maybe_interrupt("profile_installed")
+            preflight = profile_preflight(destination, target, model_dir=model_dir)
+            if not preflight["ok"]:
+                raise ManagerError(
+                    f"Runtime profile preflight failed: {preflight['blocked_reason']}",
+                    code="runtime_profile_unusable",
+                    details=preflight,
+                )
+            transaction["stage"] = "preflighted"
+            _save_profile_transaction(root, transaction)
+            _maybe_interrupt("profile_preflighted")
+            _smoke(
+                root,
+                active["current_version"],
+                manifest,
+                transaction_root,
+                selected_runtime=target,
+            )
+            transaction["stage"] = "health_checked"
+            _save_profile_transaction(root, transaction)
+            updated = dict(active)
+            updated["runtime_id"] = target["id"]
+            updated["runtime_profile"] = profile_name
+            updated["runtime_profile_hash"] = target["profile_hash"]
+            updated["profile_transaction_id"] = transaction_id
+            updated["previous_runtime"] = previous_pointer
+            if model_dir is not None:
+                updated["runtime_model_dir"] = str(model_dir.resolve())
+            else:
+                updated.pop("runtime_model_dir", None)
+            require_schema(updated, "active")
+            atomic_yaml(root / "active.yaml", updated)
+            transaction["pointer_switched"] = True
+            transaction["stage"] = "activated"
+            _save_profile_transaction(root, transaction)
+            try:
+                checked = status(root)
+                if not checked["active_valid"]:
+                    raise ManagerError("Activated runtime profile failed active-pointer validation")
+            except Exception:
+                atomic_yaml(root / "active.yaml", active)
+                transaction["pointer_switched"] = False
+                raise
+            transaction["status"] = "committed"
+            transaction["stage"] = "committed"
+            _save_profile_transaction(root, transaction)
+            return {
+                "ok": True,
+                "active": updated,
+                "transaction": transaction_id,
+                "plan": plan,
+                "preflight": preflight,
+                "old_profile_retained": current is not None,
+            }
+        except SimulatedInterruption:
+            raise
+        except Exception as exc:
+            transaction["status"] = "failed"
+            transaction["error"] = str(exc)
+            _save_profile_transaction(root, transaction)
+            raise ManagerError(f"Profile activation failed; previous runtime remains active: {exc}") from exc
+
+
+def rollback_profile(root: Path, *, confirmed: bool) -> dict[str, Any]:
+    if not confirmed:
+        raise ManagerError("Runtime profile rollback requires --confirmed")
+    with FileLock(root / ".manager.lock"):
+        active, manifest = _active_manifest(root)
+        previous = active.get("previous_runtime")
+        if not isinstance(previous, dict):
+            raise ManagerError("Active pointer has no paired previous runtime profile")
+        matches = [item for item in manifest["runtime_bundles"] if item["id"] == previous["id"]]
+        if len(matches) != 1:
+            raise ManagerError("Paired previous runtime is absent from the signed release")
+        target = matches[0]
+        model_dir = Path(previous["model_dir"]) if previous.get("model_dir") else None
+        preflight = profile_preflight(runtime_path(root, target), target, model_dir=model_dir)
+        if not preflight["ok"]:
+            raise ManagerError(
+                f"Previous runtime profile is no longer usable: {preflight['blocked_reason']}",
+                code="runtime_profile_unusable",
+                details=preflight,
+            )
+        current = runtime_for_active(manifest, active)
+        transaction_id = "ptxn-" + uuid.uuid4().hex
+        current_pointer = _active_runtime_pointer(active, current) if current else None
+        transaction = {
+            "kind": "atomlearn.profile-transaction",
+            "schema_version": 1,
+            "id": transaction_id,
+            "core_version": active["current_version"],
+            "target_runtime": previous,
+            "previous_runtime": current_pointer,
+            "status": "in_progress",
+            "stage": "preflighted",
+            "bundle_path": f"installed:{target['id']}",
+            "pointer_switched": False,
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+            "error": None,
+        }
+        _save_profile_transaction(root, transaction)
+        smoke_root = root / "staging" / transaction_id.removeprefix("ptxn-")[:12]
+        smoke_root.mkdir(parents=True, exist_ok=False)
+        _smoke(root, active["current_version"], manifest, smoke_root, selected_runtime=target)
+        transaction["stage"] = "health_checked"
+        _save_profile_transaction(root, transaction)
+        updated = dict(active)
+        updated["runtime_id"] = target["id"]
+        updated["runtime_profile"] = previous["profile"]
+        updated["runtime_profile_hash"] = previous["profile_hash"]
+        updated["profile_transaction_id"] = transaction_id
+        updated["previous_runtime"] = current_pointer
+        if model_dir:
+            updated["runtime_model_dir"] = str(model_dir.resolve())
+        else:
+            updated.pop("runtime_model_dir", None)
+        require_schema(updated, "active")
+        atomic_yaml(root / "active.yaml", updated)
+        transaction["pointer_switched"] = True
+        transaction["status"] = "rolled_back"
+        transaction["stage"] = "rolled_back"
+        _save_profile_transaction(root, transaction)
+        return {"ok": True, "active": updated, "transaction": transaction_id, "preflight": preflight}
+
+
+def recover_profile(root: Path) -> dict[str, Any]:
+    with FileLock(root / ".manager.lock"):
+        candidates = []
+        for path in (root / "transactions").glob("ptxn-*.yaml"):
+            value = read_mapping(path)
+            require_schema(value, "profile-transaction")
+            if value["status"] in {"in_progress", "failed"}:
+                candidates.append(value)
+        if not candidates:
+            return {"ok": True, "recovered": False, "reason": "no_unfinished_profile_transaction"}
+        transaction = sorted(candidates, key=lambda item: item["updated_at"])[-1]
+        active = load_active(root)
+        active_points_to_transaction = (
+            active is not None and active.get("profile_transaction_id") == transaction["id"]
+        )
+        if transaction["pointer_switched"] or active_points_to_transaction:
+            if not active_points_to_transaction:
+                raise ManagerError("Active profile pointer moved; refusing automatic profile recovery")
+            previous = transaction["previous_runtime"]
+            if not isinstance(previous, dict):
+                raise ManagerError("Interrupted profile activation has no recoverable previous runtime")
+            active["runtime_id"] = previous["id"]
+            active["runtime_profile"] = previous["profile"]
+            if previous["profile_hash"] is None:
+                active.pop("runtime_profile_hash", None)
+                active.pop("runtime_profile", None)
+            else:
+                active["runtime_profile_hash"] = previous["profile_hash"]
+            if previous["model_dir"]:
+                active["runtime_model_dir"] = previous["model_dir"]
+            else:
+                active.pop("runtime_model_dir", None)
+            active.pop("profile_transaction_id", None)
+            active.pop("previous_runtime", None)
+            require_schema(active, "active")
+            atomic_yaml(root / "active.yaml", active)
+            transaction["pointer_switched"] = False
+        transaction["status"] = "recovered"
+        transaction["stage"] = "recovered"
+        _save_profile_transaction(root, transaction)
+        return {
+            "ok": True,
+            "recovered": True,
+            "transaction": transaction["id"],
+            "active": load_active(root),
+        }
+
+
+def _matching_platform_runtimes(manifest: dict[str, Any]) -> list[dict[str, Any]]:
+    system, architecture, python_minor = platform_identity()
+    return [
+        item
+        for item in manifest.get("runtime_bundles", [])
+        if (item["platform"], item["architecture"], item["python_minor"])
+        == (system, architecture, python_minor)
+    ]
+
+
+def profile_status(root: Path) -> dict[str, Any]:
+    active, manifest = _active_manifest(root)
+    active_runtime = runtime_for_active(manifest, active)
+    stable_profiles = set(manifest.get("capabilities", {}).get("stable_runtime_profiles", []))
+    profiles = []
+    for item in sorted(
+        _matching_platform_runtimes(manifest),
+        key=lambda value: (value.get("profile") or {}).get("name", "base"),
+    ):
+        destination = runtime_path(root, item)
+        installed = False
+        valid = False
+        if destination.exists():
+            installed = True
+            try:
+                verify_installed_runtime(destination, item)
+                valid = True
+            except ManagerError:
+                valid = False
+        profile = item.get("profile") or {
+            "name": "base",
+            "capabilities": ["base"],
+            "stability": "legacy",
+        }
+        profiles.append(
+            {
+                "profile": profile["name"],
+                "profile_hash": item.get("profile_hash"),
+                "runtime_id": item["id"],
+                "capabilities": profile["capabilities"],
+                "stability": profile["stability"],
+                "release_status": "stable"
+                if profile["name"] in stable_profiles
+                else "experimental"
+                if profile["stability"] == "experimental"
+                else "candidate",
+                "smoke_status": item.get("smoke", {}).get("status", "legacy"),
+                "installed": installed,
+                "valid": valid,
+                "active": item["id"] == active_runtime["id"],
+                "path": str(destination),
+            }
+        )
+    unfinished = []
+    for path in (root / "transactions").glob("ptxn-*.yaml"):
+        value = read_mapping(path)
+        require_schema(value, "profile-transaction")
+        if value["status"] in {"in_progress", "failed"}:
+            unfinished.append({"id": value["id"], "status": value["status"], "stage": value["stage"]})
+    return {
+        "ok": True,
+        "core_version": active["current_version"],
+        "active_profile": (active_runtime.get("profile") or {}).get("name", "base")
+        if active_runtime is not None
+        else "base",
+        "profiles": profiles,
+        "paired_previous_runtime": active.get("previous_runtime"),
+        "unfinished_transactions": unfinished,
+        "recovery_required": bool(unfinished),
+    }
+
+
+def capability_doctor(
+    root: Path,
+    capability: str | None = None,
+    *,
+    model_dir: Path | None = None,
+) -> dict[str, Any]:
+    active, manifest = _active_manifest(root)
+    active_runtime = runtime_for_active(manifest, active)
+    platform_runtimes = _matching_platform_runtimes(manifest)
+    stable_profiles = set(manifest.get("capabilities", {}).get("stable_runtime_profiles", []))
+    capabilities = sorted(
+        {
+            name
+            for item in manifest.get("runtime_bundles", [])
+            for name in ((item.get("profile") or {}).get("capabilities") or ["base"])
+        }
+    )
+    if capability is not None:
+        capabilities = [capability]
+    results = []
+    for name in capabilities:
+        declared_candidates = [
+            item
+            for item in manifest.get("runtime_bundles", [])
+            if name in ((item.get("profile") or {}).get("capabilities") or ["base"])
+        ]
+        candidates = [
+            item
+            for item in platform_runtimes
+            if name in ((item.get("profile") or {}).get("capabilities") or ["base"])
+        ]
+        active_declares = active_runtime is not None and name in (
+            (active_runtime.get("profile") or {}).get("capabilities") or ["base"]
+        )
+        installed_candidates = []
+        for item in candidates:
+            destination = runtime_path(root, item)
+            if destination.exists():
+                try:
+                    verify_installed_runtime(destination, item)
+                    installed_candidates.append(item)
+                except ManagerError:
+                    continue
+        preferred = active_runtime if active_declares else (candidates[0] if candidates else None)
+        installed = bool(installed_candidates)
+        preflight = None
+        usable = False
+        blocked_reason = None
+        if not declared_candidates:
+            blocked_reason = "not_declared"
+        elif preferred is None:
+            blocked_reason = "runtime_variant_unavailable"
+        else:
+            preferred_profile = preferred.get("profile") or {
+                "name": "base", "native_requirements": [], "model_policy": {"mode": "none"}
+            }
+            native_missing = any(
+                shutil.which(requirement["command"]) is None
+                for requirement in preferred_profile.get("native_requirements", [])
+            )
+            if native_missing:
+                blocked_reason = "native_engine_missing"
+            elif preferred not in installed_candidates:
+                blocked_reason = "profile_not_installed"
+            elif not active_declares:
+                blocked_reason = "inactive_profile"
+            else:
+                effective_model_dir = model_dir
+                if effective_model_dir is None and active.get("runtime_model_dir"):
+                    effective_model_dir = Path(active["runtime_model_dir"])
+                preflight = profile_preflight(
+                    runtime_path(root, preferred), preferred, model_dir=effective_model_dir
+                )
+                usable = preflight["usable"]
+                blocked_reason = preflight["blocked_reason"]
+        remediation = None
+        if blocked_reason == "not_declared":
+            remediation = "install a release that declares this signed capability profile"
+        elif blocked_reason == "runtime_variant_unavailable":
+            remediation = "use a signed release that publishes this profile for the current platform and Python ABI"
+        elif blocked_reason == "native_engine_missing":
+            remediation = "install the required native engine, then apply the signed profile"
+        elif blocked_reason in {
+            "model_missing", "model_hash_mismatch", "model_policy_invalid", "model_unregistered_file"
+        }:
+            remediation = "provide the exact local model directory bound by the signed model lock"
+        elif blocked_reason in {"profile_not_installed", "inactive_profile", "python_adapter_missing"}:
+            remediation = f"install and activate the signed {preferred.get('profile', {}).get('name', 'base')} profile"
+        stable = any(
+            (item.get("profile") or {}).get("name", "base") in stable_profiles
+            and (item.get("profile") or {}).get("stability") == "stable"
+            and item.get("smoke", {}).get("status") == "passed"
+            and item.get("smoke", {}).get("platform_verified") is True
+            for item in candidates
+        )
+        results.append(
+            {
+                "capability": name,
+                "available": bool(candidates),
+                "declared": bool(declared_candidates),
+                "installed": installed,
+                "usable": usable,
+                "stable": stable,
+                "profile": (active_runtime.get("profile") or {}).get("name", "base")
+                if active_runtime is not None
+                else "base",
+                "blocked_reason": blocked_reason,
+                "remediation": remediation,
+                "preflight": preflight,
+            }
+        )
+    return {
+        "ok": all(item["usable"] for item in results),
+        "core_version": active["current_version"],
+        "active_profile": (active_runtime.get("profile") or {}).get("name", "base")
+        if active_runtime is not None
+        else "base",
+        "capabilities": results,
+    }
+
+
 def recover_latest(root: Path) -> dict[str, Any]:
     with FileLock(root / ".manager.lock"):
         candidates = []
@@ -720,9 +1271,14 @@ def rollback(root: Path, version: str, confirmed: bool) -> dict[str, Any]:
         target_manifest = read_mapping(root / "manifests" / f"{version}.json")
         validate_release_manifest(target_manifest, load_trust(root))
         verify_installed(root, version, target_manifest)
-        rollback_runtime = select_runtime(target_manifest)
+        previous_pointer = current_transaction.get("previous_active")
+        rollback_runtime = (
+            runtime_for_active(target_manifest, previous_pointer)
+            if isinstance(previous_pointer, dict) and previous_pointer.get("runtime_id")
+            else select_runtime(target_manifest)
+        )
         if rollback_runtime is not None:
-            verify_installed_runtime(root / "runtimes" / rollback_runtime["id"], rollback_runtime)
+            verify_installed_runtime(runtime_path(root, rollback_runtime), rollback_runtime)
         transaction_id = "txn-" + uuid.uuid4().hex
         reverse_files = [
             {
@@ -765,7 +1321,13 @@ def rollback(root: Path, version: str, confirmed: bool) -> dict[str, Any]:
             save_transaction(root, transaction)
             data = Path(transaction["data_root"]) if transaction["data_root"] else None
             workspaces = [Path(path) for path in transaction["workspaces"]]
-            _smoke(root, version, target_manifest, actual_paths=(data, workspaces))
+            _smoke(
+                root,
+                version,
+                target_manifest,
+                actual_paths=(data, workspaces),
+                selected_runtime=rollback_runtime,
+            )
             rolled = {
                 "kind": "atomlearn.manager-active",
                 "schema_version": 1,
@@ -777,6 +1339,11 @@ def rollback(root: Path, version: str, confirmed: bool) -> dict[str, Any]:
             if rollback_runtime is not None:
                 rolled["runtime_id"] = rollback_runtime["id"]
                 rolled["skill_protocol_version"] = target_manifest["skill_protocol"]["version"]
+                if rollback_runtime.get("profile_hash"):
+                    rolled["runtime_profile"] = rollback_runtime["profile"]["name"]
+                    rolled["runtime_profile_hash"] = rollback_runtime["profile_hash"]
+                    if isinstance(previous_pointer, dict) and previous_pointer.get("runtime_model_dir"):
+                        rolled["runtime_model_dir"] = previous_pointer["runtime_model_dir"]
             atomic_yaml(root / "active.yaml", rolled)
             transaction["pointer_switched"] = True
             transaction["status"] = "rolled_back"
@@ -801,18 +1368,23 @@ def status(root: Path) -> dict[str, Any]:
             require_schema(value, "transaction")
             if value["status"] in {"in_progress", "failed", "needs_manual_recovery"}:
                 unfinished.append({"id": value["id"], "status": value["status"], "stage": value["stage"]})
+        for path in transaction_dir.glob("ptxn-*.yaml"):
+            value = read_mapping(path)
+            require_schema(value, "profile-transaction")
+            if value["status"] in {"in_progress", "failed"}:
+                unfinished.append({"id": value["id"], "status": value["status"], "stage": value["stage"]})
     active_valid = False
     if active:
         manifest = read_mapping(root / "manifests" / f"{active['current_version']}.json")
         validate_release_manifest(manifest, load_trust(root))
         verify_installed(root, active["current_version"], manifest)
-        selected_runtime = select_runtime(manifest)
+        selected_runtime = runtime_for_active(manifest, active)
         if selected_runtime is not None:
             if active.get("runtime_id") != selected_runtime["id"]:
                 raise ManagerError("Active pointer runtime does not match the signed release")
             if active.get("skill_protocol_version") != manifest["skill_protocol"]["version"]:
                 raise ManagerError("Active pointer Skill protocol does not match the signed release")
-            verify_installed_runtime(root / "runtimes" / selected_runtime["id"], selected_runtime)
+            verify_installed_runtime(runtime_path(root, selected_runtime), selected_runtime)
         active_valid = active["manifest_hash"] == _manifest_hash(manifest)
     return {
         "ok": active_valid if active else True,
@@ -820,7 +1392,15 @@ def status(root: Path) -> dict[str, Any]:
         "active": active,
         "active_valid": active_valid,
         "installed_versions": sorted(path.name for path in (root / "releases").iterdir() if path.is_dir()) if (root / "releases").is_dir() else [],
-        "installed_runtimes": sorted(path.name for path in (root / "runtimes").iterdir() if path.is_dir()) if (root / "runtimes").is_dir() else [],
+        "installed_runtimes": sorted(
+            {
+                read_mapping(path)["id"]
+                for path in (root / "runtimes").rglob("atomlearn-runtime.json")
+                if path.is_file()
+            }
+        )
+        if (root / "runtimes").is_dir()
+        else [],
         "unfinished_transactions": unfinished,
         "recovery_required": bool(unfinished),
     }

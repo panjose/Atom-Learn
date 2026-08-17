@@ -23,7 +23,7 @@ MANAGER_PACKAGE = ROOT / "manager"
 PROFILE_FIXTURE = ROOT / "tests" / "fixtures" / "self_evolution_v2" / "user-profile.json"
 sys.path.insert(0, str(MANAGER_PACKAGE))
 
-from atomlearn_manager.runtime import build_runtime_bundle, platform_identity
+from atomlearn_manager.runtime import PROFILE_SPECS, build_runtime_bundle, platform_identity, runtime_path
 from atomlearn_manager.manifest import key_fingerprint
 
 
@@ -257,6 +257,7 @@ def synthetic_source(
         "skill_protocol_version": 1,
         "capability_ledger": "atom-learn/assets/capabilities.yaml",
         "smoke_fixtures": "atom-learn/assets/smoke-fixtures.json",
+        "runtime_profiles": "atom-learn/assets/runtime-profiles.yaml",
         "release_channel": "development",
         "feature_defaults": {
             "global_personalization": False,
@@ -299,6 +300,29 @@ def synthetic_source(
     (assets / "smoke-fixtures.json").write_text(
         json.dumps({"kind": "atomlearn.smoke-fixtures", "schema_version": 1}), encoding="utf-8"
     )
+    profile_statuses = {
+        "base": "stable",
+        "scale": "candidate",
+        "semantic-cpu": "candidate",
+        "ocr": "candidate",
+        "semantic-gpu": "experimental",
+    }
+    (assets / "runtime-profiles.yaml").write_text(
+        yaml.safe_dump(
+            {
+                "kind": "atomlearn.runtime-profile-registry",
+                "schema_version": 1,
+                "core_version": version,
+                "stable_profiles": ["base"],
+                "profiles": [
+                    {"name": name, "release_status": profile_statuses[name], **spec}
+                    for name, spec in PROFILE_SPECS.items()
+                ],
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
     reported = reported_version or version
     (scripts / "atomlearn.py").write_text(
         "import json, sys\n"
@@ -339,6 +363,39 @@ def synthetic_core_wheel(tmp_path: Path, source: Path, version: str) -> Path:
     return wheel_dir
 
 
+def add_synthetic_module_wheel(wheel_dir: Path, distribution: str, module: str, version: str = "1.0.0") -> Path:
+    normalized = distribution.replace("-", "_")
+    wheel = wheel_dir / f"{normalized}-{version}-py3-none-any.whl"
+    dist_info = f"{normalized}-{version}.dist-info"
+    with zipfile.ZipFile(wheel, "x", compression=zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr(f"{module}/__init__.py", "PROFILE_SMOKE = True\n")
+        archive.writestr(
+            f"{dist_info}/METADATA",
+            f"Metadata-Version: 2.1\nName: {distribution}\nVersion: {version}\n",
+        )
+        archive.writestr(
+            f"{dist_info}/WHEEL",
+            "Wheel-Version: 1.0\nGenerator: AtomLearn tests\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+        )
+        archive.writestr(f"{dist_info}/RECORD", "")
+    return wheel
+
+
+def profile_smoke(profile: str, system: str, python_minor: str) -> dict:
+    return {
+        "kind": "atomlearn.runtime-profile-smoke",
+        "schema_version": 1,
+        "profile": profile,
+        "status": "passed",
+        "suites": PROFILE_SPECS[profile]["smoke_suites"],
+        "platform_verified": True,
+        "platform": system,
+        "architecture": "amd64",
+        "python_minor": python_minor,
+        "report_id": f"test-{profile}-{system}-py{python_minor}",
+    }
+
+
 def runtime_matrix(tmp_path: Path, source: Path, version: str) -> list[Path]:
     wheel_dir = synthetic_core_wheel(tmp_path, source, version)
     output_dir = tmp_path / f"runtime-bundles-{version}-{uuid.uuid4().hex}"
@@ -352,6 +409,7 @@ def runtime_matrix(tmp_path: Path, source: Path, version: str) -> list[Path]:
                 system=system,
                 architecture="amd64",
                 python_minor=python_minor,
+                smoke_report=profile_smoke("base", system, python_minor),
             )
             paths.append(Path(built["path"]))
     return paths
@@ -377,6 +435,103 @@ def test_release_builder_rejects_review_runtime_without_packaged_assets(tmp_path
     _require_capability_runtime_payload(Path(built["path"]), ["core", "bridge"])
 
 
+def test_runtime_profile_recipe_binds_lock_smoke_and_safe_model_policy(tmp_path: Path) -> None:
+    from atomlearn_manager.common import ManagerError
+    from atomlearn_manager.runtime import inspect_runtime_bundle
+
+    version = "0.14.2"
+    source = synthetic_source(tmp_path, version)
+    wheel_dir = synthetic_core_wheel(tmp_path, source, version)
+    system, architecture, python_minor = platform_identity()
+    with pytest.raises(ManagerError, match="requires an explicit signed model lock"):
+        build_runtime_bundle(
+            wheel_dir,
+            tmp_path / "missing-model",
+            core_version=version,
+            system=system,
+            architecture=architecture,
+            python_minor=python_minor,
+            profile_name="semantic-cpu",
+            smoke_report=profile_smoke("semantic-cpu", system, python_minor),
+        )
+    unsafe_lock = {
+        "model_id": "example/unsafe",
+        "revision": "fixed-revision",
+        "trust_remote_code": False,
+        "files": [{"path": "weights.bin", "sha256": "sha256:" + "1" * 64, "size": 10}],
+    }
+    with pytest.raises(ManagerError, match="Unsafe model weight format"):
+        build_runtime_bundle(
+            wheel_dir,
+            tmp_path / "unsafe-model",
+            core_version=version,
+            system=system,
+            architecture=architecture,
+            python_minor=python_minor,
+            profile_name="semantic-cpu",
+            model_lock=unsafe_lock,
+            smoke_report=profile_smoke("semantic-cpu", system, python_minor),
+        )
+    safe_lock = {
+        "model_id": "example/safe",
+        "revision": "fixed-revision",
+        "trust_remote_code": False,
+        "files": [{"path": "model.safetensors", "sha256": "sha256:" + "2" * 64, "size": 10}],
+    }
+    built = build_runtime_bundle(
+        wheel_dir,
+        tmp_path / "safe-model",
+        core_version=version,
+        system=system,
+        architecture=architecture,
+        python_minor=python_minor,
+        profile_name="semantic-cpu",
+        model_lock=safe_lock,
+        smoke_report=profile_smoke("semantic-cpu", system, python_minor),
+    )
+    inspected = inspect_runtime_bundle(Path(built["path"]))
+    recipe = inspected["recipe"]
+    assert recipe["schema_version"] == 2
+    assert recipe["model_lock"] == safe_lock
+    assert recipe["dependency_lock_sha256"].startswith("sha256:")
+    assert recipe["profile_hash"].startswith("sha256:")
+    assert inspected["smoke_report"]["status"] == "passed"
+
+
+def test_semantic_model_hash_and_ocr_native_preflights_are_independent(tmp_path: Path, monkeypatch) -> None:
+    from atomlearn_manager.runtime import _model_preflight, _native_preflight
+
+    model_dir = tmp_path / "model"
+    model_dir.mkdir()
+    weights = model_dir / "model.safetensors"
+    weights.write_bytes(b"safe local weights")
+    from atomlearn_manager.common import sha256_file
+
+    semantic = {
+        "profile": PROFILE_SPECS["semantic-cpu"],
+        "model_lock": {
+            "model_id": "example/safe",
+            "revision": "fixed-revision",
+            "trust_remote_code": False,
+            "files": [{"path": weights.name, "sha256": sha256_file(weights), "size": weights.stat().st_size}],
+        },
+    }
+    assert _model_preflight(semantic, model_dir) == (True, None)
+    weights.write_bytes(b"tampered weights")
+    assert _model_preflight(semantic, model_dir) == (False, "model_hash_mismatch")
+    assert _model_preflight(semantic, None) == (False, "model_missing")
+    weights.write_bytes(b"safe local weights")
+    (model_dir / "unregistered.py").write_text("raise RuntimeError('must never load')\n", encoding="utf-8")
+    assert _model_preflight(semantic, model_dir) == (False, "model_unregistered_file")
+
+    monkeypatch.setattr("atomlearn_manager.runtime.shutil.which", lambda _command: None)
+    native_ok, blocked_reason, details = _native_preflight({"profile": PROFILE_SPECS["ocr"]})
+    assert native_ok is False
+    assert blocked_reason == "native_engine_missing"
+    assert details == [{"id": "tesseract", "available": False, "path": None}]
+    assert _native_preflight({"profile": PROFILE_SPECS["base"]}) == (True, None, [])
+
+
 def test_runtime_hash_allows_only_canonical_contained_venv_lib64_alias(tmp_path: Path) -> None:
     from atomlearn_manager.common import ManagerError
     from atomlearn_manager.runtime import _runtime_content_hash
@@ -398,6 +553,99 @@ def test_runtime_hash_allows_only_canonical_contained_venv_lib64_alias(tmp_path:
     os.symlink("lib", unsafe_root / "alias", target_is_directory=True)
     with pytest.raises(ManagerError, match="link or reparse point"):
         _runtime_content_hash(unsafe_root)
+
+
+def test_profile_diagnostics_fail_closed_for_legacy_release_manifest(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import atomlearn_manager.manager as manager_module
+
+    active = {"current_version": "0.14.2"}
+    legacy_manifest = {"manifest_version": 1}
+    monkeypatch.setattr(manager_module, "_active_manifest", lambda _root: (active, legacy_manifest))
+
+    status = manager_module.profile_status(tmp_path)
+    assert status["active_profile"] == "base"
+    assert status["profiles"] == []
+
+    doctor = manager_module.capability_doctor(tmp_path, "base")
+    assert doctor["ok"] is False
+    assert doctor["active_profile"] == "base"
+    assert doctor["capabilities"] == [
+        {
+            "capability": "base",
+            "available": False,
+            "declared": False,
+            "installed": False,
+            "usable": False,
+            "stable": False,
+            "profile": "base",
+            "blocked_reason": "not_declared",
+            "remediation": "install a release that declares this signed capability profile",
+            "preflight": None,
+        }
+    ]
+
+
+def test_profile_recovery_closes_pointer_journal_gap(tmp_path: Path) -> None:
+    from atomlearn_manager.manager import recover_profile
+
+    transaction_id = "ptxn-" + "a" * 32
+    base_hash = "sha256:" + "b" * 64
+    scale_hash = "sha256:" + "c" * 64
+    previous = {
+        "id": "runtime-base",
+        "profile": "base",
+        "profile_hash": base_hash,
+        "model_dir": None,
+    }
+    active = {
+        "kind": "atomlearn.manager-active",
+        "schema_version": 1,
+        "current_version": "0.14.2",
+        "previous_version": None,
+        "manifest_hash": "sha256:" + "d" * 64,
+        "transaction_id": "txn-" + "e" * 32,
+        "runtime_id": "runtime-scale",
+        "skill_protocol_version": 1,
+        "runtime_profile": "scale",
+        "runtime_profile_hash": scale_hash,
+        "profile_transaction_id": transaction_id,
+        "previous_runtime": previous,
+    }
+    transaction = {
+        "kind": "atomlearn.profile-transaction",
+        "schema_version": 1,
+        "id": transaction_id,
+        "core_version": "0.14.2",
+        "target_runtime": {
+            "id": "runtime-scale",
+            "profile": "scale",
+            "profile_hash": scale_hash,
+            "model_dir": None,
+        },
+        "previous_runtime": previous,
+        "status": "in_progress",
+        "stage": "health_checked",
+        "bundle_path": "signed-runtime.zip",
+        "pointer_switched": False,
+        "created_at": "2026-08-17T00:00:00Z",
+        "updated_at": "2026-08-17T00:00:00Z",
+        "error": None,
+    }
+    (tmp_path / "transactions").mkdir()
+    (tmp_path / "active.yaml").write_text(yaml.safe_dump(active, sort_keys=False), encoding="utf-8")
+    (tmp_path / "transactions" / f"{transaction_id}.yaml").write_text(
+        yaml.safe_dump(transaction, sort_keys=False), encoding="utf-8"
+    )
+
+    recovered = recover_profile(tmp_path)
+    assert recovered["recovered"] is True
+    assert recovered["active"]["runtime_id"] == "runtime-base"
+    assert recovered["active"]["runtime_profile"] == "base"
+    assert recovered["active"]["runtime_profile_hash"] == base_hash
+    assert "profile_transaction_id" not in recovered["active"]
+    assert "previous_runtime" not in recovered["active"]
 
 
 def build(
@@ -446,6 +694,65 @@ def build(
     return built
 
 
+def build_profile_prerelease(
+    tmp_path: Path,
+    source: Path,
+    version: str,
+    private_key: Path,
+) -> dict:
+    system, architecture, python_minor = platform_identity()
+    assert architecture == "amd64"
+    output_dir = tmp_path / f"profile-release-{uuid.uuid4().hex}"
+    manager_wheel = tmp_path / f"profile-manager-{uuid.uuid4().hex}" / "atomlearn_manager-0.2.0-py3-none-any.whl"
+    manager_wheel.parent.mkdir(parents=True)
+    manager_wheel.write_bytes(b"synthetic signed manager wheel")
+    commit = "9" * 40
+    report = gate_report(tmp_path / f"profile-gate-{uuid.uuid4().hex}.json", version, commit)
+    runtime_output = tmp_path / f"profile-runtimes-{uuid.uuid4().hex}"
+    base_wheels = synthetic_core_wheel(tmp_path, source, version)
+    base = build_runtime_bundle(
+        base_wheels,
+        runtime_output,
+        core_version=version,
+        system=system,
+        architecture=architecture,
+        python_minor=python_minor,
+        profile_name="base",
+        smoke_report=profile_smoke("base", system, python_minor),
+    )
+    scale_wheels = synthetic_core_wheel(tmp_path, source, version)
+    add_synthetic_module_wheel(scale_wheels, "usearch", "usearch")
+    scale = build_runtime_bundle(
+        scale_wheels,
+        runtime_output,
+        core_version=version,
+        system=system,
+        architecture=architecture,
+        python_minor=python_minor,
+        profile_name="scale",
+        smoke_report=profile_smoke("scale", system, python_minor),
+    )
+    result = release(
+        source,
+        "--output-dir", output_dir,
+        "--tag", f"v{version}",
+        "--commit-sha", commit,
+        "--artifact-url", f"https://github.com/panjose/Atom-Learn/releases/download/v{version}/atomlearn-{version}.zip",
+        "--channel", "prerelease",
+        "--key-id", "test-release",
+        "--private-key", private_key,
+        "--gate-report", report,
+        "--manager-artifact", manager_wheel,
+        "--trust-bundle", trust_bundle_for_private(tmp_path, private_key),
+        "--runtime-bundle", base["path"],
+        "--runtime-bundle", scale["path"],
+    )
+    built = parsed(result)
+    built["base_runtime"] = base["path"]
+    built["scale_runtime"] = scale["path"]
+    return built
+
+
 def init_manager(tmp_path: Path, public_key: str) -> Path:
     root = (tmp_path / "manager-root").resolve()
     parsed(manager(root, "init", "--key-id", "test-release", "--public-key", public_key))
@@ -457,7 +764,7 @@ def apply(root: Path, release_info: dict, version: str, *extra: object, check: b
     python_minor = f"py{sys.version_info.major}{sys.version_info.minor}"
     runtime_bundle = next(
         path for path in release_info["runtime_bundle_paths"]
-        if f"-{identity}-amd64-{python_minor}.zip" in path
+        if f"-{identity}-amd64-{python_minor}-base-" in path
     )
     return manager(
         root,
@@ -573,7 +880,11 @@ def test_signed_side_by_side_upgrade_and_paired_rollback(tmp_path: Path) -> None
         apply(manager_root, current, "0.13.0", "--data-dir", data_root, "--workspace", workspace)
     )
     assert reused["active"]["current_version"] == "0.13.0"
-    runtime_root = manager_root / "runtimes" / reused["active"]["runtime_id"]
+    reused_manifest = json.loads(Path(current["manifest"]).read_text(encoding="utf-8"))
+    reused_runtime = next(
+        item for item in reused_manifest["runtime_bundles"] if item["id"] == reused["active"]["runtime_id"]
+    )
+    runtime_root = runtime_path(manager_root, reused_runtime)
     runtime_module = next(
         path for path in runtime_root.rglob("atomlearn.py") if "site-packages" in path.as_posix()
     )
@@ -583,6 +894,75 @@ def test_signed_side_by_side_upgrade_and_paired_rollback(tmp_path: Path) -> None
     tampered_runtime = manager(manager_root, "update", "status", check=False)
     assert tampered_runtime.returncode == 2
     assert "Installed runtime state does not match the signed manifest" in tampered_runtime.stderr
+
+
+def test_signed_runtime_profile_interruption_doctor_activation_and_rollback(tmp_path: Path) -> None:
+    private_key, public_key = signing_material(tmp_path)
+    manager_root = init_manager(tmp_path, public_key)
+    version = "0.13.1"
+    info = build_profile_prerelease(tmp_path, synthetic_source(tmp_path, version), version, private_key)
+    installed = parsed(
+        manager(
+            manager_root,
+            "update", "apply", version,
+            "--manifest", info["manifest"],
+            "--artifact", info["artifact"],
+            "--runtime-bundle", info["base_runtime"],
+            "--channel", "prerelease",
+            "--profile", "base",
+            "--confirmed",
+        )
+    )
+    assert installed["active"]["runtime_profile"] == "base"
+    plan = parsed(
+        manager(
+            manager_root,
+            "profile", "plan", "scale",
+            "--runtime-bundle", info["scale_runtime"],
+        )
+    )
+    assert plan["target_profile"] == "scale"
+    assert plan["bundle_verified"] is True
+
+    interrupted = manager(
+        manager_root,
+        "profile", "apply", "scale",
+        "--runtime-bundle", info["scale_runtime"],
+        "--confirmed",
+        check=False,
+        env=environment(fail_after="profile_installed"),
+    )
+    assert interrupted.returncode == 2
+    assert "Simulated process interruption after profile_installed" in interrupted.stderr
+    unchanged = parsed(manager(manager_root, "profile", "status"))
+    assert unchanged["active_profile"] == "base"
+    assert unchanged["recovery_required"] is True
+    assert parsed(manager(manager_root, "profile", "recover"))["recovered"] is True
+
+    activated = parsed(
+        manager(
+            manager_root,
+            "profile", "apply", "scale",
+            "--runtime-bundle", info["scale_runtime"],
+            "--confirmed",
+        )
+    )
+    assert activated["active"]["runtime_profile"] == "scale"
+    assert activated["preflight"]["usable"] is True
+    diagnosed = parsed(manager(manager_root, "doctor", "--capability", "scale"))
+    capability = diagnosed["capabilities"][0]
+    assert capability["capability"] == "scale"
+    assert capability["available"] is True
+    assert capability["declared"] is True
+    assert capability["installed"] is True
+    assert capability["usable"] is True
+    assert capability["stable"] is False
+    assert capability["profile"] == "scale"
+    assert capability["blocked_reason"] is None
+    assert capability["remediation"] is None
+    rolled = parsed(manager(manager_root, "profile", "rollback", "--confirmed"))
+    assert rolled["active"]["runtime_profile"] == "base"
+    assert parsed(manager(manager_root, "profile", "status"))["active_profile"] == "base"
 
 
 def test_signature_hash_channel_and_hostile_archives_fail_closed(tmp_path: Path) -> None:

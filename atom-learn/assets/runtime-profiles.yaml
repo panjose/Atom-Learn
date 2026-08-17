@@ -1,0 +1,64 @@
+kind: atomlearn.runtime-profile-registry
+schema_version: 1
+core_version: 0.14.2
+stable_profiles: [base]
+profiles:
+  - name: base
+    release_status: stable
+    capabilities: [base]
+    stability: stable
+    python_modules: []
+    native_requirements: []
+    model_policy:
+      mode: none
+      silent_download: false
+    smoke_suites: [base]
+  - name: scale
+    release_status: candidate
+    capabilities: [base, scale]
+    stability: stable
+    python_modules: [usearch]
+    native_requirements: []
+    model_policy:
+      mode: none
+      silent_download: false
+    smoke_suites: [base, scale-index]
+  - name: semantic-cpu
+    release_status: candidate
+    capabilities: [base, semantic-cpu]
+    stability: stable
+    python_modules: [sentence_transformers]
+    native_requirements: []
+    model_policy:
+      mode: pinned_local
+      silent_download: false
+      trust_remote_code: false
+      allowed_weight_formats: [safetensors]
+      forbidden_formats: [bin, pkl, pickle, pt]
+    smoke_suites: [base, semantic-retrieval]
+  - name: ocr
+    release_status: candidate
+    capabilities: [base, ocr]
+    stability: stable
+    python_modules: [fitz, pytesseract, PIL]
+    native_requirements:
+      - id: tesseract
+        command: tesseract
+        version_args: [--version]
+    model_policy:
+      mode: none
+      silent_download: false
+    smoke_suites: [base, ocr-layout]
+  - name: semantic-gpu
+    release_status: experimental
+    capabilities: [base, semantic-gpu]
+    stability: experimental
+    python_modules: [sentence_transformers, torch]
+    native_requirements: []
+    model_policy:
+      mode: pinned_local
+      silent_download: false
+      trust_remote_code: false
+      allowed_weight_formats: [safetensors]
+      forbidden_formats: [bin, pkl, pickle, pt]
+    smoke_suites: [base, semantic-gpu]

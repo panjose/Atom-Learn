@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind", "schema_version", "id", "core_version", "target_runtime", "previous_runtime",
+    "status", "stage", "bundle_path", "pointer_switched", "created_at", "updated_at", "error"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.profile-transaction"},
+    "schema_version": {"const": 1},
+    "id": {"type": "string", "pattern": "^ptxn-[0-9a-f]{32}$"},
+    "core_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
+    "target_runtime": {"$ref": "#/$defs/runtime_pointer"},
+    "previous_runtime": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/runtime_pointer"}]},
+    "status": {"enum": ["in_progress", "committed", "failed", "recovered", "rolled_back"]},
+    "stage": {"enum": ["planned", "downloaded", "installed", "preflighted", "health_checked", "activated", "committed", "recovered", "rolled_back"]},
+    "bundle_path": {"type": "string", "minLength": 1},
+    "pointer_switched": {"type": "boolean"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "error": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "runtime_pointer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "profile", "profile_hash", "model_dir"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9._-]{3,128}$"},
+        "profile": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+        "profile_hash": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/hash"}]},
+        "model_dir": {"type": ["string", "null"], "minLength": 1}
+      }
+    }
+  }
+}

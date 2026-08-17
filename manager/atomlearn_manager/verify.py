@@ -180,6 +180,21 @@ def verify_release(manifest: dict[str, Any], artifact: Path) -> dict[str, Any]:
         fixture_path = core["smoke_fixtures"]
         if ledger_path not in files or sha256_bytes(files[ledger_path]) != manifest["capabilities"]["ledger_sha256"]:
             raise ManagerError("Signed capability ledger is missing or inconsistent")
+        profile_path = core.get("runtime_profiles")
+        profile_hash = manifest["capabilities"].get("runtime_profiles_sha256")
+        if profile_hash is not None and (
+            not isinstance(profile_path, str)
+            or profile_path not in files
+            or sha256_bytes(files[profile_path]) != profile_hash
+        ):
+            raise ManagerError("Signed runtime profile registry is missing or inconsistent")
+        if profile_hash is not None:
+            registry = yaml.safe_load(files[profile_path].decode("utf-8"))
+            if (
+                not isinstance(registry, dict)
+                or registry.get("stable_profiles") != manifest["capabilities"].get("stable_runtime_profiles")
+            ):
+                raise ManagerError("Signed runtime profile delivery claims are inconsistent")
         if fixture_path not in files or sha256_bytes(files[fixture_path]) != manifest["smoke_fixture_sha256"]:
             raise ManagerError("Signed smoke fixture bundle is missing or inconsistent")
     tree_hash = content_tree_hash(inspected["files"])

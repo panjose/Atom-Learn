@@ -14,7 +14,7 @@ import yaml
 from .common import ManagerError, canonical_json, manager_root, read_mapping, sha256_bytes
 from .manager import load_active, verify_installed
 from .manifest import load_trust, validate_release_manifest
-from .runtime import runtime_python, select_runtime, verify_installed_runtime
+from .runtime import runtime_for_active, runtime_path, runtime_python, verify_installed_runtime
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -40,14 +40,14 @@ def active_core(root: Path) -> tuple[Path, str, Path | None]:
     core = root / "releases" / version / "atom-learn" / "scripts" / "atomlearn.py"
     if not core.is_file():  # pragma: no cover - verify_installed checks the content tree first
         raise ManagerError(f"Active Core entry point is missing: {core}")
-    selected_runtime = select_runtime(manifest)
+    selected_runtime = runtime_for_active(manifest, active)
     python = None
     if selected_runtime is not None:
         if active.get("runtime_id") != selected_runtime["id"]:
             raise ManagerError("Active pointer runtime does not match the signed release")
         if active.get("skill_protocol_version") != manifest["skill_protocol"]["version"]:
             raise ManagerError("Active pointer Skill protocol does not match the signed release")
-        runtime_root = root / "runtimes" / selected_runtime["id"]
+        runtime_root = runtime_path(root, selected_runtime)
         verify_installed_runtime(runtime_root, selected_runtime)
         python = runtime_python(runtime_root)
     return core, version, python

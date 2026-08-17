@@ -24,11 +24,32 @@
             "manifest_hash": {"$ref": "#/$defs/hash"},
             "transaction_id": {"type": "string", "pattern": "^txn-[0-9a-f]{32}$"},
             "runtime_id": {"type": "string", "pattern": "^[a-z0-9._-]{3,128}$"},
-            "skill_protocol_version": {"type": "integer", "minimum": 1}
+            "skill_protocol_version": {"type": "integer", "minimum": 1},
+            "runtime_profile": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+            "runtime_profile_hash": {"$ref": "#/$defs/hash"},
+            "runtime_model_dir": {"type": "string", "minLength": 1},
+            "profile_transaction_id": {"type": "string", "pattern": "^ptxn-[0-9a-f]{32}$"},
+            "previous_runtime": {
+              "oneOf": [
+                {"type": "null"},
+                {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["id", "profile", "profile_hash", "model_dir"],
+                  "properties": {
+                    "id": {"type": "string", "pattern": "^[a-z0-9._-]{3,128}$"},
+                    "profile": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+                    "profile_hash": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/hash"}]},
+                    "model_dir": {"type": ["string", "null"], "minLength": 1}
+                  }
+                }
+              ]
+            }
           },
           "allOf": [
             {"if": {"required": ["runtime_id"]}, "then": {"required": ["skill_protocol_version"]}},
-            {"if": {"required": ["skill_protocol_version"]}, "then": {"required": ["runtime_id"]}}
+            {"if": {"required": ["skill_protocol_version"]}, "then": {"required": ["runtime_id"]}},
+            {"if": {"required": ["runtime_profile"]}, "then": {"required": ["runtime_profile_hash"]}},
+            {"if": {"required": ["runtime_profile_hash"]}, "then": {"required": ["runtime_profile"]}}
           ]
         }
       ]

@@ -8,12 +8,17 @@
   ],
   "properties": {
     "kind": {"const": "atomlearn.runtime-bundle"},
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "id": {"type": "string", "pattern": "^[a-z0-9._-]{3,128}$"},
     "core_version": {"$ref": "#/$defs/version"},
     "platform": {"enum": ["linux", "windows"]},
     "architecture": {"enum": ["amd64", "arm64"]},
     "python_minor": {"type": "string", "pattern": "^3\\.(10|11|12|13)$"},
+    "profile": {"$ref": "#/$defs/profile"},
+    "profile_hash": {"$ref": "#/$defs/hash"},
+    "dependency_lock_sha256": {"$ref": "#/$defs/hash"},
+    "model_lock": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/model_lock"}]},
+    "smoke_report_sha256": {"$ref": "#/$defs/hash"},
     "core_wheel": {"$ref": "#/$defs/wheel"},
     "wheels": {
       "type": "array",
@@ -21,9 +26,110 @@
       "items": {"$ref": "#/$defs/wheel"}
     }
   },
+  "allOf": [
+    {
+      "if": {"properties": {"schema_version": {"const": 1}}},
+      "then": {
+        "not": {
+          "anyOf": [
+            {"required": ["profile"]},
+            {"required": ["profile_hash"]},
+            {"required": ["dependency_lock_sha256"]},
+            {"required": ["model_lock"]},
+            {"required": ["smoke_report_sha256"]}
+          ]
+        }
+      }
+    },
+    {
+      "if": {"properties": {"schema_version": {"const": 2}}},
+      "then": {
+        "required": [
+          "profile", "profile_hash", "dependency_lock_sha256", "model_lock", "smoke_report_sha256"
+        ]
+      }
+    }
+  ],
   "$defs": {
     "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"},
     "hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name", "capabilities", "stability", "python_modules", "native_requirements",
+        "model_policy", "smoke_suites"
+      ],
+      "properties": {
+        "name": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+        "capabilities": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]}
+        },
+        "stability": {"enum": ["stable", "experimental"]},
+        "python_modules": {
+          "type": "array", "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"}
+        },
+        "native_requirements": {
+          "type": "array", "items": {"$ref": "#/$defs/native_requirement"}
+        },
+        "model_policy": {"$ref": "#/$defs/model_policy"},
+        "smoke_suites": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale-index", "semantic-retrieval", "ocr-layout", "semantic-gpu"]}
+        }
+      }
+    },
+    "native_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command", "version_args"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,31}$"},
+        "command": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$"},
+        "version_args": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "model_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "silent_download"],
+      "properties": {
+        "mode": {"enum": ["none", "pinned_local"]},
+        "silent_download": {"const": false},
+        "trust_remote_code": {"const": false},
+        "allowed_weight_formats": {
+          "type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}
+        },
+        "forbidden_formats": {
+          "type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}
+        }
+      }
+    },
+    "model_lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "revision", "trust_remote_code", "files"],
+      "properties": {
+        "model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "trust_remote_code": {"const": false},
+        "files": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path", "sha256", "size"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^[A-Za-z0-9_.\\/-]+$"},
+              "sha256": {"$ref": "#/$defs/hash"},
+              "size": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
     "wheel": {
       "type": "object",
       "additionalProperties": false,

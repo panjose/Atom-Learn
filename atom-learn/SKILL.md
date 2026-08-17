@@ -21,6 +21,8 @@ python <SKILL_DIR>/scripts/atomlearn.py <command> ...
 
 When the repository is installed, the equivalent short entry point is `atomlearn <command> ...`. Every subcommand exposes descriptive `--help`.
 
+When this Skill was resolved through the signed Manager bridge, never install packages into its active runtime. Use `atomlearn-manager profile status` and `atomlearn-manager doctor [--capability <name>]` to distinguish signed availability, declaration, installation, usability, and stability. A learning session may explain a blocker but must not activate or roll back a profile. Profile changes belong to the separately confirmed Manager workflow: `profile plan`, `profile apply`, `profile recover`, or paired `profile rollback`. `base` must never fetch a model or OCR engine; semantic profiles require a local directory matching the signed revision and file hashes, while OCR requires both its Python adapters and native-engine preflight. Read [references/RELEASE_MANAGER.md](references/RELEASE_MANAGER.md) before runtime operations.
+
 Treat `.atomlearn/` YAML as canonical state. Treat root Markdown views, including learning, evolution, and research views, as generated. Core course rendering maintains both English files and aligned `*.zh-CN.md` Chinese views; use the learner's language without translating their Atom titles or content. Do not edit generated views to mutate state.
 
 Inspect Core and state compatibility with `atomlearn version` and `atomlearn migrate status|plan|validate`. Read [references/MIGRATIONS.md](references/MIGRATIONS.md) before troubleshooting schema compatibility. Keep the Core directory read-only during learning; migration application belongs to the trusted release workflow, never a course session.

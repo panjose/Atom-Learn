@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "profile", "status", "suites", "platform_verified"],
+  "properties": {
+    "kind": {"const": "atomlearn.runtime-profile-smoke"},
+    "schema_version": {"const": 1},
+    "profile": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+    "status": {"enum": ["pending", "passed", "failed"]},
+    "suites": {
+      "type": "array", "minItems": 1, "uniqueItems": true,
+      "items": {"enum": ["base", "scale-index", "semantic-retrieval", "ocr-layout", "semantic-gpu"]}
+    },
+    "platform_verified": {"type": "boolean"},
+    "platform": {"enum": ["linux", "windows"]},
+    "architecture": {"enum": ["amd64", "arm64"]},
+    "python_minor": {"type": "string", "pattern": "^3\\.(10|11|12|13)$"},
+    "report_id": {"type": "string", "minLength": 1}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "passed"}}},
+      "then": {"required": ["platform", "architecture", "python_minor"]}
+    }
+  ]
+}

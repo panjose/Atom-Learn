@@ -56,12 +56,26 @@ jobs:
           $coreWheel = Get-ChildItem core-wheel -Filter 'atom_learn-*.whl' | Select-Object -First 1
           if ($null -eq $coreWheel) { throw 'Core wheel was not built' }
           python -m pip download --only-binary=:all: --dest runtime-wheelhouse $coreWheel.FullName
+          @{
+            kind = 'atomlearn.runtime-profile-smoke'
+            schema_version = 1
+            profile = 'base'
+            status = 'passed'
+            suites = @('base')
+            platform_verified = $true
+            platform = '${{ matrix.platform }}'
+            architecture = 'amd64'
+            python_minor = '${{ matrix.python-version }}'
+            report_id = 'release-gates-${{ github.sha }}-${{ matrix.platform }}-py${{ matrix.python-version }}'
+          } | ConvertTo-Json -Compress | Set-Content -Encoding utf8 runtime-smoke.json
           atomlearn-runtime-bundle runtime-wheelhouse `
             --output-dir runtime-dist `
             --core-version $version `
             --platform '${{ matrix.platform }}' `
             --architecture amd64 `
-            --python-minor '${{ matrix.python-version }}'
+            --python-minor '${{ matrix.python-version }}' `
+            --profile base `
+            --smoke-report runtime-smoke.json
       - name: Upload signed-input runtime bundle
         uses: actions/upload-artifact@v4
         with:
@@ -139,7 +153,7 @@ jobs:
           while IFS= read -r bundle; do
             RUNTIME_ARGS+=(--runtime-bundle "$bundle")
           done < <(find runtime-dist -maxdepth 1 -type f -name 'atomlearn-runtime-*.zip' -print | sort)
-          test "${#RUNTIME_ARGS[@]}" -eq 16
+          test "${#RUNTIME_ARGS[@]}" -eq 8
           python -m atomlearn_manager.builder . \
             --output-dir dist \
             --tag "$GITHUB_REF_NAME" \

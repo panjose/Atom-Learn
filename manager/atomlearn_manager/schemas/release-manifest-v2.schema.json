@@ -72,6 +72,11 @@
           "minItems": 1,
           "uniqueItems": true,
           "items": {"enum": ["core", "bridge", "documents", "rag", "exam", "research", "review"]}
+        },
+        "runtime_profiles_sha256": {"$ref": "#/$defs/hash"},
+        "stable_runtime_profiles": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale", "semantic-cpu", "ocr"]}
         }
       }
     },
@@ -120,6 +125,7 @@
       ],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z0-9._-]{3,128}$"},
+        "core_version": {"$ref": "#/$defs/version"},
         "platform": {"enum": ["linux", "windows"]},
         "architecture": {"enum": ["amd64", "arm64"]},
         "python_minor": {"type": "string", "pattern": "^3\\.(10|11|12|13)$"},
@@ -128,8 +134,123 @@
         "sha256": {"$ref": "#/$defs/hash"},
         "size": {"type": "integer", "minimum": 1},
         "recipe_sha256": {"$ref": "#/$defs/hash"},
-        "core_wheel": {"$ref": "#/$defs/wheel"}
+        "core_wheel": {"$ref": "#/$defs/wheel"},
+        "profile": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/profile"}]},
+        "profile_hash": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/hash"}]},
+        "dependency_lock_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/hash"}]},
+        "model_lock": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/model_lock"}]},
+        "smoke_report_sha256": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/hash"}]},
+        "smoke": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/profile_smoke"}]}
+      },
+      "allOf": [
+        {
+          "if": {"required": ["profile"]},
+          "then": {
+            "required": [
+              "core_version", "profile_hash", "dependency_lock_sha256", "model_lock",
+              "smoke_report_sha256", "smoke"
+            ]
+          }
+        }
+      ]
+    },
+    "profile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name", "capabilities", "stability", "python_modules", "native_requirements",
+        "model_policy", "smoke_suites"
+      ],
+      "properties": {
+        "name": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+        "capabilities": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]}
+        },
+        "stability": {"enum": ["stable", "experimental"]},
+        "python_modules": {
+          "type": "array", "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_.]*$"}
+        },
+        "native_requirements": {
+          "type": "array", "items": {"$ref": "#/$defs/native_requirement"}
+        },
+        "model_policy": {"$ref": "#/$defs/model_policy"},
+        "smoke_suites": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale-index", "semantic-retrieval", "ocr-layout", "semantic-gpu"]}
+        }
       }
+    },
+    "native_requirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "command", "version_args"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,31}$"},
+        "command": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+$"},
+        "version_args": {"type": "array", "minItems": 1, "items": {"type": "string", "minLength": 1}}
+      }
+    },
+    "model_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "silent_download"],
+      "properties": {
+        "mode": {"enum": ["none", "pinned_local"]},
+        "silent_download": {"const": false},
+        "trust_remote_code": {"const": false},
+        "allowed_weight_formats": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}},
+        "forbidden_formats": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string"}}
+      }
+    },
+    "model_lock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model_id", "revision", "trust_remote_code", "files"],
+      "properties": {
+        "model_id": {"type": "string", "minLength": 1},
+        "revision": {"type": "string", "minLength": 1},
+        "trust_remote_code": {"const": false},
+        "files": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["path", "sha256", "size"],
+            "properties": {
+              "path": {"type": "string", "pattern": "^[A-Za-z0-9_.\\/-]+$"},
+              "sha256": {"$ref": "#/$defs/hash"},
+              "size": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      }
+    },
+    "profile_smoke": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "schema_version", "profile", "status", "suites", "platform_verified"],
+      "properties": {
+        "kind": {"const": "atomlearn.runtime-profile-smoke"},
+        "schema_version": {"const": 1},
+        "profile": {"enum": ["base", "scale", "semantic-cpu", "ocr", "semantic-gpu"]},
+        "status": {"enum": ["pending", "passed", "failed"]},
+        "suites": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["base", "scale-index", "semantic-retrieval", "ocr-layout", "semantic-gpu"]}
+        },
+        "platform_verified": {"type": "boolean"},
+        "platform": {"enum": ["linux", "windows"]},
+        "architecture": {"enum": ["amd64", "arm64"]},
+        "python_minor": {"type": "string", "pattern": "^3\\.(10|11|12|13)$"},
+        "report_id": {"type": "string", "minLength": 1}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "passed"}}},
+          "then": {"required": ["platform", "architecture", "python_minor"]}
+        }
+      ]
     },
     "schemas": {
       "type": "object",

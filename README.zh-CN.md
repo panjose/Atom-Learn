@@ -282,7 +282,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 
 ### 签名 Release Manager
 
-Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Manifest v2 把签名 Core、固定 Codex bridge 协议、能力 smoke 契约、完整离线 wheelhouse 配方，以及每个受支持 OS/Python 目标的隔离 runtime 绑定为同一发行身份。launcher 始终使用 active release 自己的 runtime；只有状态副本迁移和能力感知 smoke 测试全部通过后才会激活。更新失败或中断时旧 Core 与其 runtime 都会保留；回滚仍只允许配套的上一版 release 与对应状态快照。
+Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Runtime recipe v2 会把有限的 profile 名称与能力集合、完整依赖锁、OS/架构/Python ABI、模型策略或显式模型文件锁、原生引擎要求以及目标平台 smoke 报告绑定到签名 release。Manager 会把每个 profile 离线安装到 `runtimes/<core>/<platform>/<profile-hash-prefix>/`，用不可变状态中的完整 hash 验证它，执行 preflight 与 Core smoke，然后才原子切换 active profile 指针。profile 安装失败或中断时旧 profile 仍然 active；Core 回滚与 profile 回滚使用彼此独立的配对事务历史。当前签名 `v0.14.2` 的交付声明仍然只有 `base`：`scale`、`semantic-cpu` 和 `ocr` 在完整签名矩阵通过前仍是候选 recipe，`semantic-gpu` 则是 experimental。
 
 ```powershell
 python -m pip install -e ./manager
@@ -291,10 +291,12 @@ atomlearn-manager codex install
 atomlearn-manager codex status
 atomlearn-manager update status
 atomlearn-manager update recover
+atomlearn-manager profile status
+atomlearn-manager doctor
 atomlearn-core version
 ```
 
-公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。指纹核验、密钥轮换、bridge 修复、更新计划、runtime 构建、恢复、回滚和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
+`profile plan` 与 `profile apply` 只能选择 active 签名 manifest 已声明的 profile asset。语义 profile 激活时必须提供绝对路径的本地模型目录，其 revision 与每个必要文件 hash 都要匹配签名模型锁；系统绝不会下载模型或启用 remote code。OCR 激活会区分已安装的 Python adapter 与必需的原生引擎。`doctor` 会分别报告 `available`、`declared`、`installed`、`usable` 和 `stable`，并给出有类型的阻塞原因与修复建议。公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。profile 命令、指纹核验、密钥轮换、恢复、回滚和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
 
 所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.14.2 Release Notes](docs/releases/v0.14.2.md)和[Changelog](CHANGELOG.md)。
 

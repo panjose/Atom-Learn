@@ -168,6 +168,21 @@ def build_release(
         or signing_record["fingerprint"] != key_fingerprint(signing_public)
     ):
         raise ManagerError("Release private key does not match the active trust-bundle identity")
+    runtime_registry_path = "atom-learn/assets/runtime-profiles.yaml"
+    runtime_registry = yaml.safe_load(by_name[runtime_registry_path].decode("utf-8"))
+    if (
+        not isinstance(runtime_registry, dict)
+        or set(runtime_registry) != {"kind", "schema_version", "core_version", "stable_profiles", "profiles"}
+        or runtime_registry.get("kind") != "atomlearn.runtime-profile-registry"
+        or runtime_registry.get("schema_version") != 1
+        or runtime_registry.get("core_version") != version
+        or not isinstance(runtime_registry.get("stable_profiles"), list)
+        or len(runtime_registry["stable_profiles"]) != len(set(runtime_registry["stable_profiles"]))
+    ):
+        raise ManagerError("Runtime profile registry is missing or has a mismatched Core version")
+    registry_profiles = {item["name"]: item for item in runtime_registry.get("profiles", [])}
+    if set(registry_profiles) != {"base", "scale", "semantic-cpu", "ocr", "semantic-gpu"}:
+        raise ManagerError("Runtime profile registry must define the finite supported profile set exactly once")
     runtime_bundles = []
     runtime_ids: set[str] = set()
     for runtime_path in runtime_bundle_paths:
@@ -179,9 +194,19 @@ def build_release(
         if recipe["id"] in runtime_ids:
             raise ManagerError(f"Duplicate runtime bundle id: {recipe['id']}")
         runtime_ids.add(recipe["id"])
+        if recipe.get("schema_version") != 2 or not isinstance(recipe.get("profile"), dict):
+            raise ManagerError("New release builds require immutable runtime profile recipe v2")
+        profile_name = recipe["profile"]["name"]
+        registered = dict(registry_profiles.get(profile_name, {}))
+        registered.pop("release_status", None)
+        if registered != recipe["profile"]:
+            raise ManagerError(f"Runtime bundle profile disagrees with the Core registry: {profile_name}")
+        if channel == "stable" and profile_name not in runtime_registry["stable_profiles"]:
+            raise ManagerError(f"Candidate or experimental profile cannot enter a stable release: {profile_name}")
         runtime_bundles.append(
             {
                 "id": recipe["id"],
+                "core_version": recipe["core_version"],
                 "platform": recipe["platform"],
                 "architecture": recipe["architecture"],
                 "python_minor": recipe["python_minor"],
@@ -191,6 +216,12 @@ def build_release(
                 "size": runtime_path.stat().st_size,
                 "recipe_sha256": inspected_runtime["recipe_sha256"],
                 "core_wheel": recipe["core_wheel"],
+                "profile": recipe.get("profile"),
+                "profile_hash": recipe.get("profile_hash"),
+                "dependency_lock_sha256": recipe.get("dependency_lock_sha256"),
+                "model_lock": recipe.get("model_lock"),
+                "smoke_report_sha256": recipe.get("smoke_report_sha256"),
+                "smoke": inspected_runtime.get("smoke_report"),
             }
         )
     required_matrix = {
@@ -198,11 +229,35 @@ def build_release(
         for system in ["linux", "windows"]
         for python_minor in ["3.10", "3.11", "3.12", "3.13"]
     }
-    actual_matrix = {(item["platform"], item["architecture"], item["python_minor"]) for item in runtime_bundles}
-    if channel == "stable" and actual_matrix != required_matrix:
-        missing = sorted(required_matrix - actual_matrix)
-        extra = sorted(actual_matrix - required_matrix)
-        raise ManagerError(f"Stable release runtime matrix mismatch; missing={missing}, extra={extra}")
+    if channel == "stable":
+        profile_names = {(item.get("profile") or {}).get("name", "base") for item in runtime_bundles}
+        expected_profiles = set(runtime_registry["stable_profiles"])
+        if profile_names != expected_profiles:
+            raise ManagerError(
+                "Stable release profile set disagrees with the Core registry; "
+                f"missing={sorted(expected_profiles - profile_names)}, extra={sorted(profile_names - expected_profiles)}"
+            )
+        for profile_name in sorted(profile_names):
+            profile_items = [
+                item for item in runtime_bundles if (item.get("profile") or {}).get("name", "base") == profile_name
+            ]
+            actual_matrix = {
+                (item["platform"], item["architecture"], item["python_minor"]) for item in profile_items
+            }
+            if actual_matrix != required_matrix:
+                missing = sorted(required_matrix - actual_matrix)
+                extra = sorted(actual_matrix - required_matrix)
+                raise ManagerError(
+                    f"Stable release runtime matrix mismatch for {profile_name}; missing={missing}, extra={extra}"
+                )
+            for item in profile_items:
+                if item.get("profile") is None:
+                    raise ManagerError("New stable releases cannot publish legacy runtime recipes")
+                smoke = item.get("smoke") or {}
+                if smoke.get("status") != "passed" or smoke.get("platform_verified") is not True:
+                    raise ManagerError(
+                        f"Stable runtime profile lacks a passing target-platform smoke report: {item['id']}"
+                    )
     by_name["release/gate-report.json"] = gate_bytes
     core_path = "atom-learn/assets/core-manifest.yaml"
     core = yaml.safe_load(by_name[core_path].decode("utf-8"))
@@ -279,6 +334,8 @@ def build_release(
         "capabilities": {
             "ledger_sha256": sha256_bytes(by_name[core["capability_ledger"]]),
             "required_smoke": capability_ledger["required_smoke"],
+            "runtime_profiles_sha256": sha256_bytes(by_name[runtime_registry_path]),
+            "stable_runtime_profiles": runtime_registry["stable_profiles"],
         },
         "smoke_fixture_sha256": sha256_bytes(by_name[core["smoke_fixtures"]]),
         "trust": {"bundle_version": trust_bundle["bundle_version"], "key_id": key_id},
