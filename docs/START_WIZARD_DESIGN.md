@@ -11,16 +11,21 @@ flowchart LR
     A["One learner request"] --> B["JSON Schema validation"]
     B --> C["Course + intake + RAG initialization"]
     C --> D["Source normalization + Document IR indexing"]
-    D --> E{"Sparse-input coverage passes?"}
-    E -->|"no"| F["Structured harness Web Search tasks"]
-    F --> G["Bounded evidence + verdicts"]
-    G --> E
-    E -->|"yes or complete sources"| H["Source-grounded plan task"]
+    D --> E{"Universal Goal Contract coverage passes?"}
+    E -->|"local candidates"| CJ["Harness coverage judgment"]
+    CJ -->|"supported"| H["Source-grounded plan task"]
+    CJ -->|"policy allows correction"| F["Structured harness Web Search tasks"]
+    CJ -->|"closed corpus has gaps"| CG["Report gaps and request a scope/policy decision"]
+    E -->|"no candidates; policy allows correction"| F
+    E -->|"no candidates; closed corpus"| CG
+    F --> WE["Bounded evidence + verdicts"]
+    WE --> E
+    CG -->|"learner changes goal, sources, or policy"| E
     H --> I["Deterministic plan preview + validation"]
     I --> K{"Learner confirms phase?"}
     K -->|"yes"| L["Plan import + traceability gate"]
     L --> M{"Learner confirms first Atom?"}
-    M -->|"yes"| J["Activate exactly one first Atom"]
+    M -->|"yes"| Z["Activate exactly one first Atom"]
 ```
 
 The wizard calls the existing subsystem engines directly. Course, intake, and RAG files remain canonical. Its `.atomlearn/start.yaml` checkpoint contains the orchestration stage and exact current typed action, so interruption recovery replays work without replaying mutations.

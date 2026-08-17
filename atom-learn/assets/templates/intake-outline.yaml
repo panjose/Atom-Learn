@@ -16,3 +16,8 @@ topic_terms: []
 discovery_sources: []
 ambiguities: []
 assumptions: []
+mandatory_anchors: []
+corpus_policy:
+  role: outline_like
+  expansion: correct_gaps
+  user_confirmed: true

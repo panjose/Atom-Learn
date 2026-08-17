@@ -6,3 +6,7 @@ outline:
   - Integrals
 desired_outcome: exam
 target_depth: advanced
+corpus_policy:
+  role: outline_like
+  expansion: correct_gaps
+  user_confirmed: true

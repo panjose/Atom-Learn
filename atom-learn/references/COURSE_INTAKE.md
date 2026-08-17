@@ -17,7 +17,14 @@ Classify the primary input before building the Knowledge Atom map:
 - `outline`: the user supplies a syllabus, chapter list, curriculum, or structured topic outline without complete explanatory content;
 - `topic`: the user supplies only a field name, keyword, concept, skill, or desired subject.
 
-Use the most information-rich primary mode. A textbook with a table of contents remains `sources`. A short syllabus with a few references remains `outline`. Mixed inputs may retain secondary fields while using one primary mode.
+Use the most information-rich primary mode. A textbook with a table of contents remains `sources`. A short syllabus with a few references remains `outline`. Mixed inputs retain every secondary field while using one primary mode. `mode` selects an atomization strategy; it never bypasses readiness gates.
+
+Every intake also has two orthogonal contracts:
+
+- `goal_contract` combines the goal, outcome, depth, outline items, topic terms, and explicit mandatory anchors under its own revision;
+- `corpus_policy` records whether the supplied corpus is `full`, `partial`, `supplemental`, `outline_like`, or `unknown`, and whether expansion is `closed_corpus`, `correct_gaps`, or `discover`.
+
+Use `closed_corpus` when the learner wants only the supplied material. A failed anchor then becomes an explicit corpus gap and must never trigger Web Search. `correct_gaps` permits focused external correction after local candidates are judged. `discover` is the normal topic-only default.
 
 For a new workspace, prefer the unified [start wizard](START_WIZARD.md), which generates intake and retrieval state from one request:
 
@@ -61,7 +68,7 @@ Treat the outline as a coverage contract, not a finished learning graph.
 6. Add missing bridge Atoms and label them as inferred.
 7. Use outline item IDs as source locators so coverage remains auditable.
 
-If explanatory sources are absent, the outline is not ready to plan. Index the outline, generate one retrieval requirement per outline ID, use corrective harness Web Search for missing explanations, and pass the explicit RAG coverage gate.
+If explanatory sources are absent, the outline is not ready to plan. Index the outline, generate one retrieval requirement per outline ID, judge local candidates, and use corrective harness Web Search only when Corpus Policy permits it. Pass the explicit RAG coverage gate.
 
 ## Topic names or keywords
 
@@ -81,7 +88,7 @@ If current recommendations, versions, standards, or research coverage matter, ve
 
 ## Mixed inputs
 
-Use the strongest input as the primary mode and preserve the others:
+Use the strongest input as the primary mode and preserve the others in the Goal Contract:
 
 - textbook plus outline: use `sources`; use outline items as coverage checks;
 - outline plus keywords: use `outline`; use keywords to clarify emphasis;
@@ -92,7 +99,7 @@ Use the strongest input as the primary mode and preserve the others:
 
 ## Readiness and completion
 
-`sources` becomes `ready_to_plan` after valid intake capture. `outline` remains `discovering` until every outline anchor passes RAG coverage. `topic` remains `discovering` until authoritative discovery sources are recorded and topic/goal coverage passes. Coverage must match the current intake revision; an intake update makes the previous report stale.
+Every mode remains `discovering` until every mandatory Goal Contract anchor has a supported verdict over current requirement-specific candidates. Coverage must match the current intake revision, Goal Contract revision, and RAG corpus revision; changing any of them makes the report stale. A learner-provided source, even one described as complete, is not evidence that the learning goal is covered.
 
 After creating and importing the course plan, run:
 
@@ -105,7 +112,7 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 Completion requires:
 
 - at least one imported Knowledge Atom;
-- a passed current RAG coverage report for outline and topic intake;
+- a passed RAG coverage report for the planned intake, Goal Contract, and RAG revisions;
 - the intake source IDs represented in course sources;
 - source locators on every non-archived Atom;
 - a valid course and intake state.

@@ -1537,20 +1537,26 @@ class RagEngine:
                 raise RagError("both intake and research state exist; select `rag requirements --context intake` or `--context research`")
             context = "intake" if intake_path.is_file() else "research"
         if context == "intake" and intake_path.is_file():
-            intake = read_data(intake_path)
-            mode = intake.get("mode")
-            requirements: list[dict[str, Any]] = []
-            if mode == "outline":
-                for item in intake.get("outline_items", []):
-                    query = " — ".join(value for value in [item.get("title", ""), item.get("notes", "")] if value)
-                    requirements.append({"id": item["id"], "query": query, "minimum_sources": 1, "authoritative": False})
-            elif mode == "topic":
-                for index, term in enumerate(intake.get("topic_terms", []), start=1):
-                    requirements.append({"id": f"topic.{index}", "query": f"{term}: {intake.get('goal', '')}", "minimum_sources": 1, "authoritative": True})
-                requirements.append({"id": "scope.goal", "query": intake.get("goal"), "minimum_sources": 2, "authoritative": True})
-            else:
-                requirements.append({"id": "scope.goal", "query": intake.get("goal"), "minimum_sources": 1, "authoritative": False})
-            return {"context": "intake", "intake_revision": intake.get("revision"), "requirements": requirements, "verdicts": []}
+            from intake import IntakeEngine
+
+            intake = IntakeEngine.upgrade_state(read_data(intake_path), self.workspace.revision)
+            contract = intake["goal_contract"]
+            return {
+                "context": "intake",
+                "intake_revision": intake.get("revision"),
+                "goal_contract_revision": intake.get("goal_contract_revision"),
+                "corpus_policy": intake.get("corpus_policy"),
+                "requirements": [
+                    {
+                        "id": item["id"],
+                        "query": item["query"],
+                        "minimum_sources": item["minimum_sources"],
+                        "authoritative": item["authoritative"],
+                    }
+                    for item in contract["mandatory_anchors"]
+                ],
+                "verdicts": [],
+            }
         if context == "research" and research_path.is_file():
             research = read_data(research_path)
             field = limited_text(research.get("field"), "research.field", limit=500)
@@ -1577,6 +1583,7 @@ class RagEngine:
         if len(payload["requirements"]) > 300:
             raise RagError("coverage may evaluate at most 300 requirements")
         intake_revision = payload.get("intake_revision")
+        goal_contract_revision = payload.get("goal_contract_revision")
         research_revision = payload.get("research_revision")
         intake_path = self.workspace.meta / "intake.yaml"
         research_path = self.workspace.meta / "research" / "state.yaml"
@@ -1593,12 +1600,30 @@ class RagEngine:
         if context not in {"intake", "research", "custom"}:
             raise RagError("coverage.context must be intake, research, or custom")
         baseline: dict[str, dict[str, Any]] = {}
+        corpus_policy: dict[str, Any] | None = None
+        closed_source_ids: list[str] = []
         if context == "intake":
             if not intake_path.is_file():
                 raise RagError("coverage context is intake but intake state is not initialized")
-            current_intake_revision = read_data(intake_path).get("revision")
+            from intake import IntakeEngine
+
+            intake = IntakeEngine.upgrade_state(read_data(intake_path), self.workspace.revision)
+            current_intake_revision = intake.get("revision")
             if intake_revision != current_intake_revision:
                 raise RagError(f"coverage intake_revision must match current intake revision {current_intake_revision}")
+            current_contract_revision = intake.get("goal_contract_revision")
+            if goal_contract_revision != current_contract_revision:
+                raise RagError(
+                    "coverage goal_contract_revision must match current Goal Contract revision "
+                    f"{current_contract_revision}"
+                )
+            corpus_policy = intake["corpus_policy"]
+            if corpus_policy["expansion"] == "closed_corpus":
+                closed_source_ids = unique(
+                    [item["id"] for item in intake.get("source_materials", [])]
+                    + [item["id"] for item in intake.get("discovery_sources", [])]
+                    + ([intake.get("outline_source_id")] if intake.get("outline_items") else [])
+                )
             baseline = {item["id"]: item for item in self.requirements("intake")["requirements"]}
         elif context == "research":
             if not research_path.is_file():
@@ -1649,6 +1674,8 @@ class RagEngine:
             if not isinstance(authoritative, bool):
                 raise RagError(f"{requirement_id}.authoritative must be boolean")
             required = baseline.get(requirement_id)
+            if context == "intake" and required and query != required["query"]:
+                raise RagError(f"{requirement_id}.query must match the current Goal Contract anchor")
             if required and minimum_sources < required["minimum_sources"]:
                 raise RagError(
                     f"{requirement_id}.minimum_sources cannot be lower than the intake requirement "
@@ -1656,10 +1683,19 @@ class RagEngine:
                 )
             if required and required["authoritative"] and not authoritative:
                 raise RagError(f"{requirement_id}.authoritative cannot weaken the intake requirement")
-            search = self.search(
-                {"query": query, "alternate_queries": alternates, "top_k": 50, "candidate_k": 100},
-                record=False,
-            )
+            if context == "intake" and corpus_policy and corpus_policy["expansion"] == "closed_corpus" and not closed_source_ids:
+                search = self._empty_search(query, [query, *alternates], [], False, corpus_empty=True)
+            else:
+                search = self.search(
+                    {
+                        "query": query,
+                        "alternate_queries": alternates,
+                        "top_k": 50,
+                        "candidate_k": 100,
+                        "source_ids": closed_source_ids,
+                    },
+                    record=False,
+                )
             candidate_ids = [entry["chunk_id"] for entry in search["results"]]
             verdict = verdicts.get(requirement_id)
             status = "unverified"
@@ -1720,17 +1756,34 @@ class RagEngine:
             "rag_revision": self.revision + 1,
             "context": context,
             "intake_revision": intake_revision,
+            "goal_contract_revision": goal_contract_revision,
             "research_revision": research_revision,
+            "corpus_policy": corpus_policy,
+            "allowed_source_ids": closed_source_ids,
             "evaluated_at": iso(),
             "gate": "pass" if not failing else "fail",
-            "web_search_needed": bool(failing),
-            "web_search_queries": [item["query"] for item in failing],
+            "web_search_needed": bool(
+                failing
+                and (
+                    context != "intake"
+                    or corpus_policy is None
+                    or corpus_policy["expansion"] != "closed_corpus"
+                )
+            ),
+            "web_search_queries": (
+                [item["query"] for item in failing]
+                if context != "intake" or corpus_policy is None or corpus_policy["expansion"] != "closed_corpus"
+                else []
+            ),
             "requirements": results,
             "quality_contract": {
                 "explicit_harness_verdicts_required": True,
                 "supported_requires_active_evidence": True,
                 "evidence_must_be_current_requirement_candidate": True,
                 "all_requirements_must_be_supported": True,
+                "external_evidence_allowed": bool(
+                    context != "intake" or corpus_policy is None or corpus_policy["expansion"] != "closed_corpus"
+                ),
             },
         }
         persisted_report = {
@@ -1748,14 +1801,15 @@ class RagEngine:
             IntakeEngine.load(str(self.workspace.root)).render()
         return report
 
-    def correct(self, payload: Any) -> dict[str, Any]:
-        if not isinstance(payload, dict) or not isinstance(payload.get("coverage"), dict):
-            raise RagError("correct payload must contain a coverage mapping")
-        ingested: dict[str, Any] | None = None
-        if payload.get("web_evidence") is not None:
-            ingested = self.ingest(payload["web_evidence"], "web")
-        report = self.coverage(payload["coverage"])
-        tasks = [
+    def correction_response(
+        self, report: dict[str, Any], ingested: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        closed_corpus = (
+            report.get("context") == "intake"
+            and isinstance(report.get("corpus_policy"), dict)
+            and report["corpus_policy"].get("expansion") == "closed_corpus"
+        )
+        tasks = [] if closed_corpus else [
             {
                 "requirement_id": item["id"],
                 "query": item["query"],
@@ -1772,18 +1826,48 @@ class RagEngine:
             for item in report["requirements"]
             if item["status"] != "supported"
         ]
+        if report["gate"] == "pass":
+            status = "complete"
+            next_action = "Coverage passed; continue to source-grounded planning."
+        elif closed_corpus:
+            status = "corpus_gap_reported"
+            next_action = (
+                "The closed corpus does not support every Goal Contract anchor. "
+                "Narrow the goal, add user-approved sources, or explicitly change the expansion policy."
+            )
+        else:
+            status = "web_search_required"
+            next_action = "Execute each web_search_task with the harness, ingest bounded evidence, and rerun this command."
         return {
-            "status": "complete" if report["gate"] == "pass" else "web_search_required",
+            "status": status,
             "rag_revision": self.revision,
             "ingested": ingested,
             "coverage": report,
             "web_search_tasks": tasks,
-            "next_action": (
-                "Coverage passed; continue to source-grounded planning."
-                if report["gate"] == "pass"
-                else "Execute each web_search_task with the harness, ingest bounded evidence, and rerun this command."
-            ),
+            "next_action": next_action,
         }
+
+    def correct(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict) or not isinstance(payload.get("coverage"), dict):
+            raise RagError("correct payload must contain a coverage mapping")
+        coverage_payload = payload["coverage"]
+        if coverage_payload.get("context") == "intake":
+            intake_path = self.workspace.meta / "intake.yaml"
+            if not intake_path.is_file():
+                raise RagError("coverage context is intake but intake state is not initialized")
+            from intake import IntakeEngine
+
+            intake = IntakeEngine.upgrade_state(read_data(intake_path), self.workspace.revision)
+            if (
+                intake["corpus_policy"]["expansion"] == "closed_corpus"
+                and payload.get("web_evidence") is not None
+            ):
+                raise RagError("closed_corpus forbids Web evidence ingestion; change the policy explicitly first")
+        ingested: dict[str, Any] | None = None
+        if payload.get("web_evidence") is not None:
+            ingested = self.ingest(payload["web_evidence"], "web")
+        report = self.coverage(coverage_payload)
+        return self.correction_response(report, ingested)
 
     @staticmethod
     def load_benchmark_profile(profile_id: str) -> dict[str, Any]:

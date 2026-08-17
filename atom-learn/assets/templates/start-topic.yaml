@@ -4,3 +4,7 @@ desired_outcome: working_knowledge
 target_depth: working
 prior_knowledge: [basic probability]
 constraints: []
+corpus_policy:
+  role: unknown
+  expansion: discover
+  user_confirmed: true

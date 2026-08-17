@@ -95,12 +95,38 @@ def test_source_start_accepts_one_payload_then_resumes_with_the_plan() -> None:
         },
     )
     started = output(invoke("start", path, "--input", request, "--json"))
-    assert started["status"] == "course_plan_required"
-    assert started["course_plan_task"]["source_ids"] == ["calculus-notes"]
+    assert started["status"] == "coverage_judgment_required"
+    assert started["workflow_action"]["action"] == "judge_coverage"
 
     replay = output(invoke("start", path, "--json"))
     assert replay["wizard_revision"] == started["wizard_revision"]
     assert replay["workflow_action"] == started["workflow_action"]
+
+    candidate = started["coverage_requirements"][0]["candidate_chunk_ids"][0]
+    planned = output(
+        invoke(
+            "start",
+            path,
+            "--submission",
+            submission(
+                "coverage",
+                started["workflow_action"],
+                {
+                    "verdicts": [
+                        {
+                            "requirement_id": "scope.goal",
+                            "status": "supported",
+                            "evidence_chunk_ids": [candidate],
+                            "rationale": "The supplied notes directly explain the requested limit concept.",
+                        }
+                    ]
+                },
+            ),
+            "--json",
+        )
+    )
+    assert planned["status"] == "course_plan_required"
+    assert planned["course_plan_task"]["source_ids"] == ["calculus-notes"]
 
     plan = {
         "sources": [
@@ -126,7 +152,7 @@ def test_source_start_accepts_one_payload_then_resumes_with_the_plan() -> None:
             "start",
             path,
             "--submission",
-            submission("plan", started["workflow_action"], {"course_plan": plan}),
+            submission("plan", planned["workflow_action"], {"course_plan": plan}),
             "--json",
         )
     )
@@ -138,7 +164,7 @@ def test_source_start_accepts_one_payload_then_resumes_with_the_plan() -> None:
         "start",
         path,
         "--submission",
-        submission("stale-plan", started["workflow_action"], {"course_plan": plan}),
+        submission("stale-plan", planned["workflow_action"], {"course_plan": plan}),
         "--json",
         check=False,
     )
@@ -233,3 +259,120 @@ def test_start_can_print_its_machine_readable_schema() -> None:
     schema = json.loads(result.stdout)
     assert schema["$schema"].endswith("2020-12/schema")
     assert schema["title"] == "AtomLearn unified start payload"
+
+
+def test_closed_corpus_reports_gaps_without_web_search() -> None:
+    path = workspace("closed-corpus")
+    request = payload(
+        "closed-corpus",
+        {
+            "title": "Closed notes",
+            "goal": "Understand limits and measure theory",
+            "sources": [
+                {
+                    "id": "limit-notes",
+                    "title": "Limit notes",
+                    "type": "notes",
+                    "authority": "user",
+                    "text": "# Limits\nA limit describes an approached value.",
+                }
+            ],
+            "corpus_policy": {
+                "role": "full",
+                "expansion": "closed_corpus",
+                "user_confirmed": True,
+            },
+        },
+    )
+    started = output(invoke("start", path, "--input", request, "--json"))
+    assert started["status"] == "coverage_judgment_required"
+    gap = output(
+        invoke(
+            "start",
+            path,
+            "--submission",
+            submission(
+                "closed-gap",
+                started["workflow_action"],
+                {
+                    "verdicts": [
+                        {
+                            "requirement_id": "scope.goal",
+                            "status": "weak",
+                            "evidence_chunk_ids": [],
+                            "rationale": "The notes cover limits but not measure theory.",
+                        }
+                    ]
+                },
+            ),
+            "--json",
+        )
+    )
+    assert gap["status"] == "corpus_gap_reported"
+    assert gap["web_search_tasks"] == []
+    assert gap["workflow_action"]["action"] == "clarify_goal"
+    assert gap["workflow_action"]["tool_contract"]["required_result_fields"][-1] == "corpus_policy"
+    rejected_web = payload(
+        "closed-web",
+        {
+            "web_evidence": {
+                "sources": [
+                    {
+                        "id": "forbidden-web",
+                        "title": "Forbidden Web source",
+                        "url": "https://example.org/forbidden",
+                        "retrieved_at": "2026-08-17T00:00:00+00:00",
+                        "query": "measure theory",
+                        "authority": "official",
+                        "passages": [{"locator": "intro", "text": "Measure theory material."}],
+                    }
+                ]
+            },
+            "verdicts": [],
+        },
+    )
+    rejected = invoke("start", path, "--input", rejected_web, "--json", check=False)
+    assert rejected.returncode == 2
+    assert "closed_corpus forbids Web evidence" in rejected.stderr
+    registry = yaml.safe_load((path / ".atomlearn" / "rag" / "sources.yaml").read_text(encoding="utf-8"))
+    assert "forbidden-web" not in {item["id"] for item in registry["sources"]}
+
+
+def test_mixed_input_preserves_every_goal_contract_anchor() -> None:
+    path = workspace("mixed")
+    request = payload(
+        "mixed",
+        {
+            "title": "Mixed calculus",
+            "goal": "Build a rigorous calculus review",
+            "sources": [
+                {
+                    "id": "calculus-notes",
+                    "title": "Calculus notes",
+                    "type": "notes",
+                    "authority": "textbook",
+                    "text": "# Limits\nLimits support derivatives and continuity.",
+                }
+            ],
+            "outline": [{"id": "outline.limits", "title": "Limits"}],
+            "topic_terms": ["epsilon-delta proofs"],
+            "mandatory_anchors": [
+                {"id": "goal.proofs", "query": "Construct rigorous epsilon-delta proofs"}
+            ],
+        },
+    )
+    result = output(invoke("start", path, "--input", request, "--json"))
+    assert result["status"] == "coverage_judgment_required"
+    intake = yaml.safe_load((path / ".atomlearn" / "intake.yaml").read_text(encoding="utf-8"))
+    assert intake["mode"] == "sources"
+    assert intake["input_inventory"] == {"has_sources": True, "has_outline": True, "has_topic": True}
+    assert {item["id"] for item in intake["goal_contract"]["mandatory_anchors"]} == {
+        "outline.limits",
+        "topic.1",
+        "goal.proofs",
+        "scope.goal",
+    }
+    assert set(yaml.safe_load((path / ".atomlearn" / "start.yaml").read_text(encoding="utf-8"))["source_ids"]) == {
+        "calculus-notes",
+        "user-outline",
+    }

@@ -78,7 +78,13 @@ def complete(path: Path, revision: int) -> dict:
     )
 
 
-def test_full_sources_intake_is_ready_and_traceable_to_imported_atoms() -> None:
+def canonical_coverage(path: Path, verdicts: list[dict]) -> Path:
+    request = yaml.safe_load(invoke("rag", "requirements", path, "--context", "intake").stdout)
+    request["verdicts"] = verdicts
+    return payload(path, f"coverage-{uuid.uuid4().hex}.yaml", request)
+
+
+def test_full_sources_intake_requires_goal_coverage_and_is_traceable_to_imported_atoms() -> None:
     path = workspace("sources")
     state = initialize(
         path,
@@ -99,9 +105,38 @@ def test_full_sources_intake_is_ready_and_traceable_to_imported_atoms() -> None:
         },
     )
     assert state["mode"] == "sources"
-    assert state["status"] == "ready_to_plan"
-    assert state["guidance"]["ready_to_plan"] is True
+    assert state["status"] == "discovering"
+    assert state["guidance"]["ready_to_plan"] is False
     assert (path / "INTAKE.md").is_file()
+    output(invoke("rag", "init", path))
+    source_file = payload(
+        path,
+        "source-content.yaml",
+        {
+            "sources": [
+                {
+                    "id": "calculus-notes",
+                    "title": "Calculus source",
+                    "authority": "textbook",
+                    "text": "# Derivatives\nA derivative is the limit of a difference quotient and represents instantaneous change.",
+                }
+            ]
+        },
+    )
+    output(invoke("rag", "ingest", path, "--input", source_file))
+    coverage_file = canonical_coverage(
+        path,
+        [
+            {
+                "requirement_id": "scope.goal",
+                "status": "supported",
+                "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
+                "rationale": "The supplied source directly covers the requested derivative foundation.",
+            }
+        ],
+    )
+    assert output(invoke("rag", "coverage", path, "--input", coverage_file))["gate"] == "pass"
+    assert output(invoke("intake", "guidance", path))["ready_to_plan"] is True
     import_course(path)
     completed = complete(path, 0)
     assert completed["intake_revision"] == 1
@@ -151,30 +186,28 @@ def test_outline_intake_preserves_coverage_anchor_without_copying_structure() ->
         },
     )
     output(invoke("rag", "ingest", path, "--input", source_file))
-    coverage_file = payload(
+    coverage_file = canonical_coverage(
         path,
-        "outline-coverage.yaml",
-        {
-            "intake_revision": 0,
-            "requirements": [
-                {"id": "outline.limits", "query": "Limits"},
-                {"id": "outline.derivatives", "query": "Derivatives Includes the formal definition."},
-            ],
-            "verdicts": [
-                {
-                    "requirement_id": "outline.limits",
-                    "status": "supported",
-                    "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
-                    "rationale": "The textbook passage directly defines the limit concept.",
-                },
-                {
-                    "requirement_id": "outline.derivatives",
-                    "status": "supported",
-                    "evidence_chunk_ids": ["calculus-notes.r1.c00002"],
-                    "rationale": "The textbook passage grounds derivatives in limits.",
-                },
-            ],
-        },
+        [
+            {
+                "requirement_id": "outline.limits",
+                "status": "supported",
+                "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
+                "rationale": "The textbook passage directly defines the limit concept.",
+            },
+            {
+                "requirement_id": "outline.derivatives",
+                "status": "supported",
+                "evidence_chunk_ids": ["calculus-notes.r1.c00002"],
+                "rationale": "The textbook passage grounds derivatives in limits.",
+            },
+            {
+                "requirement_id": "scope.goal",
+                "status": "supported",
+                "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
+                "rationale": "The source supports the prerequisite-aware calculus goal.",
+            },
+        ],
     )
     assert output(invoke("rag", "coverage", path, "--input", coverage_file))["gate"] == "pass"
     assert output(invoke("intake", "guidance", path))["ready_to_plan"] is True
@@ -207,7 +240,7 @@ def test_topic_only_intake_requires_discovery_then_becomes_plannable() -> None:
         check=False,
     )
     assert blocked.returncode == 2
-    assert "Authoritative discovery sources" in blocked.stderr
+    assert "RAG coverage has not been evaluated" in blocked.stderr
 
     update_file = payload(
         path,
@@ -277,40 +310,22 @@ def test_topic_only_intake_requires_discovery_then_becomes_plannable() -> None:
         },
     )
     output(invoke("rag", "ingest-web", path, "--input", web_file))
-    coverage_file = payload(
+    coverage_file = canonical_coverage(
         path,
-        "topic-coverage.yaml",
-        {
-            "intake_revision": 1,
-            "requirements": [
-                {
-                    "id": "topic.1",
-                    "query": "derivative: Understand what derivatives mean and how to use them.",
-                    "minimum_sources": 1,
-                    "authoritative": True,
-                },
-                {
-                    "id": "scope.goal",
-                    "query": "Understand what derivatives mean and how to use them.",
-                    "minimum_sources": 2,
-                    "authoritative": True,
-                },
-            ],
-            "verdicts": [
-                {
-                    "requirement_id": "topic.1",
-                    "status": "supported",
-                    "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
-                    "rationale": "The official source provides the core definition.",
-                },
-                {
-                    "requirement_id": "scope.goal",
-                    "status": "supported",
-                    "evidence_chunk_ids": ["calculus-notes.r1.c00001", "calculus-second.r1.c00001"],
-                    "rationale": "Two authoritative sources cover meaning and use.",
-                },
-            ],
-        },
+        [
+            {
+                "requirement_id": "topic.1",
+                "status": "supported",
+                "evidence_chunk_ids": ["calculus-notes.r1.c00001"],
+                "rationale": "The official source provides the core definition.",
+            },
+            {
+                "requirement_id": "scope.goal",
+                "status": "supported",
+                "evidence_chunk_ids": ["calculus-notes.r1.c00001", "calculus-second.r1.c00001"],
+                "rationale": "Two authoritative sources cover meaning and use.",
+            },
+        ],
     )
     assert output(invoke("rag", "coverage", path, "--input", coverage_file))["gate"] == "pass"
     assert output(invoke("intake", "guidance", path))["ready_to_plan"] is True
@@ -338,3 +353,44 @@ def test_outline_cycles_are_rejected() -> None:
     blocked = invoke("intake", "init", path, "--input", intake, check=False)
     assert blocked.returncode == 2
     assert "outline hierarchy cycle" in blocked.stderr
+
+
+def test_legacy_sources_state_is_upgraded_in_memory_without_rewriting() -> None:
+    path = workspace("legacy-sources")
+    initialize(
+        path,
+        {
+            "mode": "sources",
+            "request_summary": "Legacy source intake.",
+            "goal": "Learn the supplied material.",
+            "source_materials": [
+                {
+                    "id": "legacy-notes",
+                    "title": "Legacy notes",
+                    "type": "notes",
+                    "location": "inline:legacy-notes",
+                }
+            ],
+        },
+    )
+    state_path = path / ".atomlearn" / "intake.yaml"
+    legacy = yaml.safe_load(state_path.read_text(encoding="utf-8"))
+    for field in [
+        "mandatory_anchors",
+        "input_inventory",
+        "corpus_policy",
+        "goal_contract_revision",
+        "goal_contract",
+        "planned_intake_revision",
+        "planned_goal_contract_revision",
+    ]:
+        legacy.pop(field, None)
+    legacy["status"] = "ready_to_plan"
+    state_path.write_text(yaml.safe_dump(legacy, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    before = state_path.read_bytes()
+
+    status = output(invoke("intake", "status", path))
+
+    assert status["status"] == "discovering"
+    assert status["corpus_policy"]["expansion"] == "correct_gaps"
+    assert state_path.read_bytes() == before

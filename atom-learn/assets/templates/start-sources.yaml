@@ -9,3 +9,7 @@ sources:
     ocr: auto
 desired_outcome: working_knowledge
 target_depth: working
+corpus_policy:
+  role: full
+  expansion: closed_corpus
+  user_confirmed: true

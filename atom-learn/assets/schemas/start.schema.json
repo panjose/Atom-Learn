@@ -16,6 +16,17 @@
     "constraints": {"$ref": "#/$defs/stringList"},
     "ambiguities": {"$ref": "#/$defs/stringList"},
     "assumptions": {"$ref": "#/$defs/stringList"},
+    "mandatory_anchors": {
+      "type": "array",
+      "maxItems": 300,
+      "items": {
+        "oneOf": [
+          {"type": "string", "minLength": 1, "maxLength": 4000},
+          {"$ref": "#/$defs/mandatoryAnchor"}
+        ]
+      }
+    },
+    "corpus_policy": {"$ref": "#/$defs/corpusPolicy"},
     "topic": {"oneOf": [{"type": "string", "minLength": 1}, {"$ref": "#/$defs/stringList"}]},
     "topic_terms": {"$ref": "#/$defs/stringList"},
     "outline_source_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
@@ -75,6 +86,27 @@
   },
   "$defs": {
     "stringList": {"type": "array", "items": {"type": "string", "minLength": 1}, "uniqueItems": true},
+    "corpusPolicy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "expansion", "user_confirmed"],
+      "properties": {
+        "role": {"enum": ["full", "partial", "supplemental", "outline_like", "unknown"]},
+        "expansion": {"enum": ["closed_corpus", "correct_gaps", "discover"]},
+        "user_confirmed": {"type": "boolean"}
+      }
+    },
+    "mandatoryAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["query"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+        "query": {"type": "string", "minLength": 1, "maxLength": 4000},
+        "minimum_sources": {"type": "integer", "minimum": 1, "maximum": 10},
+        "authoritative": {"type": "boolean"}
+      }
+    },
     "passage": {
       "type": "object",
       "additionalProperties": false,

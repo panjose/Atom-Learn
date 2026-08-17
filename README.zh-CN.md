@@ -115,7 +115,7 @@ atomlearn review pilot courses/calculus
 
 AtomLearn 支持三种主要输入模式：`sources` 用于完整教材或知识库，`outline` 用于课程大纲或用户自建结构，`topic` 用于用户只提供领域关键词、概念、技能或名词的情况。三种模式最终都会生成同一套来源可追踪的 Knowledge Atom DAG，但采用不同的资料发现和原子化策略。
 
-首次使用通常应走可恢复的 `start` 向导。只提供主题的用户输入一个短语即可；对于资料和大纲请求，由 harness 把学习者的一次请求转换为公开 start schema。Core 会为澄清、Web Search、覆盖判断、规划、阶段确认和首个 Atom 激活返回绑定 revision 的 typed action。学习者不需要编辑中间 YAML，中断后会原样重放当前 action，过期 submission 不能修改更新后的状态。
+首次使用通常应走可恢复的 `start` 向导。只提供主题的用户输入一个短语即可；对于资料、大纲和混合输入请求，由 harness 把学习者的一次请求转换为公开 start schema。Core 会派生带 revision 的 Goal Contract 和显式 Corpus Policy，然后为澄清、本地候选覆盖判断、策略允许的 Web Search、规划、阶段确认和首个 Atom 激活返回绑定 revision 的 typed action。学习者不需要编辑中间 YAML，中断后会原样重放当前 action，过期 submission 不能修改更新后的状态。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py start courses/causal --topic "causal inference"
@@ -130,7 +130,7 @@ python atom-learn/scripts/atomlearn.py import-plan courses/calculus --input cour
 python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expected-intake-revision 1
 ```
 
-完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧、记录假设并发现权威来源，不要求学习者自己编写教学大纲。候选计划在阶段确认前先经过校验，首个可学 Atom 会在激活前单独展示。Intake 完成检查会确保每个非归档 Atom 都有来源 locator。统一起始 payload 位于 `atom-learn/assets/templates/start-*.yaml`，机器可读契约包括 [start.schema.json](atom-learn/assets/schemas/start.schema.json)和 typed action/submission schema。完整方法见[统一 Start 向导](atom-learn/references/START_WIZARD.md)、[Typed Workflow Actions](atom-learn/references/WORKFLOW_ACTIONS.md)和[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
+完整资料模式会清点并协调多份材料；大纲模式把大纲条目作为覆盖锚点，而不是最终 Atom 边界；关键词模式会主动进行术语消歧、记录假设并发现权威来源，不要求学习者自己编写教学大纲。混合输入中的来源、大纲、主题词和显式锚点都会保留在同一个 Goal Contract 中。所有模式在规划前都必须通过候选绑定的 coverage；`closed_corpus` 只报告不受支持的目标而不会 Web Search，`correct_gaps` 和 `discover` 也只有在判断本地候选后才会检索。候选计划在阶段确认前先经过校验，首个可学 Atom 会在激活前单独展示。旧版 sources workspace 会在内存中升级，不能保留旧的 coverage 绕过。统一起始 payload 位于 `atom-learn/assets/templates/start-*.yaml`，机器可读契约包括 [start.schema.json](atom-learn/assets/schemas/start.schema.json)和 typed action/submission schema。完整方法见[统一 Start 向导](atom-learn/references/START_WIZARD.md)、[Typed Workflow Actions](atom-learn/references/WORKFLOW_ACTIONS.md)和[课程输入工作流](atom-learn/references/COURSE_INTAKE.md)。
 
 ## RAG 与纠错式 Web Search
 
@@ -150,7 +150,7 @@ python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag
 python atom-learn/scripts/atomlearn.py rag benchmark courses/rag-benchmark --profile core-multidomain-v1
 ```
 
-`rag correct` 会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率；如果既没有完整提供五项阈值，也没有指定命名 profile，它会返回 `quality_gate: report_only`，绝不会用宽松默认值推断通过。内置的多领域、多语言、多结构 profile 是非空发布门禁。本地模型绝不会被静默下载；pickle-capable 权重和自定义代码会被拒绝；cross-encoder 只有在当前可移植 benchmark report 通过后才能激活。只有当前 intake revision 的所有强制锚点都得到显式支持，大纲和主题 intake 才能进入可规划状态。详见[共享 Document IR](atom-learn/references/DOCUMENT_IR.md)、[检索与纠错式 Web Search](atom-learn/references/RAG.md)、[学习型语义与规模 RAG](atom-learn/references/SEMANTIC_RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
+`rag correct` 只有在 Corpus Policy 允许扩展时，才会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持；`closed_corpus` 会返回显式缺口并拒绝 Web evidence。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率；如果既没有完整提供五项阈值，也没有指定命名 profile，它会返回 `quality_gate: report_only`，绝不会用宽松默认值推断通过。内置的多领域、多语言、多结构 profile 是非空发布门禁。本地模型绝不会被静默下载；pickle-capable 权重和自定义代码会被拒绝；cross-encoder 只有在当前可移植 benchmark report 通过后才能激活。只有当前 intake、Goal Contract 和 RAG revision 的全部强制锚点都得到显式支持，任一 intake 模式才能进入可规划状态。详见[共享 Document IR](atom-learn/references/DOCUMENT_IR.md)、[检索与纠错式 Web Search](atom-learn/references/RAG.md)、[学习型语义与规模 RAG](atom-learn/references/SEMANTIC_RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
 
 科研领域发现使用同一质量门禁，并为研究问题、综述、方法谱系、评测/数据集以及批评/复现证据生成绑定 research revision 的锚点。构建论文导向的领域地图时使用 `rag requirements --context research`。
 

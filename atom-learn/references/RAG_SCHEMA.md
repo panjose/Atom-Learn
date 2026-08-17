@@ -115,13 +115,14 @@ The result includes `search_id`, query variants, retrieval metadata, candidate t
 coverage:
   context: intake
   intake_revision: 2
+  goal_contract_revision: 0
   requirements: []
   verdicts: []
 web_evidence: # optional on a correction round
   sources: []
 ```
 
-`rag correct` runs the coverage gate and returns `web_search_tasks` for weak, missing, or unverified requirements. The harness executes those tasks with native Web Search, opens authoritative pages, and reruns the command with bounded `web_evidence` and verdicts. Evidence is ingested before candidates are refreshed. A task disappears only after the matching requirement passes.
+`rag correct` runs the coverage gate and returns `web_search_tasks` for weak, missing, or unverified requirements only when the current intake Corpus Policy permits expansion. The harness executes those tasks with native Web Search, opens authoritative pages, and reruns the command with bounded `web_evidence` and verdicts. Evidence is ingested before candidates are refreshed. A task disappears only after the matching requirement passes. `closed_corpus` returns `corpus_gap_reported`, has no Web tasks, and rejects Web evidence ingestion.
 
 ## Optional provider embeddings
 

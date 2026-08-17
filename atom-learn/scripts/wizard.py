@@ -218,8 +218,10 @@ class WizardEngine:
             "outline_source_id": outline_source_id,
             "outline_items": outline,
             "topic_terms": topic_terms,
-            "discovery_sources": intake_sources if mode == "topic" else [],
+            "discovery_sources": [],
             "ambiguities": payload.get("ambiguities", []),
+            "mandatory_anchors": payload.get("mandatory_anchors", []),
+            "corpus_policy": payload.get("corpus_policy"),
             "assumptions": unique(
                 [
                     *payload.get("assumptions", []),
@@ -243,7 +245,7 @@ class WizardEngine:
         }
         IntakeEngine.initialize(str(workspace.root), intake_payload)
         rag = RagEngine.initialize(str(workspace.root), payload.get("chunk_chars", 2800), payload.get("overlap_chars", 300))
-        if mode == "outline":
+        if outline:
             outline_text = "\n\n".join(
                 f"## {item['title']}\n\n{item['notes'] or 'Coverage heading supplied by the learner.'}"
                 for item in outline
@@ -265,7 +267,7 @@ class WizardEngine:
             "revision": 0,
             "mode": mode,
             "course_id": course_id,
-            "source_ids": [item["id"] for item in intake_sources] + ([outline_source_id] if mode == "outline" else []),
+            "source_ids": [item["id"] for item in intake_sources] + ([outline_source_id] if outline else []),
             "stage": "initialized",
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -339,6 +341,8 @@ class WizardEngine:
             raise WorkflowError("workflow submission result contains unsupported fields: " + ", ".join(unexpected))
         if action == "web_search":
             return {"web_evidence": result["web_evidence"], "verdicts": result["verdicts"]}
+        if action == "judge_coverage":
+            return {"verdicts": result["verdicts"]}
         if action == "generate_course_plan":
             return {"course_plan": result["course_plan"]}
         if action == "confirm_phase":
@@ -360,8 +364,8 @@ class WizardEngine:
             }
         raise WorkflowError(f"Action {action} does not accept a submission")
 
-    def _add_topic_discovery(self, payload: dict[str, Any]) -> None:
-        if self.state.get("mode") != "topic" or not payload.get("web_evidence"):
+    def _add_discovery_sources(self, payload: dict[str, Any]) -> None:
+        if not payload.get("web_evidence"):
             return
         additions = discovery_sources(payload["web_evidence"])
         if not additions:
@@ -375,8 +379,6 @@ class WizardEngine:
         intake.commit("intake.discovery_sources_added", {"source_ids": [item["id"] for item in additions]})
 
     def _coverage(self, payload: dict[str, Any], *, initial: bool) -> dict[str, Any] | None:
-        if self.state.get("mode") == "sources":
-            return None
         rag = RagEngine.load(str(self.workspace.root))
         correction_requested = (
             initial
@@ -385,23 +387,34 @@ class WizardEngine:
             or "verdicts" in payload
         )
         if correction_requested:
-            self._add_topic_discovery(payload)
+            ingested = None
+            if payload.get("web_evidence") is not None:
+                intake = IntakeEngine.load(str(self.workspace.root))
+                if intake.state["corpus_policy"]["expansion"] == "closed_corpus":
+                    raise WizardError("closed_corpus forbids Web evidence; change the policy explicitly first")
+                ingested = rag.ingest(payload["web_evidence"], "web")
+                self._add_discovery_sources(payload)
+                rag = RagEngine.load(str(self.workspace.root))
             coverage = rag.requirements("intake")
             coverage["verdicts"] = payload.get("verdicts", [])
-            correction = {"coverage": coverage}
-            if payload.get("web_evidence") is not None:
-                correction["web_evidence"] = payload["web_evidence"]
-            return rag.correct(correction)
+            report = rag.coverage(coverage)
+            if ingested is not None:
+                return rag.correction_response(report, ingested)
+            if report["gate"] != "pass" and not payload.get("verdicts") and any(
+                item.get("candidate_chunk_ids") for item in report["requirements"]
+            ):
+                return {
+                    "status": "coverage_judgment_required",
+                    "rag_revision": rag.revision,
+                    "coverage": report,
+                    "web_search_tasks": [],
+                }
+            return rag.correction_response(report)
         coverage_path = self.workspace.meta / "rag" / "latest-coverage.yaml"
         if not coverage_path.is_file():
             return None
         report = read_data(coverage_path)
-        return {
-            "status": "complete" if report.get("gate") == "pass" else "web_search_required",
-            "rag_revision": rag.revision,
-            "coverage": report,
-            "web_search_tasks": self.state.get("last_result", {}).get("web_search_tasks", []),
-        }
+        return rag.correction_response(report)
 
     def _plan_task(self) -> dict[str, Any]:
         intake = IntakeEngine.load(str(self.workspace.root))
@@ -410,6 +423,8 @@ class WizardEngine:
             "action": "generate_course_plan",
             "goal": intake.state.get("goal"),
             "mode": intake.state.get("mode"),
+            "goal_contract": intake.state.get("goal_contract"),
+            "corpus_policy": intake.state.get("corpus_policy"),
             "source_ids": [item["id"] for item in rag._source_registry().get("sources", [])],
             "constraints": [
                 "Produce a prerequisite DAG rather than copying source order.",
@@ -422,6 +437,18 @@ class WizardEngine:
 
     def advance(self, payload: dict[str, Any], *, initial: bool = False) -> dict[str, Any]:
         intake = IntakeEngine.load(str(self.workspace.root))
+        if (
+            payload.get("web_evidence") is not None
+            and intake.state["corpus_policy"]["expansion"] == "closed_corpus"
+        ):
+            raise WizardError("closed_corpus forbids Web evidence; change the policy explicitly first")
+        stage = self.state.get("stage")
+        if stage == "coverage_judgment_required" and "verdicts" not in payload:
+            return self.current_result()
+        if stage == "web_search_required" and not any(key in payload for key in ["web_evidence", "verdicts"]):
+            return self.current_result()
+        if stage == "corpus_gap_reported" and not payload.get("clarification_applied"):
+            return self.current_result()
         if intake.state.get("ambiguities") and not payload.get("clarification_applied"):
             self.state["stage"] = "clarify_goal"
             result = {
@@ -441,6 +468,74 @@ class WizardEngine:
             self.commit("start.clarification_required", result)
             return result
         coverage = self._coverage(payload, initial=initial)
+        if coverage and coverage.get("status") == "coverage_judgment_required":
+            self.state["stage"] = "coverage_judgment_required"
+            report = coverage["coverage"]
+            result = {
+                "ok": True,
+                "status": "coverage_judgment_required",
+                "workspace": str(self.workspace.root),
+                "wizard_revision": self.state.get("revision", 0) + 1,
+                "intake": IntakeEngine.load(str(self.workspace.root)).status_summary(),
+                "rag_revision": coverage.get("rag_revision"),
+                "coverage_requirements": report.get("requirements", []),
+                "workflow_action": self._action(
+                    "coverage_judgment",
+                    "judge_coverage",
+                    {
+                        "requirements": report.get("requirements", []),
+                        "instruction": (
+                            "Judge each Goal Contract requirement against only its returned candidate chunks. "
+                            "Mark supported, weak, or missing and cite candidate chunk IDs for supported verdicts."
+                        ),
+                    },
+                    ["verdicts"],
+                ),
+                "next_action": "Judge the local candidates before any external search is considered.",
+            }
+            self.commit("start.coverage_judgment_required", result)
+            return result
+        if coverage and coverage.get("status") == "corpus_gap_reported":
+            self.state["stage"] = "corpus_gap_reported"
+            report = coverage["coverage"]
+            gaps = [
+                {
+                    "requirement_id": item["id"],
+                    "query": item["query"],
+                    "status": item["status"],
+                    "candidate_chunk_ids": item.get("candidate_chunk_ids", []),
+                }
+                for item in report.get("requirements", [])
+                if item.get("status") != "supported"
+            ]
+            result = {
+                "ok": True,
+                "status": "corpus_gap_reported",
+                "workspace": str(self.workspace.root),
+                "wizard_revision": self.state.get("revision", 0) + 1,
+                "intake": IntakeEngine.load(str(self.workspace.root)).status_summary(),
+                "rag_revision": coverage.get("rag_revision"),
+                "corpus_gaps": gaps,
+                "web_search_tasks": [],
+                "workflow_action": self._action(
+                    "clarify_goal",
+                    "clarify_goal",
+                    {
+                        "current_goal": intake.state.get("goal"),
+                        "current_corpus_policy": intake.state.get("corpus_policy"),
+                        "gaps": gaps,
+                        "options": [
+                            "Narrow the learning goal to what the closed corpus supports.",
+                            "Add learner-approved material, then restart coverage.",
+                            "Explicitly change expansion to correct_gaps or discover.",
+                        ],
+                    },
+                    ["goal", "desired_outcome", "target_depth", "corpus_policy"],
+                ),
+                "next_action": "Resolve the closed-corpus gaps without automatic Web Search.",
+            }
+            self.commit("start.corpus_gap_reported", result)
+            return result
         if coverage and coverage.get("status") != "complete":
             self.state["stage"] = "web_search_required"
             result = {

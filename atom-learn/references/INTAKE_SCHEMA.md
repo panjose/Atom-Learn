@@ -27,11 +27,38 @@ prior_knowledge: [basic algebra]
 constraints: [Prefer visual intuition before formal proofs]
 ambiguities: [The intended application domain is not specified]
 assumptions: [Begin with single-variable calculus]
+mandatory_anchors: []
+input_inventory:
+  has_sources: false
+  has_outline: false
+  has_topic: true
+corpus_policy:
+  role: unknown
+  expansion: discover
+  user_confirmed: false
+goal_contract_revision: 0
+goal_contract:
+  target: Understand what derivatives mean and how to use them.
+  use_case: orientation
+  target_depth: overview
+  mandatory_anchors:
+    - id: topic.1
+      query: "derivative: Understand what derivatives mean and how to use them."
+      minimum_sources: 1
+      authoritative: true
+      origin: topic
+    - id: scope.goal
+      query: Understand what derivatives mean and how to use them.
+      minimum_sources: 2
+      authoritative: true
+      origin: goal
 ```
 
 `desired_outcome` is `orientation`, `working_knowledge`, `exam`, `project`, or `research`. `target_depth` is `overview`, `working`, `advanced`, or `expert`.
 
-The CLI can detect the mode when exactly one of `source_materials`, `outline_items`, or `topic_terms` is non-empty. Set `mode` explicitly for mixed inputs.
+The CLI can detect the mode when exactly one of `source_materials`, `outline_items`, or `topic_terms` is non-empty. Set `mode` explicitly for mixed inputs. `input_inventory` and `goal_contract` are derived canonical fields; do not hand-edit them. `mandatory_anchors` and `corpus_policy` are inputs. Goal-relevant changes increment `goal_contract_revision` and invalidate coverage.
+
+`corpus_policy.role` is `full`, `partial`, `supplemental`, `outline_like`, or `unknown`. `corpus_policy.expansion` is `closed_corpus`, `correct_gaps`, or `discover`. `closed_corpus` forbids Web evidence; unresolved anchors remain visible gaps.
 
 ## Sources mode
 
@@ -50,6 +77,8 @@ source_materials:
 ```
 
 Source types are `pdf`, `book`, `notes`, `documentation`, `website`, `database`, `outline`, `exam`, and `other`. Store metadata and stable locations, not copied full text.
+
+Sources mode is not immediately ready. The supplied content must first support every current Goal Contract anchor through the same coverage gate used by other modes.
 
 ## Outline mode
 
@@ -71,7 +100,7 @@ outline_items:
     notes: Definition and computation
 ```
 
-Outline parent IDs must exist and the hierarchy must remain acyclic. Register `outline_source_id` in the course import plan and use outline item IDs as Atom locators. Outline intake remains `discovering` until a RAG coverage report for the current intake revision explicitly supports every outline ID.
+Outline parent IDs must exist and the hierarchy must remain acyclic. Register `outline_source_id` in the course import plan and use outline item IDs as Atom locators. Outline intake remains `discovering` until a RAG coverage report for the current intake and Goal Contract revisions explicitly supports every outline ID and the overall goal.
 
 ## Topic mode
 
@@ -100,7 +129,9 @@ discovery_sources:
     version: current-edition
 ```
 
-Topic intake is not ready for plan completion while `discovery_sources` is empty or while its current RAG coverage gate is not `pass`. Run `rag requirements` only after the final discovery-source intake update so the report binds to the current intake revision.
+Topic intake is not ready for plan completion until its current RAG coverage gate is `pass`. Accepted Web evidence is recorded in `discovery_sources`, but that list is metadata rather than a readiness shortcut. Regenerate `rag requirements` after any discovery-source or goal update so the report binds to the current intake and Goal Contract revisions.
+
+Legacy intake files are upgraded in memory for read-only commands. Legacy sources intake defaults to `role: unknown`, `expansion: correct_gaps`, and `discovering`; an old `ready_to_plan` value cannot bypass the new gate. A read-only status or validation command does not rewrite the legacy file.
 
 ## Commands
 

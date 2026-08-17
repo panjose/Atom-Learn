@@ -14,8 +14,25 @@ topic_terms: []
 discovery_sources: []
 ambiguities: []
 assumptions: []
+mandatory_anchors: []
+input_inventory:
+  has_sources: false
+  has_outline: false
+  has_topic: true
+corpus_policy:
+  role: unknown
+  expansion: discover
+  user_confirmed: false
+goal_contract_revision: 0
+goal_contract:
+  target: ""
+  use_case: working_knowledge
+  target_depth: working
+  mandatory_anchors: []
 status: captured
 course_revision_at_capture: 0
 planned_course_revision: null
+planned_intake_revision: null
+planned_goal_contract_revision: null
 created_at: ""
 updated_at: ""

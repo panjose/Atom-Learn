@@ -31,6 +31,8 @@ INTAKE_STATUSES = {"captured", "discovering", "ready_to_plan", "planned"}
 DESIRED_OUTCOMES = {"orientation", "working_knowledge", "exam", "project", "research"}
 TARGET_DEPTHS = {"overview", "working", "advanced", "expert"}
 SOURCE_TYPES = {"pdf", "book", "notes", "documentation", "website", "database", "outline", "exam", "other"}
+CORPUS_ROLES = {"full", "partial", "supplemental", "outline_like", "unknown"}
+CORPUS_EXPANSIONS = {"closed_corpus", "correct_gaps", "discover"}
 
 
 class IntakeError(RuntimeError):
@@ -116,7 +118,195 @@ class IntakeEngine:
         path = workspace.meta / "intake.yaml"
         if not path.is_file():
             raise IntakeError("Course intake is not initialized; run `intake init` first")
-        return cls(workspace, read_data(path))
+        return cls(workspace, cls.upgrade_state(read_data(path), workspace.revision))
+
+    @staticmethod
+    def _input_inventory(state: dict[str, Any]) -> dict[str, bool]:
+        return {
+            "has_sources": bool(state.get("source_materials")),
+            "has_outline": bool(state.get("outline_items")),
+            "has_topic": bool(state.get("topic_terms")),
+        }
+
+    @staticmethod
+    def _default_corpus_policy(mode: str, inventory: dict[str, bool]) -> dict[str, Any]:
+        supplied = sum(inventory.values())
+        if supplied > 1:
+            role = "partial"
+            expansion = "correct_gaps"
+        elif mode == "outline":
+            role = "outline_like"
+            expansion = "correct_gaps"
+        elif mode == "topic":
+            role = "unknown"
+            expansion = "discover"
+        else:
+            role = "unknown"
+            expansion = "correct_gaps"
+        return {"role": role, "expansion": expansion, "user_confirmed": False}
+
+    @staticmethod
+    def _normalize_corpus_policy(
+        value: Any, mode: str, inventory: dict[str, bool]
+    ) -> dict[str, Any]:
+        if value is None:
+            return IntakeEngine._default_corpus_policy(mode, inventory)
+        if not isinstance(value, dict):
+            raise IntakeError("corpus_policy must be a mapping")
+        unexpected = sorted(set(value) - {"role", "expansion", "user_confirmed"})
+        if unexpected:
+            raise IntakeError("corpus_policy contains unsupported fields: " + ", ".join(unexpected))
+        role = value.get("role")
+        expansion = value.get("expansion")
+        user_confirmed = value.get("user_confirmed", False)
+        if role not in CORPUS_ROLES:
+            raise IntakeError("corpus_policy.role must be one of: " + ", ".join(sorted(CORPUS_ROLES)))
+        if expansion not in CORPUS_EXPANSIONS:
+            raise IntakeError(
+                "corpus_policy.expansion must be one of: " + ", ".join(sorted(CORPUS_EXPANSIONS))
+            )
+        if not isinstance(user_confirmed, bool):
+            raise IntakeError("corpus_policy.user_confirmed must be boolean")
+        return {"role": role, "expansion": expansion, "user_confirmed": user_confirmed}
+
+    @staticmethod
+    def _normalize_mandatory_anchors(value: Any) -> list[dict[str, Any]]:
+        if value is None:
+            return []
+        if not isinstance(value, list):
+            raise IntakeError("mandatory_anchors must be a list")
+        result: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for index, raw in enumerate(value, start=1):
+            if isinstance(raw, str):
+                item: dict[str, Any] = {"id": f"goal.anchor.{index}", "query": raw}
+            elif isinstance(raw, dict):
+                item = raw
+            else:
+                raise IntakeError(f"mandatory_anchors[{index - 1}] must be a string or mapping")
+            anchor_id = require_id(item.get("id", f"goal.anchor.{index}"), f"mandatory_anchors[{index - 1}].id")
+            if anchor_id in seen:
+                raise IntakeError(f"duplicate mandatory anchor ID: {anchor_id}")
+            seen.add(anchor_id)
+            minimum_sources = item.get("minimum_sources", 1)
+            if (
+                not isinstance(minimum_sources, int)
+                or isinstance(minimum_sources, bool)
+                or not 1 <= minimum_sources <= 10
+            ):
+                raise IntakeError(f"{anchor_id}.minimum_sources must be between 1 and 10")
+            authoritative = item.get("authoritative", False)
+            if not isinstance(authoritative, bool):
+                raise IntakeError(f"{anchor_id}.authoritative must be boolean")
+            result.append(
+                {
+                    "id": anchor_id,
+                    "query": text(item.get("query"), f"{anchor_id}.query", limit=4000),
+                    "minimum_sources": minimum_sources,
+                    "authoritative": authoritative,
+                    "origin": "explicit",
+                }
+            )
+        return result
+
+    @staticmethod
+    def _build_goal_contract(state: dict[str, Any]) -> dict[str, Any]:
+        inventory = state["input_inventory"]
+        policy = state["corpus_policy"]
+        anchors: list[dict[str, Any]] = []
+        used: set[str] = set()
+
+        def add(anchor: dict[str, Any]) -> None:
+            anchor_id = anchor["id"]
+            if anchor_id in used:
+                raise IntakeError(f"duplicate Goal Contract anchor ID: {anchor_id}")
+            used.add(anchor_id)
+            anchors.append(anchor)
+
+        for item in state.get("outline_items", []):
+            add(
+                {
+                    "id": item["id"],
+                    "query": " — ".join(value for value in [item["title"], item.get("notes", "")] if value),
+                    "minimum_sources": 1,
+                    "authoritative": False,
+                    "origin": "outline",
+                }
+            )
+        topic_authoritative = (
+            inventory["has_topic"]
+            and not inventory["has_sources"]
+            and policy["expansion"] != "closed_corpus"
+        )
+        for index, term in enumerate(state.get("topic_terms", []), start=1):
+            add(
+                {
+                    "id": f"topic.{index}",
+                    "query": f"{term}: {state['goal']}",
+                    "minimum_sources": 1,
+                    "authoritative": topic_authoritative,
+                    "origin": "topic",
+                }
+            )
+        for item in state.get("mandatory_anchors", []):
+            add(copy.deepcopy(item))
+        add(
+            {
+                "id": "scope.goal",
+                "query": state["goal"],
+                "minimum_sources": 2 if topic_authoritative else 1,
+                "authoritative": topic_authoritative,
+                "origin": "goal",
+            }
+        )
+        return {
+            "target": state["goal"],
+            "use_case": state["desired_outcome"],
+            "target_depth": state["target_depth"],
+            "mandatory_anchors": anchors,
+        }
+
+    @classmethod
+    def upgrade_state(cls, state: dict[str, Any], course_revision: int) -> dict[str, Any]:
+        """Upgrade legacy intake state in memory without mutating a read-only command."""
+        if isinstance(state.get("goal_contract"), dict) and isinstance(state.get("corpus_policy"), dict):
+            return state
+        payload = {
+            key: copy.deepcopy(value)
+            for key, value in state.items()
+            if key
+            in {
+                "mode",
+                "request_summary",
+                "goal",
+                "desired_outcome",
+                "target_depth",
+                "prior_knowledge",
+                "constraints",
+                "source_materials",
+                "outline_source_id",
+                "outline_items",
+                "topic_terms",
+                "discovery_sources",
+                "ambiguities",
+                "assumptions",
+                "mandatory_anchors",
+            }
+        }
+        upgraded = cls._normalized(payload, read_data(template_dir() / "intake.yaml"), course_revision)
+        for field in [
+            "revision",
+            "status",
+            "course_revision_at_capture",
+            "planned_course_revision",
+            "created_at",
+            "updated_at",
+        ]:
+            if field in state:
+                upgraded[field] = copy.deepcopy(state[field])
+        upgraded["planned_intake_revision"] = None
+        upgraded["planned_goal_contract_revision"] = None
+        return upgraded
 
     @staticmethod
     def _normalized(payload: dict[str, Any], base: dict[str, Any], course_revision: int) -> dict[str, Any]:
@@ -146,9 +336,36 @@ class IntakeEngine:
             state["outline_source_id"] = require_id(payload["outline_source_id"], "outline_source_id")
         if "outline_items" in payload:
             state["outline_items"] = IntakeEngine._normalize_outline(payload["outline_items"])
+        if "mandatory_anchors" in payload:
+            state["mandatory_anchors"] = IntakeEngine._normalize_mandatory_anchors(payload["mandatory_anchors"])
+        else:
+            state["mandatory_anchors"] = IntakeEngine._normalize_mandatory_anchors(
+                state.get("mandatory_anchors", [])
+            )
+        inventory = IntakeEngine._input_inventory(state)
+        state["input_inventory"] = inventory
+        previous_contract = (
+            base.get("goal_contract")
+            if base.get("created_at") and isinstance(base.get("goal_contract"), dict)
+            else None
+        )
+        policy_value = payload.get("corpus_policy") if "corpus_policy" in payload else (
+            state.get("corpus_policy") if previous_contract else None
+        )
+        state["corpus_policy"] = IntakeEngine._normalize_corpus_policy(policy_value, mode, inventory)
+        contract = IntakeEngine._build_goal_contract(state)
+        previous_revision = base.get("goal_contract_revision", 0)
+        if not isinstance(previous_revision, int) or isinstance(previous_revision, bool) or previous_revision < 0:
+            previous_revision = 0
+        state["goal_contract_revision"] = (
+            previous_revision if previous_contract is None or previous_contract == contract else previous_revision + 1
+        )
+        state["goal_contract"] = contract
         state["schema_version"] = SCHEMA_VERSION
         state["course_revision_at_capture"] = state.get("course_revision_at_capture", course_revision)
         state.setdefault("planned_course_revision", None)
+        state.setdefault("planned_intake_revision", None)
+        state.setdefault("planned_goal_contract_revision", None)
         return state
 
     @staticmethod
@@ -237,9 +454,33 @@ class IntakeEngine:
             self._normalize_sources(self.state.get("source_materials", []), "source_materials")
             self._normalize_sources(self.state.get("discovery_sources", []), "discovery_sources")
             outline = self._normalize_outline(self.state.get("outline_items", []))
+            mandatory_anchors = self._normalize_mandatory_anchors(self.state.get("mandatory_anchors", []))
+            inventory = self._input_inventory(self.state)
+            policy = self._normalize_corpus_policy(self.state.get("corpus_policy"), self.state.get("mode"), inventory)
+            expected_contract = self._build_goal_contract(
+                {
+                    **self.state,
+                    "input_inventory": inventory,
+                    "corpus_policy": policy,
+                    "mandatory_anchors": mandatory_anchors,
+                    "outline_items": outline,
+                }
+            )
         except (AtomLearnError, IntakeError) as exc:
             errors.append(str(exc))
             outline = []
+            expected_contract = None
+            inventory = None
+            policy = None
+        if inventory is not None and self.state.get("input_inventory") != inventory:
+            errors.append("input_inventory does not match the supplied intake fields")
+        if policy is not None and self.state.get("corpus_policy") != policy:
+            errors.append("corpus_policy is not canonical")
+        if expected_contract is not None and self.state.get("goal_contract") != expected_contract:
+            errors.append("goal_contract does not match the current goal and input anchors")
+        contract_revision = self.state.get("goal_contract_revision")
+        if not isinstance(contract_revision, int) or isinstance(contract_revision, bool) or contract_revision < 0:
+            errors.append("goal_contract_revision must be a non-negative integer")
         outline_ids = {item["id"] for item in outline}
         for item in outline:
             parent = item.get("parent_id")
@@ -255,8 +496,13 @@ class IntakeEngine:
             errors.append("outline mode requires outline_items")
         if mode == "topic" and not self.state.get("topic_terms"):
             errors.append("topic mode requires topic_terms")
-        if self.state.get("status") == "planned" and self.state.get("planned_course_revision") is None:
-            errors.append("planned intake requires planned_course_revision")
+        if self.state.get("status") == "planned":
+            if self.state.get("planned_course_revision") is None:
+                errors.append("planned intake requires planned_course_revision")
+            if self.state.get("planned_intake_revision") is None:
+                errors.append("planned intake requires planned_intake_revision")
+            if self.state.get("planned_goal_contract_revision") is None:
+                errors.append("planned intake requires planned_goal_contract_revision")
         return unique(errors)
 
     def _outline_cycle_errors(self, outline: list[dict[str, Any]]) -> list[str]:
@@ -274,13 +520,10 @@ class IntakeEngine:
         return unique(errors)
 
     def derived_status(self) -> str:
+        if not self._coverage_ready():
+            return "discovering"
         if self.state.get("status") == "planned":
             return "planned"
-        mode = self.state.get("mode")
-        if mode == "topic" and not self.state.get("discovery_sources"):
-            return "discovering"
-        if mode in {"outline", "topic"} and not self._coverage_ready():
-            return "discovering"
         return "ready_to_plan"
 
     def _coverage_report(self) -> dict[str, Any] | None:
@@ -300,10 +543,21 @@ class IntakeEngine:
             rag_revision = read_data(rag_state_path).get("revision") if rag_state_path.is_file() else None
         except (OSError, AtomLearnError):
             rag_revision = None
+        expected_intake_revision = (
+            self.state.get("planned_intake_revision")
+            if self.state.get("status") == "planned"
+            else self.revision
+        )
+        expected_contract_revision = (
+            self.state.get("planned_goal_contract_revision")
+            if self.state.get("status") == "planned"
+            else self.state.get("goal_contract_revision")
+        )
         return bool(
             report
             and report.get("gate") == "pass"
-            and report.get("intake_revision") == self.revision
+            and report.get("intake_revision") == expected_intake_revision
+            and report.get("goal_contract_revision") == expected_contract_revision
             and report.get("rag_revision") == rag_revision
             and report.get("requirements")
             and all(item.get("status") == "supported" for item in report["requirements"] if isinstance(item, dict))
@@ -322,7 +576,7 @@ class IntakeEngine:
                 "Inventory every supplied source and inspect its structure before atomization.",
                 "Create a cross-source concept registry; merge duplicates and record conflicts.",
                 "Sample dense or ambiguous sections instead of assuming the table of contents is sufficient.",
-                "Use the user's materials as the primary authority and flag uncovered prerequisite gaps.",
+                "Evaluate the Goal Contract against retrieved source candidates before planning.",
             ],
             "outline": [
                 "Preserve stable outline item IDs as coverage anchors, not as mandatory Atom boundaries.",
@@ -339,20 +593,25 @@ class IntakeEngine:
             ],
         }[mode]
         blockers: list[str] = []
-        if mode == "topic" and not self.state.get("discovery_sources"):
-            blockers.append("Authoritative discovery sources have not been recorded yet.")
-        if mode in {"outline", "topic"} and not self._coverage_ready():
+        if not self._coverage_ready():
             report = self._coverage_report()
             if report is None:
                 blockers.append("RAG coverage has not been evaluated for this intake revision.")
             elif report.get("intake_revision") != self.revision:
                 blockers.append("RAG coverage is stale for the current intake revision.")
+            elif report.get("goal_contract_revision") != self.state.get("goal_contract_revision"):
+                blockers.append("RAG coverage is stale for the current Goal Contract revision.")
             elif not self._coverage_ready() and report.get("gate") == "pass":
                 blockers.append("RAG coverage is stale for the current retrieval corpus revision.")
+            elif self.state.get("corpus_policy", {}).get("expansion") == "closed_corpus":
+                blockers.append("The closed corpus does not yet support every Goal Contract requirement.")
             else:
                 blockers.append("RAG coverage still has unverified, weak, or missing requirements.")
         return {
             "mode": mode,
+            "input_inventory": copy.deepcopy(self.state.get("input_inventory")),
+            "corpus_policy": copy.deepcopy(self.state.get("corpus_policy")),
+            "goal_contract_revision": self.state.get("goal_contract_revision"),
             "status": self.derived_status(),
             "ready_to_plan": self.derived_status() == "ready_to_plan",
             "blockers": blockers,
@@ -377,13 +636,18 @@ class IntakeEngine:
             "discovery_sources",
             "ambiguities",
             "assumptions",
+            "mandatory_anchors",
+            "corpus_policy",
         ]:
             if field not in payload and field in base:
                 payload[field] = copy.deepcopy(base[field])
         updated = self._normalized(payload, base, self.workspace.revision)
         updated["revision"] = self.revision
         updated["created_at"] = self.state.get("created_at")
-        updated["planned_course_revision"] = self.state.get("planned_course_revision")
+        updated["status"] = "captured"
+        updated["planned_course_revision"] = None
+        updated["planned_intake_revision"] = None
+        updated["planned_goal_contract_revision"] = None
         self.state = updated
         self.state["status"] = self.derived_status()
         return self.guidance()
@@ -396,12 +660,10 @@ class IntakeEngine:
             raise IntakeError("Cannot complete intake before importing a Knowledge Atom plan")
         course_source_ids = {item.get("id") for item in self.workspace.course.get("sources", [])}
         mode = self.state["mode"]
-        if mode == "sources":
-            expected = {item["id"] for item in self.state.get("source_materials", [])}
-        elif mode == "outline":
-            expected = {self.state.get("outline_source_id")}
-        else:
-            expected = {item["id"] for item in self.state.get("discovery_sources", [])}
+        expected = {item["id"] for item in self.state.get("source_materials", [])}
+        expected.update(item["id"] for item in self.state.get("discovery_sources", []))
+        if self.state.get("outline_items"):
+            expected.add(self.state.get("outline_source_id"))
         missing = sorted(expected - course_source_ids)
         if missing:
             raise IntakeError("Course plan is missing intake source IDs: " + ", ".join(missing))
@@ -414,6 +676,8 @@ class IntakeEngine:
             raise IntakeError("Atoms without source locators: " + ", ".join(ungrounded))
         self.state["status"] = "planned"
         self.state["planned_course_revision"] = self.workspace.revision
+        self.state["planned_intake_revision"] = self.revision
+        self.state["planned_goal_contract_revision"] = self.state.get("goal_contract_revision")
         return {
             "mode": mode,
             "course_revision": self.workspace.revision,
@@ -453,6 +717,8 @@ class IntakeEngine:
             "mode": self.state.get("mode"),
             "status": self.derived_status(),
             "goal": self.state.get("goal"),
+            "goal_contract_revision": self.state.get("goal_contract_revision"),
+            "corpus_policy": copy.deepcopy(self.state.get("corpus_policy")),
             "guidance": self.guidance(),
         }
 
@@ -468,8 +734,11 @@ class IntakeEngine:
             f"- Mode: `{self.state.get('mode')}`",
             f"- Status: `{self.derived_status()}`",
             f"- Goal: {self.state.get('goal')}",
+            f"- Goal Contract revision: `{self.state.get('goal_contract_revision')}`",
             f"- Target depth: {self.state.get('target_depth')}",
             f"- Desired outcome: {self.state.get('desired_outcome')}",
+            f"- Corpus role: `{self.state.get('corpus_policy', {}).get('role')}`",
+            f"- Corpus expansion: `{self.state.get('corpus_policy', {}).get('expansion')}`",
             "",
             "## Primary Inputs",
             "",

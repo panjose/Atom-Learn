@@ -55,7 +55,7 @@ capabilities:
       - The harness still proposes the semantic decomposition or relationship classification before Core validates the mutation.
 
   - id: rag.corrective_hybrid_v1
-    title: Auditable hybrid retrieval and candidate-bound corrective Web Search loop
+    title: Auditable hybrid retrieval and policy-bound corrective Web Search loop
     status: implemented
     default_mode: enabled
     public_claim: true
@@ -71,6 +71,8 @@ capabilities:
         symbol: "test_correct_command_emits_web_tasks_then_closes_the_loop"
       - path: tests/test_rag.py
         symbol: "test_rag_evaluation_reports_retrieval_and_grounding_metrics"
+      - path: tests/test_wizard.py
+        symbol: "test_closed_corpus_reports_gaps_without_web_search"
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/RAG.md]
     limitations:
       - The default dense-like signal is a deterministic multilingual hash projection, not a learned semantic embedding.
@@ -295,11 +297,17 @@ capabilities:
         symbol: "def validate_submission"
       - path: atom-learn/scripts/wizard.py
         symbol: "def apply_submission"
+      - path: atom-learn/scripts/intake.py
+        symbol: "def _build_goal_contract"
     verification:
       - path: tests/test_wizard.py
         symbol: "test_source_start_accepts_one_payload_then_resumes_with_the_plan"
       - path: tests/test_wizard.py
         symbol: "test_start_clarification_submission_reenters_evidence_discovery"
+      - path: tests/test_wizard.py
+        symbol: "test_mixed_input_preserves_every_goal_contract_anchor"
+      - path: tests/test_intake.py
+        symbol: "test_legacy_sources_state_is_upgraded_in_memory_without_rewriting"
     documentation: [README.md, README.zh-CN.md, atom-learn/references/START_WIZARD.md, atom-learn/references/WORKFLOW_ACTIONS.md]
     limitations:
       - Harness-native Web Search and model reasoning remain harness responsibilities; Core validates submissions and owns state but does not embed another agent.
