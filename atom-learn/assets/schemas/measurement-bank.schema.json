@@ -6,16 +6,13 @@
   "required": ["kind", "schema_version", "bank_id", "bank_version", "items"],
   "properties": {
     "kind": {"const": "atomlearn.measurement-bank"},
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "bank_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,95}$"},
     "bank_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"},
-    "items": {
-      "type": "array",
-      "minItems": 1,
-      "items": {"$ref": "#/$defs/item"}
-    }
+    "items": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/item"}}
   },
   "$defs": {
+    "dimensionList": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}},
     "item": {
       "type": "object",
       "additionalProperties": false,
@@ -25,22 +22,24 @@
         "language", "domain", "difficulty"
       ],
       "properties": {
+        "item_schema_version": {"const": 2},
         "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,127}$"},
         "atom_family_id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]{2,127}$"},
         "measurement_kind": {"enum": ["immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"]},
-        "required_dimensions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}},
+        "required_dimensions": {"$ref": "#/$defs/dimensionList"},
+        "supported_dimensions": {"$ref": "#/$defs/dimensionList"},
+        "task_form": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$"},
+        "response_mode": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$"},
+        "item_family": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,127}$"},
+        "novelty_scope": {"enum": ["same_context", "new_context", "cross_domain"]},
+        "scoring_profile_id": {"type": "string", "minLength": 3, "maxLength": 128},
+        "rubric_sections": {"type": "object", "propertyNames": {"pattern": "^[a-z][a-z0-9_-]{1,63}$"}, "additionalProperties": {"type": "string", "minLength": 1}},
         "prompt": {"type": "string", "minLength": 1, "maxLength": 10000},
         "grader_id": {"type": "string", "minLength": 3},
         "rubric_version": {"type": "string", "minLength": 1},
-        "answer_spec": {
-          "type": "object",
-          "additionalProperties": true,
-          "required": ["type"],
-          "properties": {"type": {"enum": ["exact_choice", "numeric_unit", "open_response"]}}
-        },
+        "answer_spec": {"type": "object", "additionalProperties": true, "required": ["type"], "properties": {"type": {"enum": ["exact_choice", "numeric_unit", "open_response"]}}},
         "holdout": {
-          "type": "object",
-          "additionalProperties": false,
+          "type": "object", "additionalProperties": false,
           "required": ["visibility", "context_isolated", "family_id"],
           "properties": {
             "visibility": {"enum": ["teaching_visible", "held_out"]},
@@ -52,7 +51,13 @@
         "language": {"type": "string", "pattern": "^[a-z]{2}(?:-[A-Z]{2})?$"},
         "domain": {"type": "string", "minLength": 2, "maxLength": 100},
         "difficulty": {"enum": ["introductory", "intermediate", "advanced"]}
-      }
+      },
+      "allOf": [
+        {
+          "if": {"required": ["item_schema_version"]},
+          "then": {"required": ["supported_dimensions", "task_form", "response_mode", "item_family", "novelty_scope", "scoring_profile_id"]}
+        }
+      ]
     }
   }
 }

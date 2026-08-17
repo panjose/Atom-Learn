@@ -775,8 +775,12 @@ def test_supported_core_upgrade_paths_reach_the_current_signed_core(tmp_path: Pa
     )
     target_version = catalog["target_core_version"]
     target = build(tmp_path, synthetic_source(tmp_path, target_version), target_version, private_key, commit_char="7")
-    assert catalog["schema_edges"] == []
-    assert "schema version 1" in catalog["schema_edge_reason"]
+    assert {(edge["namespace"], edge["from"], edge["to"]) for edge in catalog["schema_edges"]} == {
+        ("evidence", 1, 2),
+        ("evidence", 2, 3),
+        ("measurement_bank", 1, 2),
+    }
+    assert "Evidence v2 remains immutable" in catalog["schema_edge_reason"]
     for index, path in enumerate(catalog["upgrade_paths"], start=1):
         old_version = path["from_core_version"]
         old = build(

@@ -6,7 +6,7 @@
   "required": ["kind", "schema_version", "registry_version", "scorers"],
   "properties": {
     "kind": {"const": "atomlearn.scorer-registry"},
-    "schema_version": {"const": 1},
+    "schema_version": {"const": 2},
     "registry_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{2,63}$"},
     "scorers": {
       "type": "array",
@@ -15,15 +15,43 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "id", "method", "implementation", "rubric_versions", "calibration_sets",
-          "max_quality_tier", "mastery_eligible", "strategy_eligible", "limitations"
+          "id", "profile_version", "profile_hash", "method", "implementation", "provider_class",
+          "rubric_versions", "calibration_sets", "supported_languages", "supported_domains",
+          "supported_task_forms", "supported_dimensions", "artifact_hashes", "calibrated_metrics",
+          "abstain_policy", "review_policy", "validity", "drift_status", "disabled", "test_only",
+          "privacy_class", "max_quality_tier", "mastery_eligible", "strategy_eligible", "limitations"
         ],
         "properties": {
           "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9/._-]{2,127}$"},
+          "profile_version": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{1,63}$"},
+          "profile_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
           "method": {"enum": ["deterministic", "anchored_model", "dual_blind", "human", "legacy_model"]},
           "implementation": {"enum": ["exact_choice", "numeric_unit", "external_anchored", "external_dual", "human_adjudication", "legacy"]},
+          "provider_class": {"enum": ["atomlearn_core", "model_provider", "independent_model_pair", "human_reviewer", "historical_unknown"]},
           "rubric_versions": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
           "calibration_sets": {"type": "array", "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "supported_languages": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "supported_domains": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "minLength": 1}},
+          "supported_task_forms": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]{2,63}$"}},
+          "supported_dimensions": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}},
+          "artifact_hashes": {
+            "type": "object", "additionalProperties": false,
+            "required": ["prompt", "rubric", "parser", "calibration"],
+            "properties": {
+              "prompt": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+              "rubric": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+              "parser": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"},
+              "calibration": {"type": ["string", "null"], "pattern": "^sha256:[0-9a-f]{64}$"}
+            }
+          },
+          "calibrated_metrics": {"type": "object", "additionalProperties": {"type": "number"}},
+          "abstain_policy": {"type": "string", "minLength": 3},
+          "review_policy": {"type": "string", "minLength": 3},
+          "validity": {"type": "object", "additionalProperties": false, "required": ["valid_from", "valid_until"], "properties": {"valid_from": {"type": "string"}, "valid_until": {"type": ["string", "null"]}}},
+          "drift_status": {"enum": ["not_applicable", "stable", "review_due", "blocked"]},
+          "disabled": {"type": "boolean"},
+          "test_only": {"type": "boolean"},
+          "privacy_class": {"enum": ["local_hash_only", "external_redacted", "human_disclosed", "historical_unknown"]},
           "max_quality_tier": {"enum": ["A", "B", "C", "legacy"]},
           "mastery_eligible": {"type": "boolean"},
           "strategy_eligible": {"type": "boolean"},

@@ -48,4 +48,13 @@ schemas:
   evolution_capsule:
     read: [1]
     write: 1
+  evidence:
+    read: [1, 2, 3]
+    write: 3
+  measurement_bank:
+    read: [1, 2]
+    write: 2
+  scorer_registry:
+    read: [2]
+    write: 2
 artifact_sha256: sha256:0000000000000000000000000000000000000000000000000000000000000000

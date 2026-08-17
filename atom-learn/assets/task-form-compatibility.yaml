@@ -1,0 +1,48 @@
+kind: atomlearn.task-form-compatibility
+schema_version: 1
+matrix_version: task-form-v2
+task_forms:
+  - id: single_choice
+    response_modes: [select_one]
+    supported_dimensions: [recognize, discriminate]
+    constraints: ['A selected option cannot demonstrate explanation, derivation, critique, or transfer.']
+  - id: multiple_choice
+    response_modes: [select_many]
+    supported_dimensions: [recognize, discriminate]
+    constraints: [Scoring is limited to distinctions encoded by independently authored options.]
+  - id: numeric_short_answer
+    response_modes: [numeric]
+    supported_dimensions: [compute, apply]
+    constraints: [Apply is eligible only when the item declares a non-identical application context.]
+  - id: structured_derivation
+    response_modes: [structured_work]
+    supported_dimensions: [derive, compute]
+    constraints: [Derive requires independently scored intermediate steps.]
+  - id: open_explanation
+    response_modes: [free_text, spoken]
+    supported_dimensions: [explain, connect]
+    constraints: [A calibrated rubric or human adjudication must score each claimed dimension.]
+  - id: critique
+    response_modes: [free_text, annotation]
+    supported_dimensions: [critique, evaluate]
+    constraints: ['The response must evaluate a supplied claim, method, or artifact.']
+  - id: teach_back
+    response_modes: [free_text, spoken]
+    supported_dimensions: [explain, connect]
+    constraints: ['The scorer must distinguish correctness, causal structure, and unsupported claims.']
+  - id: concept_map
+    response_modes: [structured_map]
+    supported_dimensions: [explain, connect]
+    constraints: ['Relations, not visual polish, determine the score.']
+  - id: novel_application
+    response_modes: [free_text, structured_work, artifact]
+    supported_dimensions: [apply, transfer, near_transfer, far_transfer]
+    constraints:
+      - Transfer items must be context-isolated and held out.
+      - Far transfer additionally requires novelty_scope cross_domain.
+  - id: multi_part
+    response_modes: [structured_work]
+    supported_dimensions: [recognize, discriminate, compute, derive, explain, connect, critique, evaluate, apply, transfer, near_transfer, far_transfer]
+    constraints:
+      - Every dimension must have a separate rubric section and independently attributable score.
+      - Transfer dimensions still require held-out context and declared novelty.

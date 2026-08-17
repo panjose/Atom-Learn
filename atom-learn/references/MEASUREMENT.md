@@ -1,98 +1,100 @@
-# Evidence v2 and learning measurement
+# Evidence v3 and learning measurement
 
 ## Purpose
 
-Evidence v2 separates an observed learner response from the authority used to score it. A numeric score is not trusted merely because a harness or model supplied it. Core records the measurement kind, item and episode identity, grader profile, rubric and calibration versions, independence claim, answer hash, required-dimension projection, quality tier, and eligibility decisions.
+Evidence v3 binds every score to three independent contracts: the Atom's required dimension, the task form's supported dimension, and an immutable scorer profile. A score can enter mastery only when it belongs to their intersection. This prevents a correct selected option from being reused as proof of explanation, derivation, critique, or transfer.
 
-Read this reference before creating mastery, retention, transfer, or teaching-strategy Evidence. Continue to use [MASTERY.md](MASTERY.md) for Atom-specific rubric design.
+Read this reference before creating mastery, retention, transfer, or strategy Evidence. Read [MASTERY.md](MASTERY.md) for Atom rubric and diversity policy design.
 
-## Quality and eligibility
+## Compatibility contract
 
-The bundled scorer registry is `assets/scorer-registry.yaml` and is validated by `assets/schemas/scorer-registry.schema.json`.
+The versioned matrix is `assets/task-form-compatibility.yaml`:
 
-| Tier | Typical source | May master | May enter a strategy outcome |
-| --- | --- | --- | --- |
-| A | Core deterministic exact-choice or numeric/unit scorer | Yes | Yes |
-| B | Registered calibrated anchored scorer, independent dual review, or declared human adjudication | If its registry profile and independence/calibration gates pass | If the same gates pass |
-| C | Unregistered, uncalibrated, or non-independent external scorer | No | No |
-| legacy | Historical score without reconstructable provenance | Historical state only | No |
+| Task form | Eligible dimensions |
+| --- | --- |
+| single/multiple choice | recognize, discriminate |
+| numeric short answer | compute; apply only in a changed context |
+| structured derivation | derive, compute |
+| open explanation | explain, connect |
+| critique | critique, evaluate |
+| teach-back / concept map | explain, connect |
+| novel application | apply, near/far transfer under novelty and holdout rules |
+| multi-part | only dimensions with separately attributable rubric sections |
 
-An old-shaped payload submitted now is stored as explicit unqualified legacy Evidence and cannot independently master an Atom. Migration may preserve an already-mastered historical result so the workspace remains recoverable, but it never makes that record eligible for a new strategy experiment.
+Every v2 measurement item declares `task_form`, `response_mode`, `item_family`, `novelty_scope`, `supported_dimensions`, and `scoring_profile_id`. Core computes:
 
-`assess` reads only `required_dimension_scores`, which Core derives from the Active Atom's current mastery dimensions. Extra presentation or fluency scores cannot inflate mastery or a strategy outcome.
+```text
+eligible_dimensions = Atom.required_dimensions
+                    ∩ item.supported_dimensions
+                    ∩ task_form.supported_dimensions
+                    ∩ scorer.supported_dimensions
+```
 
-## Measurement kinds
+Anything outside this intersection is rejected for an explicit v2 item and cannot enter `required_dimension_scores`. Legacy v1 items are interpreted conservatively: incompatible dimensions are discarded, never promoted. In particular, legacy choice correctness can establish `discriminate` but not `explain`.
+
+## Immutable scorer profiles
+
+`assets/scorer-registry.yaml` is schema v2. A profile records provider class, method, implementation, supported languages/domains/forms/dimensions, prompt/rubric/parser/calibration hashes, calibrated metrics, abstention and review policies, validity, drift, disabled/test-only state, privacy class, and eligibility limits. Its `profile_hash` must match its canonical content.
+
+Evidence v3 freezes the decision-relevant profile fields and the registry profile hash into `scorer_profile_snapshot`; `scorer_profile_hash` authenticates that snapshot. Validation uses the frozen snapshot, not today's registry. A later scorer release therefore cannot reinterpret historical Evidence. Human and model provenance remain distinct through `provider_class`.
+
+The bundled anchored-model fixture is `test_only` and can test calibration machinery but cannot establish production feasibility or mastery. An unregistered/uncalibrated model can provide feedback only. Disagreement, abstention, low confidence, disabled profiles, and missing calibration remain ineligible until the declared review path resolves them.
+
+## Mastery Feasibility Preflight
+
+Run before activating a course or after changing its rubric/scorer configuration:
+
+```text
+atomlearn measure feasibility <workspace>
+```
+
+The report lists each Atom's required dimensions, production-eligible task/scorer paths, missing dimensions, scorer hashes, and evidence-diversity feasibility. `activate` fails closed for an infeasible mastery Atom. Repair it by adding a valid task/scorer, narrowing the claim, or setting `mastery.claim_mode: reading|exploration`; never create a mastery course whose required Evidence cannot exist.
+
+Courses may restrict production profiles with `course.settings.scorer_profile_ids`. Absence of a production open-response path makes `explain` infeasible even if a test fixture exists.
+
+## Multi-Evidence mastery
+
+One item no longer has to cover every Atom dimension. `assess` aggregates only assessed, mastery-eligible Evidence per required dimension. The final report retains the contributing Evidence ID, task form, item family, scorer identity/hash, and measurement window. Mastery also requires the Atom thresholds and its `evidence_policy`:
+
+- `minimum_item_families` and `minimum_task_forms` prevent one copied score from filling high-risk claims;
+- `delayed_check_required` requires delayed-retention Evidence;
+- `transfer_check_required` requires a near- or far-transfer window;
+- far transfer requires a held-out cross-domain task.
+
+Until every required dimension and policy condition passes, the Atom stays Active. Missing, disputed, low-confidence, or ineligible Evidence does not disappear; it remains auditable as partial/not-mastered feedback.
+
+## Measurement kinds and holdouts
 
 - `immediate_mastery`: a new check close to teaching time;
-- `delayed_retention`: a held-out check after a declared delay, persisted with Evidence `kind: review`;
-- `near_transfer`: a held-out variant that changes a limited part of the context;
-- `far_transfer`: a held-out task requiring the concept in a meaningfully different context.
+- `delayed_retention`: a held-out check after a declared delay, with Evidence `kind: review`;
+- `near_transfer`: a held-out variant in a changed context;
+- `far_transfer`: a held-out cross-domain application.
 
-Transfer and delayed-retention items must be `held_out` and `context_isolated`. Do not expose their answer, equivalent worked solution, or hidden rubric during the same teaching episode. If the harness cannot maintain this boundary, record the result as ineligible feedback rather than qualified Evidence.
+Retention and transfer items must be `held_out` and `context_isolated`. Never expose the answer, equivalent worked solution, or hidden rubric in the same episode.
 
-## Deterministic Evidence
+## Deterministic and external scoring
 
-Use `atomlearn measure grade --input <file>` to preview a deterministic grade, or place the same `item` and `response` under `grading_input` when calling `record-evidence`. Core recomputes the scores, takes the item ID and answer hash from that result, and rejects a conflicting claimed item ID. The raw response is not copied to canonical Evidence.
+Use `atomlearn measure grade --input <file>` to preview exact-choice or numeric/unit scoring, or provide the same item and response under `grading_input` to `record-evidence`. Core recomputes the result, hashes but does not persist the raw response, and rejects conflicting item identity or task contracts.
 
-The exact-choice scorer normalizes surrounding whitespace and optionally case. The numeric/unit scorer checks a finite number against the declared absolute or relative tolerance and requires the canonical unit or an explicit alias. It does not prove that a derivation is sound, so use an appropriate open-response rubric when reasoning steps are themselves required.
+External, dual, and human Evidence requires stable item/episode IDs, a registered profile and rubric, required calibration, independent provenance, a local SHA-256 answer hash, an explicit task contract, and bounded scores. Model-assessed Evidence must also declare `abstain`, `review_required`, and `confidence`; abstention, review requests, or confidence below the frozen threshold cannot master the Atom. Backward-compatible human/dual payloads without task fields are conservatively treated as a multi-part legacy contract; new integrations should always declare the fields.
 
-All new Evidence also requires a stable, opaque `episode_id`. Deterministic Evidence must declare `assessment.independent: true`; Core itself performs the scorer and ignores caller-supplied scores.
-
-## External, dual, and human Evidence
-
-External scoring must provide:
-
-- a non-empty `measurement_item_id` and `episode_id`;
-- an assessment method, registered `grader_id`, and registered `rubric_version`;
-- the exact registered `calibration_set_version` when that method requires calibration;
-- `independent: true` when claiming qualified Evidence;
-- a local SHA-256 hash of the raw response, never a fabricated answer hash;
-- bounded scores for every required Atom dimension.
-
-The registry contains fixture profiles for reproducible tests; their presence is not a claim that an arbitrary model is calibrated. Adding a production scorer requires a reviewed registry change, a versioned held-out calibration set, and a reproducible report. Repeating the same model call does not create a dual-blind evaluator.
-
-## Item banks
-
-Validate a bank with:
+## Item banks, calibration, and claim boundaries
 
 ```text
+atomlearn measure task-forms
+atomlearn measure registry
 atomlearn measure validate-bank --input measurement-bank.yaml
-```
-
-Each item declares its Atom family, measurement kind, required dimensions, prompt, scorer and rubric, answer specification, holdout family and visibility, retention delay, language, domain, and difficulty. Keep calibration examples separate from learning-effect test items. Item-family separation is required to reduce memorization leakage between teaching, calibration, immediate checks, retention, and transfer.
-
-## Open-response calibration
-
-Run:
-
-```text
 atomlearn measure calibrate --input calibration-set.yaml --output calibration-report.json
+atomlearn measure validate-protocol
 ```
 
-The report is deterministic for identical input and includes dataset hash, sample/scored/abstain counts, a distinct human-review-required rate, MAE, signed bias, tolerance agreement, per-dimension metrics, multilingual/domain/difficulty/length strata, pass/fail confusion, thresholds, and qualification reasons. An optional prior report summary produces signed metric deltas, a maximum absolute drift, and a qualification-blocking drift threshold without importing raw calibration answers. Output creation is exclusive: an existing report is never overwritten.
+Calibration reports remain deterministic and stratified, but calibration is not a learning-effect result. Only an independently consented, controlled study with delayed and transfer outcomes may support a learning-gain claim.
 
-A calibration report measures agreement with reference scores on a declared distribution. It does not establish that a strategy improves learning and it does not authorize a different model, prompt, rubric, or calibration-set version.
+## Migration
 
-The bundled `assets/benchmarks/calibration-open-v1.yaml` is a deliberately small engineering fixture for the anchored scorer contract. Its committed `.report.json` must reproduce value-for-value through the CLI. It proves report determinism and gate behavior only; its four artificial examples are not production model validation.
-
-## Three benchmark layers
-
-`assets/learning-benchmark-protocol.yaml` keeps claims separated:
-
-1. engineering tests show that schemas, state transitions, graders, privacy boundaries, and recovery behave correctly;
-2. calibration tests show performance against known answers or human annotations on declared strata;
-3. only an independently consented learning-effect study with a control condition, delayed measurements, transfer items, missing-data reporting, and uncertainty intervals may support a learning-gain claim.
-
-The minimum learning-effect measures are immediate mastery, 7-day and 30-day retention, near transfer, and far transfer. Research data is separately opt-in, minimized, withdrawable, and keeps raw answers local by default. Engineering or calibration success alone must never be described as proof that learners learn better.
-
-## Migration and audit
-
-Preview workspace status first, then explicitly migrate unmigrated historical Evidence:
+Evidence v1 migrates idempotently to historical v2 with explicit incomplete provenance and no new mastery/strategy eligibility. Existing v2 stays v2 and is validated under its frozen historical rules; it is never silently upgraded or reinterpreted by scorer-v2.
 
 ```text
-atomlearn status <workspace> --json
 atomlearn migrate-evidence <workspace> --confirmed --expected-revision <revision>
 atomlearn validate <workspace>
 ```
-
-Migration adds legacy provenance, a required-dimension projection, and strategy exclusion without changing historical scores or results. It is idempotent. Preserve the event log and never rewrite a legacy record as calibrated Evidence after the fact.

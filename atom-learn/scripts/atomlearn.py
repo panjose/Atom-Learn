@@ -314,6 +314,12 @@ class Workspace:
                 "review_intervals_days": [1, 3, 7, 30],
                 "mastery_default_threshold": 0.8,
                 "skip_policy": "diagnostic_first",
+                "scorer_profile_ids": [
+                    "atomlearn/exact-choice-v1",
+                    "atomlearn/numeric-unit-v1",
+                    "atomlearn/dual-blind-v1",
+                    "atomlearn/human-adjudication-v1",
+                ],
             },
             "sources": [],
             "created_at": timestamp,
@@ -517,6 +523,11 @@ class Workspace:
         settings = self.course.get("settings", {})
         if not isinstance(settings, dict) or settings.get("skip_policy", "diagnostic_first") not in SKIP_POLICIES:
             errors.append("course.settings.skip_policy must be diagnostic_first, learner_choice, or strict_mastery")
+        scorer_ids = settings.get("scorer_profile_ids") if isinstance(settings, dict) else None
+        if scorer_ids is not None and (
+            not isinstance(scorer_ids, list) or not scorer_ids or not all(isinstance(item, str) for item in scorer_ids)
+        ):
+            errors.append("course.settings.scorer_profile_ids must be a non-empty string list")
 
         source_ids: set[str] = set()
         for index, source in enumerate(self.course.get("sources", [])):
@@ -576,6 +587,19 @@ class Workspace:
                         require_number(mastery.get(field, default), f"{atom_id}.mastery.{field}", 0, 1)
                     except AtomLearnError as exc:
                         errors.append(str(exc))
+                if mastery.get("claim_mode", "mastery") not in {"mastery", "reading", "exploration"}:
+                    errors.append(f"{atom_id}.mastery.claim_mode must be mastery, reading, or exploration")
+                policy = mastery.get("evidence_policy", {})
+                if not isinstance(policy, dict):
+                    errors.append(f"{atom_id}.mastery.evidence_policy must be a mapping")
+                else:
+                    for field in ["minimum_item_families", "minimum_task_forms"]:
+                        value = policy.get(field, 1)
+                        if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+                            errors.append(f"{atom_id}.mastery.evidence_policy.{field} must be a positive integer")
+                    for field in ["delayed_check_required", "transfer_check_required"]:
+                        if not isinstance(policy.get(field, False), bool):
+                            errors.append(f"{atom_id}.mastery.evidence_policy.{field} must be boolean")
             for source_ref in atom.get("sources", []):
                 if not isinstance(source_ref, dict):
                     errors.append(f"{atom_id}.sources contains a non-mapping")
@@ -1000,7 +1024,7 @@ class Workspace:
             evidence_version = item.get("evidence_schema_version")
             if evidence_version is None:
                 continue
-            if evidence_version != 2:
+            if evidence_version not in {2, 3}:
                 errors.append(f"{item_id}.evidence_schema_version is unsupported")
                 continue
             from measurement import MeasurementError, validate_evidence_item
@@ -1018,6 +1042,8 @@ class Workspace:
             required_assessment = {
                 "method", "grader_id", "rubric_version", "calibration_set_version", "independent", "answer_hash"
             }
+            if evidence_version == 3:
+                required_assessment |= {"abstain", "review_required", "confidence"}
             if not isinstance(assessment, dict) or set(assessment) != required_assessment:
                 errors.append(f"{item_id}.assessment fields are invalid")
             elif assessment.get("method") not in {
@@ -1167,6 +1193,16 @@ class Workspace:
                     "pass_threshold": self.course["settings"].get("mastery_default_threshold", 0.8),
                     "minimum_dimension_score": 0.6,
                 }
+            mastery.setdefault("claim_mode", "mastery")
+            mastery.setdefault(
+                "evidence_policy",
+                {
+                    "minimum_item_families": 1,
+                    "minimum_task_forms": 1,
+                    "delayed_check_required": False,
+                    "transfer_check_required": False,
+                },
+            )
             existing = self.atoms.get(atom_id)
             progress = {}
             if existing:
@@ -1501,6 +1537,12 @@ class Workspace:
         for item in self.evidence.get("items", []):
             if isinstance(item, dict):
                 evidence_quality[item.get("quality_tier", "unmigrated_legacy")] += 1
+        from measurement import MeasurementError, mastery_feasibility
+
+        try:
+            feasibility = mastery_feasibility(self.course, self.atoms)
+        except MeasurementError as exc:
+            feasibility = {"feasible": False, "error": str(exc), "atoms": []}
         return {
             "valid": not validation_errors,
             "validation_errors": validation_errors,
@@ -1517,6 +1559,7 @@ class Workspace:
             "open_questions": open_questions,
             "due_reviews": due_reviews,
             "evidence_quality": dict(sorted(evidence_quality.items())),
+            "mastery_feasibility": feasibility,
             "active_flexibility_decisions": flexibility,
             "detailed_expansions": self.active_expansions(),
             "optional_branches": [
@@ -1571,6 +1614,18 @@ class Workspace:
             raise AtomLearnError(f"Unknown Atom: {atom_id}")
         if atom.get("status") not in {"available", "review_due"}:
             raise AtomLearnError(f"Atom {atom_id} cannot be activated from status {atom.get('status')}")
+        from measurement import MeasurementError, mastery_feasibility
+
+        try:
+            report = mastery_feasibility(self.course, {atom_id: atom})["atoms"][0]
+        except MeasurementError as exc:
+            raise AtomLearnError(f"Cannot preflight mastery feasibility: {exc}") from exc
+        if report["status"] == "infeasible":
+            missing = ", ".join(report["missing_dimensions"]) or "evidence diversity policy"
+            raise AtomLearnError(
+                f"Atom {atom_id} has no feasible mastery measurement path for: {missing}. "
+                "Add a compatible production scorer/task form, narrow the claim, or mark it reading/exploration."
+            )
         reviewing = atom.get("status") == "review_due"
         expansion = atom.get("expansion")
         integrating = (
@@ -2190,6 +2245,12 @@ class Workspace:
                 item["review_observation"] = validate_observation(observation)
             except ReviewSchedulerError as exc:
                 raise AtomLearnError(str(exc)) from exc
+        from measurement import validate_evidence_item
+
+        try:
+            validate_evidence_item(item)
+        except MeasurementError as exc:
+            raise AtomLearnError(str(exc)) from exc
         self.evidence["items"].append(item)
         self.atoms[atom_id].setdefault("evidence_ids", []).append(evidence_id)
         self.current["phase"] = "checking"
@@ -2209,29 +2270,50 @@ class Workspace:
         mastery = atom["mastery"]
         required = mastery["required_dimensions"]
         dimension_scores = evidence.get("required_dimension_scores", evidence.get("scores", {}))
-        missing = [dimension for dimension in required if dimension not in dimension_scores]
-        if missing:
-            raise AtomLearnError(f"Evidence is missing required dimensions: {', '.join(missing)}")
-        required_scores = [float(dimension_scores[dimension]) for dimension in required]
-        average = sum(required_scores) / len(required_scores)
-        minimum = min(required_scores)
-        passed_rubric = (
-            average >= float(mastery.get("pass_threshold", 0.8))
-            and minimum >= float(mastery.get("minimum_dimension_score", 0.6))
+        current_dimensions = [dimension for dimension in required if dimension in dimension_scores]
+        if not current_dimensions:
+            raise AtomLearnError("Evidence has no eligible score for this Atom's mastery dimensions")
+        current_scores = [float(dimension_scores[dimension]) for dimension in current_dimensions]
+        current_average = sum(current_scores) / len(current_scores)
+        current_minimum = min(current_scores)
+        current_passed = (
+            current_average >= float(mastery.get("pass_threshold", 0.8))
+            and current_minimum >= float(mastery.get("minimum_dimension_score", 0.6))
         )
         mastery_eligible = evidence.get("mastery_eligible", True)
-        if passed_rubric and mastery_eligible:
-            result = "mastered"
-        elif average >= 0.5 or passed_rubric:
-            result = "partial"
-        else:
-            result = "not_mastered"
-        evidence["result"] = result
         evidence["assessed_at"] = iso(at)
-        if passed_rubric and not mastery_eligible:
+        evidence["result"] = "partial" if current_average >= 0.5 or current_passed else "not_mastered"
+        if current_passed and not mastery_eligible:
             evidence["eligibility_block"] = "scorer_not_qualified_for_mastery"
+        from measurement import MeasurementError, mastery_evidence_report
+
+        try:
+            mastery_report = mastery_evidence_report(atom, self.evidence.get("items", []))
+        except MeasurementError as exc:
+            raise AtomLearnError(str(exc)) from exc
+        aggregate_scores = [
+            float(mastery_report["dimensions"][dimension]["score"])
+            for dimension in required
+            if dimension in mastery_report["dimensions"]
+        ]
+        aggregate_average = sum(aggregate_scores) / len(aggregate_scores) if aggregate_scores else 0.0
+        aggregate_minimum = min(aggregate_scores) if aggregate_scores else 0.0
+        passed_rubric = bool(
+            mastery_report["complete"]
+            and aggregate_average >= float(mastery.get("pass_threshold", 0.8))
+            and aggregate_minimum >= float(mastery.get("minimum_dimension_score", 0.6))
+            and mastery.get("claim_mode", "mastery") == "mastery"
+        )
+        result = "mastered" if passed_rubric else evidence["result"]
+        evidence["result"] = result
+        if mastery_eligible and current_passed and not mastery_report["complete"]:
+            evidence["eligibility_block"] = (
+                "evidence_diversity_not_met"
+                if not mastery_report["diversity_met"]
+                else "mastery_requirements_incomplete"
+            )
         atom["attempts"] = int(atom.get("attempts", 0)) + 1
-        atom["confidence"] = round(average, 3)
+        atom["confidence"] = round(aggregate_average if aggregate_scores else current_average, 3)
         atom["last_reviewed_at"] = iso(at)
         if evidence.get("kind") == "review":
             from review_scheduler import ReviewSchedulerError, record_review_event
@@ -2252,11 +2334,18 @@ class Workspace:
             self._advance_expansion_after_mastery(atom_id, at or now_utc())
         else:
             atom["status"] = "active"
-            weakest = min(required, key=lambda dimension: dimension_scores[dimension])
+            missing = mastery_report["missing_dimensions"]
+            weakest = (
+                missing[0]
+                if missing
+                else min(required, key=lambda dimension: mastery_report["dimensions"][dimension]["score"])
+            )
             self.current["phase"] = "teaching"
             self.current["next_action"] = (
                 "Obtain qualified independent Evidence before mastery."
-                if passed_rubric and not mastery_eligible
+                if current_passed and not mastery_eligible
+                else "Collect a distinct compatible Evidence family before mastery."
+                if not mastery_report["diversity_met"]
                 else f"Remediate the weakest mastery dimension: {weakest}."
             )
         return result
@@ -2266,7 +2355,7 @@ class Workspace:
 
         migrated = []
         for index, item in enumerate(self.evidence.get("items", [])):
-            if not isinstance(item, dict) or item.get("evidence_schema_version") == 2:
+            if not isinstance(item, dict) or item.get("evidence_schema_version") in {2, 3}:
                 continue
             atom = self.atoms.get(item.get("atom_id"), {})
             required = atom.get("mastery", {}).get("required_dimensions", DEFAULT_DIMENSIONS)

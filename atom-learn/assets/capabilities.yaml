@@ -11,7 +11,7 @@ claim_policy:
 required_smoke: [core, bridge, documents, rag, exam, research, review]
 capabilities:
   - id: learning.atomic_state_machine
-    title: Single-Active-Atom learning state machine and mastery Evidence guards
+    title: Single-Active-Atom state machine with task-compatible immutable mastery Evidence
     status: implemented
     default_mode: enabled
     public_claim: true
@@ -20,18 +20,26 @@ capabilities:
       runtime: base
       artifact: core_runtime
       user_entrypoint: true
-    interfaces: [activate, record-evidence, assess, status, validate]
+    interfaces: [activate, record-evidence, assess, status, validate, measure feasibility, measure task-forms]
     implementation:
       - path: atom-learn/scripts/atomlearn.py
         symbol: "def record_evidence"
       - path: atom-learn/scripts/atomlearn.py
         symbol: "def assess"
+      - path: atom-learn/scripts/measurement.py
+        symbol: "def mastery_feasibility"
+      - path: atom-learn/scripts/measurement.py
+        symbol: "def mastery_evidence_report"
     verification:
       - path: tests/test_atomlearn_cli.py
         symbol: "test_evidence_can_be_recorded_only_for_the_active_atom"
+      - path: tests/test_measurement.py
+        symbol: "test_persisted_v3_evidence_uses_compatible_scores_and_omits_raw_response"
+      - path: tests/test_measurement.py
+        symbol: "test_v2_item_rejects_choice_claiming_explanation_and_feasibility_blocks_impossible_course"
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md]
     limitations:
-      - Core can authenticate its deterministic scorers; external and human reviewer identity remains asserted provenance subject to the Evidence v2 registry gates.
+      - Core authenticates deterministic scoring and freezes scorer profiles; external and human identity remains asserted provenance, and production calibration still requires maintained domain/language validation.
 
   - id: learning.atomic_expansion_and_concept_routing
     title: Ordered child-Atom expansion and relation-aware concept routing

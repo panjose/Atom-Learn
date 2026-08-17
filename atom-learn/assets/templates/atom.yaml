@@ -12,9 +12,15 @@ status: locked
 sources: []
 misconceptions: []
 mastery:
+  claim_mode: mastery
   required_dimensions: [explain, apply]
   pass_threshold: 0.8
   minimum_dimension_score: 0.6
+  evidence_policy:
+    minimum_item_families: 1
+    minimum_task_forms: 1
+    delayed_check_required: false
+    transfer_check_required: false
 attempts: 0
 confidence: null
 last_reviewed_at: null

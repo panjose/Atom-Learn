@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import math
@@ -21,12 +22,19 @@ from core_paths import CORE_ROOT
 ASSET_ROOT = CORE_ROOT / "assets"
 SCHEMA_ROOT = ASSET_ROOT / "schemas"
 SCORER_REGISTRY = ASSET_ROOT / "scorer-registry.yaml"
+TASK_FORM_MATRIX = ASSET_ROOT / "task-form-compatibility.yaml"
 MEASUREMENT_KINDS = {"immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"}
 ASSESSMENT_METHODS = {"deterministic", "anchored_model", "dual_blind", "human", "legacy_model"}
 HASH_PATTERN = re.compile(r"^sha256:[0-9a-f]{64}$")
 NUMBER_UNIT = re.compile(
     r"^\s*([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*([^\d\s].*)?\s*$"
 )
+DEFAULT_SCORER_PROFILE_IDS = [
+    "atomlearn/exact-choice-v1",
+    "atomlearn/numeric-unit-v1",
+    "atomlearn/dual-blind-v1",
+    "atomlearn/human-adjudication-v1",
+]
 
 
 class MeasurementError(RuntimeError):
@@ -59,56 +67,7 @@ def validate_schema(value: Any, name: str) -> None:
         raise MeasurementError(f"{name} validation failed:\n- " + "\n- ".join(rendered))
 
 
-def validate_evidence_item(value: Any) -> None:
-    """Validate stored v2 shape and provenance invariants independent of course state."""
-    validate_schema(value, "evidence-v2")
-    if not isinstance(value, dict):
-        raise MeasurementError("Evidence v2 item must be a mapping")
-    assessment = value["assessment"]
-    legacy = assessment["method"] == "legacy_model"
-    if legacy:
-        if (
-            assessment["grader_id"] != "atomlearn/legacy-unverified-v1"
-            or assessment["rubric_version"] != "legacy-v1"
-            or assessment["calibration_set_version"] is not None
-            or assessment["independent"] is not False
-        ):
-            raise MeasurementError("Legacy Evidence scorer provenance is invalid")
-        if value["quality_tier"] != "legacy" or value["strategy_eligible"] is not False:
-            raise MeasurementError("Legacy Evidence must use legacy quality and remain strategy-ineligible")
-        if value["provenance_incomplete"] is not True or assessment["answer_hash"] is not None:
-            raise MeasurementError("Legacy Evidence must preserve explicit incomplete provenance")
-        if value["measurement_item_id"] is not None or value["episode_id"] is not None:
-            raise MeasurementError("Legacy Evidence cannot invent measurement-item or episode provenance")
-    else:
-        if value["quality_tier"] == "legacy" or value["provenance_incomplete"] is not False:
-            raise MeasurementError("Non-legacy Evidence cannot claim legacy or incomplete provenance")
-        if not isinstance(value["assessment"]["answer_hash"], str):
-            raise MeasurementError("Non-legacy Evidence requires an answer hash")
-        if (
-            not isinstance(value["measurement_item_id"], str)
-            or not value["measurement_item_id"].strip()
-            or not isinstance(value["episode_id"], str)
-            or not value["episode_id"].strip()
-        ):
-            raise MeasurementError("Non-legacy Evidence requires measurement-item and episode provenance")
-        record = scorer(assessment["grader_id"])
-        if record["method"] != assessment["method"] or assessment["rubric_version"] not in record["rubric_versions"]:
-            raise MeasurementError("Evidence scorer method or rubric disagrees with the registry")
-        calibration = assessment["calibration_set_version"]
-        calibration_ok = assessment["method"] not in {"anchored_model", "dual_blind"} or calibration in record["calibration_sets"]
-        if assessment["method"] not in {"anchored_model", "dual_blind"} and calibration is not None:
-            calibration_ok = calibration in record["calibration_sets"]
-        independence_ok = assessment["method"] == "deterministic" or assessment["independent"] is True
-        expected_mastery = bool(record["mastery_eligible"] and calibration_ok and independence_ok)
-        expected_strategy = bool(record["strategy_eligible"] and calibration_ok and independence_ok)
-        expected_tier = record["max_quality_tier"] if expected_mastery else "C"
-        if value["mastery_eligible"] != expected_mastery or value["strategy_eligible"] != expected_strategy:
-            raise MeasurementError("Evidence eligibility disagrees with scorer registry and provenance")
-        if value["quality_tier"] != expected_tier:
-            raise MeasurementError("Evidence quality tier disagrees with scorer registry and provenance")
-    if value["strategy_eligible"] and not value["mastery_eligible"]:
-        raise MeasurementError("Strategy-eligible Evidence must also be mastery-eligible")
+def _validate_review_pairing(value: dict[str, Any]) -> None:
     if value["kind"] == "review" and value["measurement_kind"] != "delayed_retention":
         raise MeasurementError("Review Evidence must be delayed_retention")
     if value["kind"] != "review" and value["measurement_kind"] == "delayed_retention":
@@ -125,13 +84,147 @@ def validate_evidence_item(value: Any) -> None:
             raise MeasurementError(str(exc)) from exc
 
 
+def _validate_v2_evidence(value: dict[str, Any]) -> None:
+    """Validate historical v2 as written, without consulting a mutable current registry."""
+    validate_schema(value, "evidence-v2")
+    assessment = value["assessment"]
+    legacy = assessment["method"] == "legacy_model"
+    if legacy:
+        if (
+            assessment["grader_id"] != "atomlearn/legacy-unverified-v1"
+            or assessment["rubric_version"] != "legacy-v1"
+            or assessment["calibration_set_version"] is not None
+            or assessment["independent"] is not False
+        ):
+            raise MeasurementError("Legacy Evidence scorer provenance is invalid")
+        if value["quality_tier"] != "legacy" or value["strategy_eligible"] is not False:
+            raise MeasurementError("Legacy Evidence must use legacy quality and remain strategy-ineligible")
+        if value["provenance_incomplete"] is not True or assessment["answer_hash"] is not None:
+            raise MeasurementError("Legacy Evidence must preserve explicit incomplete provenance")
+        if value["measurement_item_id"] is not None or value["episode_id"] is not None:
+            raise MeasurementError("Legacy Evidence cannot invent measurement-item or episode provenance")
+    elif value["quality_tier"] == "legacy" or value["provenance_incomplete"] is not False:
+        raise MeasurementError("Non-legacy Evidence cannot claim legacy or incomplete provenance")
+    elif not isinstance(value["assessment"]["answer_hash"], str):
+        raise MeasurementError("Non-legacy Evidence requires an answer hash")
+    elif not value["measurement_item_id"] or not value["episode_id"]:
+        raise MeasurementError("Non-legacy Evidence requires measurement-item and episode provenance")
+    if value["strategy_eligible"] and not value["mastery_eligible"]:
+        raise MeasurementError("Strategy-eligible Evidence must also be mastery-eligible")
+    _validate_review_pairing(value)
+
+
+def _validate_v3_evidence(value: dict[str, Any]) -> None:
+    validate_schema(value, "evidence-v3")
+    snapshot = value["scorer_profile_snapshot"]
+    if digest(snapshot) != value["scorer_profile_hash"]:
+        raise MeasurementError("Evidence scorer profile snapshot hash is invalid")
+    assessment = value["assessment"]
+    if assessment["grader_id"] != snapshot["id"] or assessment["method"] != snapshot["method"]:
+        raise MeasurementError("Evidence assessment disagrees with its immutable scorer snapshot")
+    if assessment["rubric_version"] != snapshot["rubric_version"]:
+        raise MeasurementError("Evidence rubric disagrees with its immutable scorer snapshot")
+    eligible = value["eligible_dimensions"]
+    required_scores = value["required_dimension_scores"]
+    if set(eligible) != set(required_scores):
+        raise MeasurementError("Evidence eligible_dimensions must exactly match required_dimension_scores")
+    if any(dimension not in value["item_supported_dimensions"] for dimension in eligible):
+        raise MeasurementError("Evidence contains a dimension outside the item compatibility contract")
+    if any(dimension not in snapshot["supported_dimensions"] for dimension in eligible):
+        raise MeasurementError("Evidence contains a dimension outside the scorer compatibility contract")
+    if value["task_form"] not in snapshot["supported_task_forms"]:
+        raise MeasurementError("Evidence task form is outside the scorer compatibility contract")
+    if value["measurement_kind"] in {"delayed_retention", "near_transfer", "far_transfer"} and (
+        value["holdout"]["visibility"] != "held_out" or value["holdout"]["context_isolated"] is not True
+    ):
+        raise MeasurementError("Retention and transfer Evidence must be isolated and held out")
+    if any(value["scores"].get(dimension) != score for dimension, score in required_scores.items()):
+        raise MeasurementError("Evidence required_dimension_scores must mirror scores")
+    expected_mastery = bool(
+        snapshot["mastery_eligible"]
+        and snapshot["calibration_qualified"]
+        and not snapshot["test_only"]
+        and not snapshot["disabled"]
+        and (assessment["method"] == "deterministic" or assessment["independent"])
+        and not assessment["abstain"]
+        and not assessment["review_required"]
+        and assessment["confidence"] >= snapshot["minimum_confidence"]
+    )
+    if value["mastery_eligible"] != expected_mastery:
+        raise MeasurementError("Evidence mastery eligibility disagrees with its immutable scorer snapshot")
+    expected_strategy = bool(expected_mastery and snapshot["strategy_eligible"])
+    if value["strategy_eligible"] != expected_strategy:
+        raise MeasurementError("Evidence strategy eligibility disagrees with its immutable scorer snapshot")
+    if value["quality_tier"] != (snapshot["max_quality_tier"] if expected_mastery else "C"):
+        raise MeasurementError("Evidence quality tier disagrees with its immutable scorer snapshot")
+    _validate_review_pairing(value)
+
+
+def validate_evidence_item(value: Any) -> None:
+    """Validate persisted Evidence using the rules frozen in its own schema version."""
+    if not isinstance(value, dict):
+        raise MeasurementError("Evidence item must be a mapping")
+    version = value.get("evidence_schema_version")
+    if version == 2:
+        _validate_v2_evidence(value)
+    elif version == 3:
+        _validate_v3_evidence(value)
+    else:
+        raise MeasurementError(f"Unsupported Evidence schema version: {version!r}")
+
+
+def compatibility_matrix() -> dict[str, Any]:
+    value = read_data(TASK_FORM_MATRIX)
+    validate_schema(value, "task-form-compatibility")
+    identifiers = [item["id"] for item in value["task_forms"]]
+    if len(identifiers) != len(set(identifiers)):
+        raise MeasurementError("Task-form compatibility matrix contains duplicate IDs")
+    return value
+
+
+def task_form(task_form_id: str) -> dict[str, Any]:
+    matches = [item for item in compatibility_matrix()["task_forms"] if item["id"] == task_form_id]
+    if len(matches) != 1:
+        raise MeasurementError(f"Unknown task form: {task_form_id!r}")
+    return matches[0]
+
+
+def scorer_snapshot(record: dict[str, Any], rubric_version: str, calibration_qualified: bool) -> dict[str, Any]:
+    """Freeze only decision-relevant scorer fields into each Evidence record."""
+    return {
+        "id": record["id"],
+        "registry_profile_hash": record["profile_hash"],
+        "profile_version": record["profile_version"],
+        "method": record["method"],
+        "provider_class": record["provider_class"],
+        "rubric_version": rubric_version,
+        "supported_task_forms": list(record["supported_task_forms"]),
+        "supported_dimensions": list(record["supported_dimensions"]),
+        "calibration_qualified": calibration_qualified,
+        "minimum_confidence": 0.8,
+        "mastery_eligible": bool(record["mastery_eligible"]),
+        "strategy_eligible": bool(record["strategy_eligible"]),
+        "test_only": bool(record["test_only"]),
+        "disabled": bool(record["disabled"]),
+        "max_quality_tier": record["max_quality_tier"],
+    }
+
+
 def scorer_registry() -> dict[str, Any]:
     value = read_data(SCORER_REGISTRY)
     validate_schema(value, "scorer-registry")
     identifiers = [item["id"] for item in value["scorers"]]
     if len(identifiers) != len(set(identifiers)):
         raise MeasurementError("Scorer registry contains duplicate IDs")
+    known_forms = {item["id"] for item in compatibility_matrix()["task_forms"]}
     for item in value["scorers"]:
+        material = copy.deepcopy(item)
+        material.pop("profile_hash", None)
+        if digest(material) != item["profile_hash"]:
+            raise MeasurementError(f"Scorer {item['id']} immutable profile hash is invalid")
+        unknown_forms = set(item["supported_task_forms"]) - known_forms
+        if unknown_forms:
+            raise MeasurementError(f"Scorer {item['id']} references unknown task forms: {sorted(unknown_forms)}")
         if item["strategy_eligible"] and not item["mastery_eligible"]:
             raise MeasurementError(f"Scorer {item['id']} cannot be strategy-eligible without mastery eligibility")
         if item["mastery_eligible"] and item["max_quality_tier"] not in {"A", "B", "legacy"}:
@@ -149,9 +242,9 @@ def scorer_registry() -> dict[str, Any]:
         if item["method"] in {"anchored_model", "dual_blind"} and item["mastery_eligible"] and not item["calibration_sets"]:
             raise MeasurementError(f"Scorer {item['id']} requires a registered calibration set")
         if item["method"] == "legacy_model" and (
-            item["strategy_eligible"] or item["max_quality_tier"] != "legacy"
+            item["mastery_eligible"] or item["strategy_eligible"] or item["max_quality_tier"] != "legacy"
         ):
-            raise MeasurementError(f"Legacy scorer {item['id']} cannot qualify strategy outcomes")
+            raise MeasurementError(f"Legacy scorer {item['id']} cannot qualify new outcomes")
     return value
 
 
@@ -202,10 +295,90 @@ def _numeric_response(value: Any) -> tuple[float, str]:
     return number, unit
 
 
+def _legacy_item_contract(item: dict[str, Any]) -> dict[str, Any]:
+    answer_type = item["answer_spec"]["type"]
+    defaults = {
+        "exact_choice": ("single_choice", "select_one", ["recognize", "discriminate"]),
+        "numeric_unit": ("numeric_short_answer", "numeric", ["compute", "apply"]),
+        "open_response": ("open_explanation", "free_text", ["explain", "connect"]),
+    }
+    form, mode, supported = defaults[answer_type]
+    compatible_declared = [dimension for dimension in item["required_dimensions"] if dimension in supported]
+    if not compatible_declared:
+        compatible_declared = [supported[0]]
+    return {
+        "task_form": form,
+        "response_mode": mode,
+        "item_family": item["holdout"]["family_id"],
+        "novelty_scope": "cross_domain" if item["measurement_kind"] == "far_transfer" else (
+            "new_context" if item["measurement_kind"] in {"near_transfer", "delayed_retention"} else "same_context"
+        ),
+        "supported_dimensions": compatible_declared,
+        "holdout": copy.deepcopy(item["holdout"]),
+        "scoring_profile_id": item["grader_id"],
+        "legacy_inferred": True,
+    }
+
+
+def item_contract(item: dict[str, Any], *, strict: bool) -> dict[str, Any]:
+    contract = (
+        {
+            "task_form": item["task_form"],
+            "response_mode": item["response_mode"],
+            "item_family": item["item_family"],
+            "novelty_scope": item["novelty_scope"],
+            "supported_dimensions": list(item["supported_dimensions"]),
+            "holdout": copy.deepcopy(item["holdout"]),
+            "scoring_profile_id": item["scoring_profile_id"],
+            "legacy_inferred": False,
+        }
+        if item.get("item_schema_version") == 2
+        else _legacy_item_contract(item)
+    )
+    form = task_form(contract["task_form"])
+    record = scorer(contract["scoring_profile_id"])
+    if strict and set(item["required_dimensions"]) != set(contract["supported_dimensions"]):
+        raise MeasurementError(
+            f"Item {item['id']} v2 required_dimensions and supported_dimensions must match exactly"
+        )
+    if contract["response_mode"] not in form["response_modes"]:
+        raise MeasurementError(f"Item {item['id']} response_mode is incompatible with task_form")
+    if contract["scoring_profile_id"] != item["grader_id"]:
+        raise MeasurementError(f"Item {item['id']} scoring_profile_id must equal grader_id")
+    supported = set(contract["supported_dimensions"])
+    eligible = supported & set(form["supported_dimensions"]) & set(record["supported_dimensions"])
+    if contract["task_form"] not in record["supported_task_forms"]:
+        eligible = set()
+    if contract["task_form"] == "numeric_short_answer" and contract["novelty_scope"] == "same_context":
+        eligible.discard("apply")
+    if item["measurement_kind"] == "far_transfer" and contract["novelty_scope"] != "cross_domain":
+        raise MeasurementError(f"Item {item['id']} far transfer requires novelty_scope cross_domain")
+    if item["measurement_kind"] in {"near_transfer", "far_transfer"} and contract["task_form"] not in {
+        "novel_application", "multi_part"
+    }:
+        if strict:
+            raise MeasurementError(f"Item {item['id']} transfer requires novel_application or multi_part")
+        eligible -= {"transfer", "near_transfer", "far_transfer"}
+    if contract["task_form"] == "multi_part":
+        sections = item.get("rubric_sections")
+        if strict and (not isinstance(sections, dict) or not supported.issubset(sections)):
+            raise MeasurementError(f"Item {item['id']} multi_part requires one rubric section per dimension")
+    incompatible = supported - eligible
+    if strict and incompatible:
+        raise MeasurementError(
+            f"Item {item['id']} declares dimensions incompatible with its task form or scorer: "
+            + ", ".join(sorted(incompatible))
+        )
+    if not eligible:
+        raise MeasurementError(f"Item {item['id']} has no task-form/scorer-compatible dimensions")
+    contract["eligible_dimensions"] = sorted(eligible, key=contract["supported_dimensions"].index)
+    return contract
+
+
 def validate_measurement_item(item: Any) -> dict[str, Any]:
     bank = {
         "kind": "atomlearn.measurement-bank",
-        "schema_version": 1,
+        "schema_version": 2 if isinstance(item, dict) and item.get("item_schema_version") == 2 else 1,
         "bank_id": "validation.bank",
         "bank_version": "v1",
         "items": [item],
@@ -216,6 +389,7 @@ def validate_measurement_item(item: Any) -> dict[str, Any]:
     record = scorer(item["grader_id"])
     if item["rubric_version"] not in record["rubric_versions"]:
         raise MeasurementError(f"Item {item['id']} uses an unregistered rubric version")
+    item_contract(item, strict=item.get("item_schema_version") == 2)
     spec = item["answer_spec"]
     expected_implementation = {
         "exact_choice": "exact_choice",
@@ -259,6 +433,7 @@ def grade_deterministic(payload: Any) -> dict[str, Any]:
         raise MeasurementError("Deterministic grading input requires exactly item and response")
     item = validate_measurement_item(payload["item"])
     record = scorer(item["grader_id"])
+    contract = item_contract(item, strict=item.get("item_schema_version") == 2)
     if record["method"] != "deterministic":
         raise MeasurementError("Only a deterministic scorer can run inside Core")
     spec = item["answer_spec"]
@@ -294,7 +469,8 @@ def grade_deterministic(payload: Any) -> dict[str, Any]:
         "grader_id": item["grader_id"],
         "rubric_version": item["rubric_version"],
         "answer_hash": digest(response),
-        "scores": {dimension: score for dimension in item["required_dimensions"]},
+        "scores": {dimension: score for dimension in contract["eligible_dimensions"]},
+        "contract": contract,
         "passed": passed,
         "reason": reason,
     }
@@ -334,7 +510,8 @@ def evidence_measurement(payload: dict[str, Any], required_dimensions: list[str]
     if not isinstance(assessment, dict):
         raise MeasurementError("evidence.assessment must be a mapping")
     allowed = {
-        "method", "grader_id", "rubric_version", "calibration_set_version", "independent", "answer_hash"
+        "method", "grader_id", "rubric_version", "calibration_set_version", "independent", "answer_hash",
+        "abstain", "review_required", "confidence",
     }
     if set(assessment) - allowed:
         raise MeasurementError("evidence.assessment contains unknown fields")
@@ -354,16 +531,36 @@ def evidence_measurement(payload: dict[str, Any], required_dimensions: list[str]
         raise MeasurementError("Evidence assessment.independent must be boolean")
     if method not in {"anchored_model", "dual_blind"} and calibration is not None and calibration not in record["calibration_sets"]:
         raise MeasurementError("Evidence declares a calibration set not registered for this scorer")
+    if method in {"anchored_model", "dual_blind"} and any(
+        field not in assessment for field in ["abstain", "review_required", "confidence"]
+    ):
+        raise MeasurementError("Model-assessed Evidence requires abstain, review_required, and confidence")
+    abstain = assessment.get("abstain", False)
+    review_required = assessment.get("review_required", False)
+    confidence = assessment.get("confidence", 1.0)
+    if not isinstance(abstain, bool) or not isinstance(review_required, bool):
+        raise MeasurementError("Evidence abstain and review_required must be boolean")
+    if isinstance(confidence, bool) or not isinstance(confidence, (int, float)) or not 0 <= float(confidence) <= 1:
+        raise MeasurementError("Evidence confidence must be between 0 and 1")
     measurement_kind = payload.get("measurement_kind")
     if measurement_kind not in MEASUREMENT_KINDS:
-        raise MeasurementError("Evidence v2 requires a valid measurement_kind")
+        raise MeasurementError("Evidence v3 requires a valid measurement_kind")
     if kind == "review" and measurement_kind != "delayed_retention":
         raise MeasurementError("Review Evidence must use delayed_retention measurement_kind")
     if kind != "review" and measurement_kind == "delayed_retention":
         raise MeasurementError("Delayed-retention Evidence must use kind: review")
     episode_id = payload.get("episode_id")
     if not isinstance(episode_id, str) or not episode_id.strip():
-        raise MeasurementError("Evidence v2 requires a non-empty episode_id")
+        raise MeasurementError("Evidence v3 requires a non-empty episode_id")
+
+    contract_fields = [
+        "task_form", "response_mode", "item_family", "novelty_scope", "item_supported_dimensions", "holdout"
+    ]
+    present_contract_fields = [field for field in contract_fields if field in payload]
+    if present_contract_fields and len(present_contract_fields) != len(contract_fields):
+        missing_contract_fields = [field for field in contract_fields if field not in payload]
+        raise MeasurementError("Evidence task contract is incomplete: " + ", ".join(missing_contract_fields))
+    explicit_contract = len(present_contract_fields) == len(contract_fields)
     if method == "deterministic":
         graded = grade_deterministic(payload.get("grading_input"))
         if graded["grader_id"] != grader_id or graded["rubric_version"] != rubric_version:
@@ -374,51 +571,142 @@ def evidence_measurement(payload: dict[str, Any], required_dimensions: list[str]
         answer_hash = graded["answer_hash"]
         quality_reason = graded["reason"]
         measurement_item_id = graded["item_id"]
+        contract = graded["contract"]
         claimed_item_id = payload.get("measurement_item_id")
         if claimed_item_id is not None and claimed_item_id != measurement_item_id:
             raise MeasurementError("Deterministic grading item and Evidence measurement_item_id disagree")
+        if explicit_contract:
+            claimed = {
+                "task_form": payload["task_form"], "response_mode": payload["response_mode"],
+                "item_family": payload["item_family"], "novelty_scope": payload["novelty_scope"],
+                "supported_dimensions": payload["item_supported_dimensions"],
+                "holdout": payload["holdout"],
+            }
+            if any(claimed[key] != contract[key] for key in claimed):
+                raise MeasurementError("Evidence task contract disagrees with the deterministic item")
     else:
         if "grading_input" in payload:
             raise MeasurementError("External or human Evidence cannot claim a Core deterministic grading input")
-        scores = bounded_scores(payload.get("scores"))
+        raw_scores = bounded_scores(payload.get("scores"))
         answer_hash = assessment.get("answer_hash")
         if not isinstance(answer_hash, str) or not HASH_PATTERN.fullmatch(answer_hash):
             raise MeasurementError("Externally assessed Evidence requires a local sha256 answer_hash")
-        quality_reason = "registered_external_assessment"
         measurement_item_id = payload.get("measurement_item_id")
         if not isinstance(measurement_item_id, str) or not measurement_item_id.strip():
             raise MeasurementError("Externally assessed Evidence requires a non-empty measurement_item_id")
-    missing = [dimension for dimension in required if dimension not in scores]
-    if missing:
-        raise MeasurementError("Evidence is missing required dimensions: " + ", ".join(missing))
+        if explicit_contract:
+            contract = {
+                "task_form": payload["task_form"],
+                "response_mode": payload["response_mode"],
+                "item_family": payload["item_family"],
+                "novelty_scope": payload["novelty_scope"],
+                "supported_dimensions": list(payload["item_supported_dimensions"]),
+                "holdout": copy.deepcopy(payload["holdout"]),
+                "legacy_inferred": False,
+            }
+        else:
+            contract = {
+                "task_form": "multi_part",
+                "response_mode": "structured_work",
+                "item_family": measurement_item_id,
+                "novelty_scope": "cross_domain" if measurement_kind == "far_transfer" else (
+                    "new_context" if measurement_kind in {"near_transfer", "delayed_retention"} else "same_context"
+                ),
+                "supported_dimensions": list(raw_scores),
+                "holdout": {
+                    "visibility": "held_out" if measurement_kind in {"delayed_retention", "near_transfer", "far_transfer"} else "teaching_visible",
+                    "context_isolated": measurement_kind in {"delayed_retention", "near_transfer", "far_transfer"},
+                    "family_id": measurement_item_id,
+                },
+                "legacy_inferred": True,
+            }
+        form = task_form(contract["task_form"])
+        if contract["response_mode"] not in form["response_modes"]:
+            raise MeasurementError("Evidence response_mode is incompatible with task_form")
+        if contract["task_form"] not in record["supported_task_forms"]:
+            raise MeasurementError("Evidence task_form is unsupported by the scorer profile")
+        allowed_dimensions = (
+            set(contract["supported_dimensions"])
+            & set(form["supported_dimensions"])
+            & set(record["supported_dimensions"])
+        )
+        if measurement_kind == "far_transfer" and contract["novelty_scope"] != "cross_domain":
+            raise MeasurementError("Far-transfer Evidence requires novelty_scope cross_domain")
+        if measurement_kind in {"delayed_retention", "near_transfer", "far_transfer"} and (
+            contract["holdout"].get("visibility") != "held_out"
+            or contract["holdout"].get("context_isolated") is not True
+        ):
+            raise MeasurementError("Retention and transfer Evidence must be isolated and held out")
+        if measurement_kind in {"near_transfer", "far_transfer"} and contract["task_form"] not in {
+            "novel_application", "multi_part"
+        }:
+            raise MeasurementError("Transfer Evidence requires novel_application or multi_part")
+        incompatible_scores = set(raw_scores) - allowed_dimensions
+        if explicit_contract and incompatible_scores:
+            raise MeasurementError(
+                "Evidence scores dimensions incompatible with its task form or scorer: "
+                + ", ".join(sorted(incompatible_scores))
+            )
+        scores = {dimension: score for dimension, score in raw_scores.items() if dimension in allowed_dimensions}
+        contract["eligible_dimensions"] = [
+            dimension for dimension in contract["supported_dimensions"] if dimension in allowed_dimensions
+        ]
+        quality_reason = "registered_external_assessment" if explicit_contract else "legacy_contract_inferred"
+
+    scorable = set(contract["eligible_dimensions"])
+    eligible = [dimension for dimension in required if dimension in scorable and dimension in scores]
+    if not eligible:
+        raise MeasurementError("Evidence has no dimension in the Atom/task-form/scorer compatibility intersection")
+    computed_required = {dimension: scores[dimension] for dimension in eligible}
+    claimed_required = payload.get("required_dimension_scores")
+    if claimed_required is not None and bounded_scores(claimed_required, "required_dimension_scores") != computed_required:
+        raise MeasurementError("required_dimension_scores must equal the eligible compatibility intersection")
     calibration_ok = method not in {"anchored_model", "dual_blind"} or calibration in record["calibration_sets"]
     independence_ok = method == "deterministic" or independent is True
     if method == "deterministic" and independent is not True:
         raise MeasurementError("Core deterministic Evidence must declare independent: true")
-    mastery_eligible = bool(record["mastery_eligible"] and calibration_ok and independence_ok)
-    strategy_eligible = bool(record["strategy_eligible"] and calibration_ok and independence_ok)
+    mastery_eligible = bool(
+        record["mastery_eligible"] and calibration_ok and independence_ok
+        and not record["test_only"] and not record["disabled"]
+        and not abstain and not review_required and float(confidence) >= 0.8
+    )
+    strategy_eligible = bool(record["strategy_eligible"] and mastery_eligible)
     quality_tier = record["max_quality_tier"] if mastery_eligible else "C"
-    if not calibration_ok:
+    if record["test_only"]:
+        quality_reason = "test_only_scorer_profile"
+    elif record["disabled"]:
+        quality_reason = "disabled_scorer_profile"
+    elif not calibration_ok:
         quality_reason = "calibration_profile_not_registered"
     elif not independence_ok:
         quality_reason = "assessment_not_independent"
-    claimed_required = payload.get("required_dimension_scores")
-    computed_required = {dimension: scores[dimension] for dimension in required}
-    if claimed_required is not None and bounded_scores(claimed_required, "required_dimension_scores") != computed_required:
-        raise MeasurementError("required_dimension_scores must equal the current Atom's declared required dimensions")
+    elif abstain:
+        quality_reason = "scorer_abstained"
+    elif review_required:
+        quality_reason = "scorer_review_required"
+    elif float(confidence) < 0.8:
+        quality_reason = "scorer_confidence_below_threshold"
+    snapshot = scorer_snapshot(record, rubric_version, calibration_ok)
     return {
-        "evidence_schema_version": 2,
+        "evidence_schema_version": 3,
         "measurement_kind": measurement_kind,
         "measurement_item_id": measurement_item_id,
         "episode_id": episode_id.strip(),
         "assessment": {
-            "method": method,
-            "grader_id": grader_id,
-            "rubric_version": rubric_version,
-            "calibration_set_version": calibration,
-            "independent": independent,
-            "answer_hash": answer_hash,
+            "method": method, "grader_id": grader_id, "rubric_version": rubric_version,
+            "calibration_set_version": calibration, "independent": independent, "answer_hash": answer_hash,
+            "abstain": abstain, "review_required": review_required, "confidence": round(float(confidence), 6),
         },
+        "scorer_profile_hash": digest(snapshot),
+        "scorer_profile_snapshot": snapshot,
+        "task_form": contract["task_form"],
+        "response_mode": contract["response_mode"],
+        "item_family": contract["item_family"],
+        "novelty_scope": contract["novelty_scope"],
+        "holdout": contract["holdout"],
+        "item_supported_dimensions": list(contract["eligible_dimensions"]),
+        "eligible_dimensions": eligible,
+        "ineligible_dimensions": [dimension for dimension in required if dimension not in eligible],
         "scores": scores,
         "required_dimension_scores": computed_required,
         "quality_tier": quality_tier,
@@ -430,7 +718,7 @@ def evidence_measurement(payload: dict[str, Any], required_dimensions: list[str]
 
 
 def migrate_legacy_item(item: dict[str, Any], required_dimensions: list[str]) -> dict[str, Any]:
-    if item.get("evidence_schema_version") == 2:
+    if item.get("evidence_schema_version") in {2, 3}:
         return item
     scores = bounded_scores(item.get("scores"))
     available = [dimension for dimension in required_dimensions if dimension in scores]
@@ -466,9 +754,14 @@ def validate_bank(value: Any) -> dict[str, Any]:
     if not isinstance(value, dict):  # Defensive after schema validation; keeps runtime errors typed.
         raise MeasurementError("Measurement bank must be a mapping")
     identifiers: set[str] = set()
+    expected_item_version = 2 if value["schema_version"] == 2 else None
     counts = {kind: 0 for kind in sorted(MEASUREMENT_KINDS)}
     families: set[str] = set()
     for item in value["items"]:
+        if item.get("item_schema_version") != expected_item_version:
+            raise MeasurementError(
+                f"Bank schema_version {value['schema_version']} and item {item.get('id')} schema version disagree"
+            )
         validate_measurement_item(item)
         if item["id"] in identifiers:
             raise MeasurementError(f"Measurement bank contains duplicate item ID: {item['id']}")
@@ -483,6 +776,153 @@ def validate_bank(value: Any) -> dict[str, Any]:
         "family_count": len(families),
         "measurement_counts": counts,
         "bank_sha256": digest(value),
+    }
+
+
+def mastery_policy(mastery: dict[str, Any]) -> dict[str, Any]:
+    policy = mastery.get("evidence_policy", {})
+    if not isinstance(policy, dict):
+        raise MeasurementError("mastery.evidence_policy must be a mapping")
+    return {
+        "minimum_item_families": int(policy.get("minimum_item_families", 1)),
+        "minimum_task_forms": int(policy.get("minimum_task_forms", 1)),
+        "delayed_check_required": bool(policy.get("delayed_check_required", False)),
+        "transfer_check_required": bool(policy.get("transfer_check_required", False)),
+    }
+
+
+def mastery_feasibility(course: dict[str, Any], atoms: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    """Preflight whether every mastery claim has at least one valid production measurement path."""
+    settings = course.get("settings", {}) if isinstance(course.get("settings"), dict) else {}
+    allowed_ids = settings.get("scorer_profile_ids", DEFAULT_SCORER_PROFILE_IDS)
+    if not isinstance(allowed_ids, list) or not allowed_ids or not all(isinstance(item, str) for item in allowed_ids):
+        raise MeasurementError("course.settings.scorer_profile_ids must be a non-empty string list")
+    registry = scorer_registry()
+    records = {item["id"]: item for item in registry["scorers"]}
+    unknown = [item for item in allowed_ids if item not in records]
+    if unknown:
+        raise MeasurementError("Course references unknown scorer profiles: " + ", ".join(unknown))
+    forms = compatibility_matrix()["task_forms"]
+    reports = []
+    for atom_id, atom in sorted(atoms.items()):
+        mastery = atom.get("mastery", {})
+        required = list(dict.fromkeys(mastery.get("required_dimensions", [])))
+        claim_mode = mastery.get("claim_mode", "mastery")
+        policy = mastery_policy(mastery)
+        paths: dict[str, list[dict[str, Any]]] = {}
+        for dimension in required:
+            candidates = []
+            for grader_id in allowed_ids:
+                record = records[grader_id]
+                if (
+                    record["disabled"] or record["test_only"] or not record["mastery_eligible"]
+                    or dimension not in record["supported_dimensions"]
+                ):
+                    continue
+                for form in forms:
+                    if form["id"] in record["supported_task_forms"] and dimension in form["supported_dimensions"]:
+                        candidates.append(
+                            {
+                                "task_form": form["id"],
+                                "scorer_profile_id": grader_id,
+                                "scorer_profile_hash": record["profile_hash"],
+                                "provider_class": record["provider_class"],
+                            }
+                        )
+            paths[dimension] = candidates
+        missing = [dimension for dimension in required if not paths[dimension]]
+        possible_forms = sorted({path["task_form"] for values in paths.values() for path in values})
+        family_diversity_possible = all(paths[dimension] for dimension in required)
+        diversity_possible = (
+            len(possible_forms) >= policy["minimum_task_forms"] and family_diversity_possible
+        )
+        if claim_mode in {"reading", "exploration"}:
+            status = "exploration_only"
+        elif missing or not diversity_possible:
+            status = "infeasible"
+        else:
+            status = "feasible"
+        reports.append(
+            {
+                "atom_id": atom_id,
+                "claim_mode": claim_mode,
+                "required_dimensions": required,
+                "eligible_paths": paths,
+                "missing_dimensions": missing,
+                "evidence_diversity": {
+                    **policy,
+                    "available_task_forms": possible_forms,
+                    "distinct_item_families_are_authorable": family_diversity_possible,
+                    "possible": diversity_possible,
+                },
+                "status": status,
+                "remediation": (
+                    [] if status in {"feasible", "exploration_only"} else [
+                        "Add a compatible production scorer and task form.",
+                        "Narrow the required mastery dimensions.",
+                        "Or set mastery.claim_mode to reading/exploration without a mastery claim.",
+                    ]
+                ),
+            }
+        )
+    infeasible = [item["atom_id"] for item in reports if item["status"] == "infeasible"]
+    return {
+        "kind": "atomlearn.mastery-feasibility",
+        "schema_version": 1,
+        "matrix_version": compatibility_matrix()["matrix_version"],
+        "registry_version": registry["registry_version"],
+        "course_id": course.get("id"),
+        "allowed_scorer_profile_ids": allowed_ids,
+        "feasible": not infeasible,
+        "infeasible_atom_ids": infeasible,
+        "atoms": reports,
+    }
+
+
+def mastery_evidence_report(atom: dict[str, Any], evidence_items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate assessed, qualified Evidence without letting one item fill incompatible dimensions."""
+    required = list(dict.fromkeys(atom.get("mastery", {}).get("required_dimensions", [])))
+    qualified = [
+        item for item in evidence_items
+        if item.get("atom_id") == atom.get("id")
+        and item.get("result") != "pending"
+        and item.get("mastery_eligible") is True
+    ]
+    best: dict[str, dict[str, Any]] = {}
+    for item in qualified:
+        for dimension, score in item.get("required_dimension_scores", {}).items():
+            if dimension not in required:
+                continue
+            if dimension not in best or float(score) > float(best[dimension]["score"]):
+                best[dimension] = {
+                    "score": float(score),
+                    "evidence_id": item.get("id"),
+                    "task_form": item.get("task_form", "legacy-unbound"),
+                    "item_family": item.get("item_family", item.get("measurement_item_id") or "legacy-unbound"),
+                    "scorer_profile_id": item.get("assessment", {}).get("grader_id"),
+                    "scorer_profile_hash": item.get("scorer_profile_hash"),
+                    "measurement_window": item.get("measurement_kind", "immediate_mastery"),
+                }
+    missing = [dimension for dimension in required if dimension not in best]
+    policy = mastery_policy(atom.get("mastery", {}))
+    families = {item["item_family"] for item in best.values()}
+    forms = {item["task_form"] for item in best.values()}
+    windows = {item["measurement_window"] for item in best.values()}
+    diversity_met = len(families) >= policy["minimum_item_families"] and len(forms) >= policy["minimum_task_forms"]
+    delayed_met = not policy["delayed_check_required"] or "delayed_retention" in windows
+    transfer_met = not policy["transfer_check_required"] or bool(windows & {"near_transfer", "far_transfer"})
+    return {
+        "required_dimensions": required,
+        "dimensions": best,
+        "missing_dimensions": missing,
+        "item_families": sorted(families),
+        "task_forms": sorted(forms),
+        "measurement_windows": sorted(windows),
+        "policy": policy,
+        "diversity_met": diversity_met,
+        "delayed_met": delayed_met,
+        "transfer_met": transfer_met,
+        "complete": not missing and diversity_met and delayed_met and transfer_met,
     }
 
 
@@ -639,6 +1079,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Grade deterministic items and audit Evidence measurement quality")
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("registry", help="Show the versioned scorer registry and eligibility limits")
+    sub.add_parser("task-forms", help="Show the versioned task-form and evidence-dimension compatibility matrix")
+    feasibility = sub.add_parser("feasibility", help="Preflight whether a workspace can validly measure every mastery claim")
+    feasibility.add_argument("workspace", help="Initialized AtomLearn course workspace")
     grade = sub.add_parser("grade", help="Grade one exact-choice or numeric-unit item without persisting the raw response")
     grade.add_argument("--input", required=True, help="JSON/YAML file containing exactly item and response")
     bank = sub.add_parser("validate-bank", help="Validate anchored immediate retention and transfer measurement items")
@@ -658,6 +1101,16 @@ def run(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
     if args.action == "registry":
         result = {"ok": True, **scorer_registry()}
+    elif args.action == "task-forms":
+        result = {"ok": True, **compatibility_matrix()}
+    elif args.action == "feasibility":
+        meta = Path(args.workspace).resolve() / ".atomlearn"
+        course = read_data(meta / "course.yaml")
+        atoms = {
+            item["id"]: item
+            for item in (read_data(path) for path in sorted((meta / "atoms").glob("*.yaml")))
+        }
+        result = {"ok": True, "report": mastery_feasibility(course, atoms)}
     elif args.action == "grade":
         result = {"ok": True, "result": grade_deterministic(read_data(Path(args.input)))}
     elif args.action == "validate-bank":

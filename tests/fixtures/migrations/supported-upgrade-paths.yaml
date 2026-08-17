@@ -1,8 +1,20 @@
 kind: atomlearn.release-upgrade-fixture
 schema_version: 1
 target_core_version: 0.14.2
-schema_edges: []
-schema_edge_reason: All published v2 namespaces still use schema version 1; no data transform is required.
+schema_edges:
+  - namespace: evidence
+    from: 1
+    to: 2
+    strategy: explicit_confirmed_legacy_provenance
+  - namespace: evidence
+    from: 2
+    to: 3
+    strategy: side_by_side_read_without_rewrite
+  - namespace: measurement_bank
+    from: 1
+    to: 2
+    strategy: conservative_in_memory_task_contract
+schema_edge_reason: Evidence v1 can be explicitly migrated to historical v2; Evidence v2 remains immutable and readable beside new v3, while measurement-bank v1 is interpreted conservatively without rewriting source files.
 upgrade_paths:
   - from_core_version: 0.12.0
     expected: compatible_state_copy

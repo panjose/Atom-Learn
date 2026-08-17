@@ -87,7 +87,9 @@ def item(
 
 def test_registry_protocol_and_all_measurement_kinds_are_versioned(tmp_path: Path) -> None:
     registry = output(invoke("measure", "registry"))
-    assert registry["registry_version"] == "scorer-v1"
+    assert registry["registry_version"] == "scorer-v2"
+    assert all(entry["profile_hash"].startswith("sha256:") for entry in registry["scorers"])
+    assert next(entry for entry in registry["scorers"] if entry["id"] == "atomlearn/fixture-anchored-v1")["test_only"] is True
     assert {entry["max_quality_tier"] for entry in registry["scorers"]} >= {"A", "B", "C", "legacy"}
     protocol = output(invoke("measure", "validate-protocol"))
     assert protocol["protocol"]["layers"] == ["engineering", "calibration", "learning_effect"]
@@ -119,6 +121,23 @@ def test_registry_protocol_and_all_measurement_kinds_are_versioned(tmp_path: Pat
     unsafe = invoke("measure", "validate-bank", "--input", write_yaml(tmp_path, "unsafe.yaml", bank), check=False)
     assert unsafe.returncode == 2
     assert "isolated and held out" in unsafe.stderr
+    v2_item = item("item.choice-v2-valid", "immediate_mastery")
+    v2_item.update(
+        {
+            "item_schema_version": 2,
+            "required_dimensions": ["discriminate"],
+            "supported_dimensions": ["discriminate"],
+            "task_form": "single_choice",
+            "response_mode": "select_one",
+            "item_family": "family.choice-v2-valid",
+            "novelty_scope": "same_context",
+            "scoring_profile_id": "atomlearn/exact-choice-v1",
+        }
+    )
+    v2_bank = {**bank, "schema_version": 2, "bank_version": "v2", "items": [v2_item]}
+    assert output(
+        invoke("measure", "validate-bank", "--input", write_yaml(tmp_path, "bank-v2.yaml", v2_bank))
+    )["item_count"] == 1
 
 
 def test_deterministic_graders_hash_but_do_not_echo_raw_answers(tmp_path: Path) -> None:
@@ -126,7 +145,7 @@ def test_deterministic_graders_hash_but_do_not_echo_raw_answers(tmp_path: Path) 
     exact_file = write_yaml(tmp_path, "exact.yaml", exact)
     exact_result = output(invoke("measure", "grade", "--input", exact_file))["result"]
     assert exact_result["passed"] is True
-    assert exact_result["scores"] == {"explain": 1.0, "discriminate": 1.0}
+    assert exact_result["scores"] == {"discriminate": 1.0}
     assert exact_result["answer_hash"].startswith("sha256:")
     assert "  b  " not in invoke("measure", "grade", "--input", exact_file).stdout
 
@@ -260,7 +279,7 @@ def base_evidence() -> dict:
     }
 
 
-def test_persisted_v2_evidence_uses_core_scores_and_omits_raw_response(tmp_path: Path) -> None:
+def test_persisted_v3_evidence_uses_compatible_scores_and_omits_raw_response(tmp_path: Path) -> None:
     workspace, revision = initialized_workspace(tmp_path)
     payload = {
         **base_evidence(),
@@ -305,8 +324,12 @@ def test_persisted_v2_evidence_uses_core_scores_and_omits_raw_response(tmp_path:
     stored_text = (workspace / ".atomlearn" / "evidence.yaml").read_text(encoding="utf-8")
     assert "response: B" not in stored_text
     stored = yaml.safe_load(stored_text)["items"][0]
+    assert stored["evidence_schema_version"] == 3
     assert stored["quality_tier"] == "A"
-    assert stored["required_dimension_scores"] == {"explain": 1.0, "discriminate": 1.0}
+    assert stored["required_dimension_scores"] == {"discriminate": 1.0}
+    assert stored["ineligible_dimensions"] == ["explain"]
+    assert stored["task_form"] == "single_choice"
+    assert stored["scorer_profile_snapshot"]["provider_class"] == "atomlearn_core"
     assert stored["assessment"]["answer_hash"].startswith("sha256:")
     assessed = output(
         invoke(
@@ -319,7 +342,84 @@ def test_persisted_v2_evidence_uses_core_scores_and_omits_raw_response(tmp_path:
             recorded["revision"],
         )
     )
-    assert assessed["result"] == "mastered"
+    assert assessed["result"] == "partial"
+
+    explanation = {
+        **base_evidence(),
+        "measurement_kind": "immediate_mastery",
+        "measurement_item_id": "item.workspace-explanation",
+        "episode_id": "episode-human-1",
+        "task_form": "open_explanation",
+        "response_mode": "free_text",
+        "item_family": "family.workspace-explanation",
+        "novelty_scope": "same_context",
+        "holdout": {"visibility": "teaching_visible", "context_isolated": False, "family_id": "family.workspace-explanation"},
+        "item_supported_dimensions": ["explain"],
+        "assessment": {
+            "method": "human",
+            "grader_id": "atomlearn/human-adjudication-v1",
+            "rubric_version": "human-v1",
+            "calibration_set_version": None,
+            "independent": True,
+            "answer_hash": "sha256:" + "8" * 64,
+        },
+        "scores": {"explain": 1.0},
+    }
+    explanation_recorded = output(
+        invoke(
+            "record-evidence", workspace, "--input", write_yaml(tmp_path, "explanation.yaml", explanation),
+            "--expected-revision", assessed["revision"],
+        )
+    )
+    completed = output(
+        invoke(
+            "assess", workspace, "calculus.limit.approach", "--evidence-id",
+            explanation_recorded["evidence_id"], "--expected-revision", explanation_recorded["revision"],
+        )
+    )
+    assert completed["result"] == "mastered"
+    items = yaml.safe_load((workspace / ".atomlearn" / "evidence.yaml").read_text(encoding="utf-8"))["items"]
+    human = items[1]
+    assert human["scorer_profile_snapshot"]["provider_class"] == "human_reviewer"
+    assert human["scorer_profile_hash"] != stored["scorer_profile_hash"]
+
+
+def test_v2_item_rejects_choice_claiming_explanation_and_feasibility_blocks_impossible_course(tmp_path: Path) -> None:
+    incompatible = item("item.choice-v2", "immediate_mastery")
+    incompatible.update(
+        {
+            "item_schema_version": 2,
+            "task_form": "single_choice",
+            "response_mode": "select_one",
+            "item_family": "family.choice-v2",
+            "novelty_scope": "same_context",
+            "supported_dimensions": ["explain", "discriminate"],
+            "scoring_profile_id": "atomlearn/exact-choice-v1",
+        }
+    )
+    failed = invoke(
+        "measure", "grade", "--input", write_yaml(tmp_path, "incompatible.yaml", {"item": incompatible, "response": "B"}),
+        check=False,
+    )
+    assert failed.returncode == 2
+    assert "incompatible" in failed.stderr
+
+    workspace = tmp_path / "infeasible" / "course"
+    output(invoke("init", workspace, "--course-id", "measurement.infeasible", "--title", "Infeasible"))
+    revision = output(invoke("import-plan", workspace, "--input", PLAN, "--expected-revision", 0))["revision"]
+    course_path = workspace / ".atomlearn" / "course.yaml"
+    course = yaml.safe_load(course_path.read_text(encoding="utf-8"))
+    course["settings"]["scorer_profile_ids"] = ["atomlearn/exact-choice-v1"]
+    course_path.write_text(yaml.safe_dump(course, sort_keys=False), encoding="utf-8")
+    report = output(invoke("measure", "feasibility", workspace))["report"]
+    atom_report = next(item for item in report["atoms"] if item["atom_id"] == "calculus.limit.approach")
+    assert atom_report["status"] == "infeasible"
+    assert atom_report["missing_dimensions"] == ["explain"]
+    blocked = invoke(
+        "activate", workspace, "calculus.limit.approach", "--expected-revision", revision, check=False
+    )
+    assert blocked.returncode == 2
+    assert "no feasible mastery measurement path" in blocked.stderr
 
 
 def test_free_model_scores_cannot_master_and_legacy_migration_preserves_results(tmp_path: Path) -> None:
@@ -336,6 +436,9 @@ def test_free_model_scores_cannot_master_and_legacy_migration_preserves_results(
             "calibration_set_version": None,
             "independent": True,
             "answer_hash": "sha256:" + "9" * 64,
+            "abstain": False,
+            "review_required": False,
+            "confidence": 0.95,
         },
         "scores": {"explain": 1.0, "discriminate": 1.0},
     }
@@ -364,6 +467,41 @@ def test_free_model_scores_cannot_master_and_legacy_migration_preserves_results(
     state = yaml.safe_load((workspace / ".atomlearn" / "evidence.yaml").read_text(encoding="utf-8"))
     assert state["items"][0]["mastery_eligible"] is False
     assert state["items"][0]["eligibility_block"] == "scorer_not_qualified_for_mastery"
+
+    disputed = {
+        **base_evidence(),
+        "measurement_kind": "immediate_mastery",
+        "measurement_item_id": "item.disputed-dual",
+        "episode_id": "episode-disputed-dual",
+        "assessment": {
+            "method": "dual_blind",
+            "grader_id": "atomlearn/dual-blind-v1",
+            "rubric_version": "dual-v1",
+            "calibration_set_version": "calibration-dual-v1",
+            "independent": True,
+            "answer_hash": "sha256:" + "7" * 64,
+            "abstain": False,
+            "review_required": True,
+            "confidence": 0.95,
+        },
+        "scores": {"explain": 1.0, "discriminate": 1.0},
+    }
+    disputed_recorded = output(
+        invoke(
+            "record-evidence", workspace, "--input", write_yaml(tmp_path, "disputed.yaml", disputed),
+            "--expected-revision", assessed["revision"],
+        )
+    )
+    disputed_assessed = output(
+        invoke(
+            "assess", workspace, "calculus.limit.approach", "--evidence-id",
+            disputed_recorded["evidence_id"], "--expected-revision", disputed_recorded["revision"],
+        )
+    )
+    assert disputed_assessed["result"] == "partial"
+    disputed_stored = yaml.safe_load((workspace / ".atomlearn" / "evidence.yaml").read_text(encoding="utf-8"))["items"][1]
+    assert disputed_stored["quality_reason"] == "scorer_review_required"
+    assert disputed_stored["mastery_eligible"] is False
 
     legacy_workspace, legacy_revision = initialized_workspace(tmp_path / "legacy")
     evidence_path = legacy_workspace / ".atomlearn" / "evidence.yaml"

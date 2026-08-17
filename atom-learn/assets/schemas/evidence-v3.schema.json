@@ -1,0 +1,78 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/evidence-v3.schema.json",
+  "title": "AtomLearn immutable task-compatible Evidence v3 item",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id", "atom_id", "kind", "prompt", "response_summary", "feedback", "rationale", "result",
+    "created_at", "evidence_schema_version", "measurement_kind", "measurement_item_id", "episode_id",
+    "assessment", "scorer_profile_hash", "scorer_profile_snapshot", "task_form", "response_mode",
+    "item_family", "novelty_scope", "holdout", "item_supported_dimensions", "eligible_dimensions",
+    "ineligible_dimensions", "scores", "required_dimension_scores", "quality_tier", "quality_reason",
+    "mastery_eligible", "strategy_eligible", "provenance_incomplete"
+  ],
+  "properties": {
+    "id": {"type": "string", "pattern": "^ev-[A-Za-z0-9._:-]{1,96}$"},
+    "atom_id": {"type": "string", "minLength": 1, "maxLength": 160},
+    "kind": {"enum": ["mastery_check", "review", "diagnostic"]},
+    "prompt": {"type": "string", "minLength": 1, "maxLength": 20000},
+    "response_summary": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "feedback": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "rationale": {"type": "string", "minLength": 1, "maxLength": 10000},
+    "result": {"enum": ["pending", "mastered", "partial", "not_mastered"]},
+    "created_at": {"type": "string", "format": "date-time"},
+    "assessed_at": {"type": "string", "format": "date-time"},
+    "review_event_id": {"type": "string", "pattern": "^rve-[0-9]{6,}$"},
+    "eligibility_block": {"enum": ["scorer_not_qualified_for_mastery", "mastery_requirements_incomplete", "evidence_diversity_not_met"]},
+    "evidence_schema_version": {"const": 3},
+    "measurement_kind": {"enum": ["immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"]},
+    "measurement_item_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "episode_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "assessment": {
+      "type": "object", "additionalProperties": false,
+      "required": ["method", "grader_id", "rubric_version", "calibration_set_version", "independent", "answer_hash", "abstain", "review_required", "confidence"],
+      "properties": {
+        "method": {"enum": ["deterministic", "anchored_model", "dual_blind", "human"]},
+        "grader_id": {"type": "string", "minLength": 3, "maxLength": 128},
+        "rubric_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "calibration_set_version": {"type": ["string", "null"], "minLength": 1, "maxLength": 96},
+        "independent": {"type": "boolean"},
+        "answer_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "abstain": {"type": "boolean"}, "review_required": {"type": "boolean"},
+        "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "scorer_profile_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "scorer_profile_snapshot": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "registry_profile_hash", "profile_version", "method", "provider_class", "rubric_version", "supported_task_forms", "supported_dimensions", "calibration_qualified", "minimum_confidence", "mastery_eligible", "strategy_eligible", "test_only", "disabled", "max_quality_tier"],
+      "properties": {
+        "id": {"type": "string"}, "registry_profile_hash": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}, "profile_version": {"type": "string"}, "method": {"type": "string"},
+        "provider_class": {"type": "string"}, "rubric_version": {"type": "string"},
+        "supported_task_forms": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "supported_dimensions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+        "calibration_qualified": {"type": "boolean"}, "minimum_confidence": {"type": "number", "minimum": 0, "maximum": 1}, "mastery_eligible": {"type": "boolean"}, "strategy_eligible": {"type": "boolean"},
+        "test_only": {"type": "boolean"}, "disabled": {"type": "boolean"},
+        "max_quality_tier": {"enum": ["A", "B", "C", "legacy"]}
+      }
+    },
+    "task_form": {"type": "string"}, "response_mode": {"type": "string"},
+    "item_family": {"type": "string"}, "novelty_scope": {"enum": ["same_context", "new_context", "cross_domain"]},
+    "holdout": {"type": "object", "additionalProperties": false, "required": ["visibility", "context_isolated", "family_id"], "properties": {"visibility": {"enum": ["teaching_visible", "held_out"]}, "context_isolated": {"type": "boolean"}, "family_id": {"type": "string"}}},
+    "item_supported_dimensions": {"$ref": "#/$defs/dimensionList"},
+    "eligible_dimensions": {"$ref": "#/$defs/dimensionList"},
+    "ineligible_dimensions": {"type": "array", "uniqueItems": true, "items": {"type": "string"}},
+    "scores": {"$ref": "#/$defs/scores"},
+    "required_dimension_scores": {"$ref": "#/$defs/scores"},
+    "quality_tier": {"enum": ["A", "B", "C"]},
+    "quality_reason": {"type": "string", "minLength": 3, "maxLength": 256},
+    "mastery_eligible": {"type": "boolean"}, "strategy_eligible": {"type": "boolean"},
+    "provenance_incomplete": {"const": false},
+    "review_observation": {"type": "object", "additionalProperties": false, "required": ["retrieval_mode", "hint_count", "delayed", "response_time_seconds"], "properties": {"retrieval_mode": {"enum": ["active_recall", "recognition", "passive_review"]}, "hint_count": {"type": "integer", "minimum": 0, "maximum": 20}, "delayed": {"type": "boolean"}, "response_time_seconds": {"type": "number", "minimum": 0, "maximum": 7200}}}
+  },
+  "$defs": {
+    "dimensionList": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "string", "pattern": "^[a-z][a-z0-9_-]{1,63}$"}},
+    "scores": {"type": "object", "minProperties": 1, "propertyNames": {"pattern": "^[a-z][a-z0-9_-]{1,63}$"}, "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}}
+  }
+}

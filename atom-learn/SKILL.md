@@ -238,7 +238,7 @@ Use session adaptation only for presentation choices. Never let inferred prefere
 2. Require the separate `strategy enable-experiments` opt-in. Start every candidate in shadow mode, run `strategy replay-shadow`, and inspect the result before live assignment.
 3. At the start of each matching Active Atom episode, call `strategy exposure` with a stable opaque episode key. Follow its chosen instruction for that episode; never switch arms mid-episode.
 4. Respect current-turn and stored explicit overrides. `shadow` and `overridden` exposures do not enter comparisons.
-5. Record and assess qualified Evidence v2 first, then link it once with `strategy record-outcome`. Never link legacy, uncalibrated, non-independent, or unexposed historical Evidence.
+5. Record and assess qualified Evidence v3 first, then link it once with `strategy record-outcome`. Never link legacy, task-incompatible, uncalibrated, non-independent, or unexposed historical Evidence.
 6. Use `strategy monitor` and accept long-lived `monitoring` when intervals are wide or delayed reviews are insufficient. Promote only when every primary delayed/transfer learning interval clears the minimum effect and all guardrail intervals are safe; UX and process signals never promote alone.
 7. For a real learning-effect study, require separate study consent and read [references/LEARNING_EFFECT_STUDY.md](references/LEARNING_EFFECT_STUDY.md). Never put raw answers or content text into `study` records, and never infer research consent from learning participation.
 
@@ -298,13 +298,15 @@ Do not teach a future Atom to be conversationally helpful. Record it and return 
 ### Check mastery and advance
 
 1. Read [references/MASTERY.md](references/MASTERY.md) and [references/MEASUREMENT.md](references/MEASUREMENT.md) before designing or grading a check.
-2. Ask for observable performance; never use "Do you understand?" as the only check.
-3. Choose an immediate, delayed-retention, near-transfer, or far-transfer item. Save its item/episode identity, scorer/rubric/calibration provenance, independence, local answer hash, response summary, dimension scores, feedback, and rationale with `record-evidence`. Prefer Core deterministic scoring when its answer contract fits.
-4. Run `assess`. Let the CLI derive `mastered`, `partial`, or `not_mastered` from the Atom rubric.
-5. If not mastered, target the weakest dimension and keep the Atom active.
-6. If mastered, render progress, use `suggest-next`, and activate a successor only when the learner asks to continue or the active learning request clearly authorizes continuation.
+2. Run `measure feasibility <workspace>` before the first activation and after changing mastery dimensions or scorer availability. If a mastery Atom is infeasible, add a valid task/scorer, narrow the claim, or explicitly mark it reading/exploration; never weaken the gate silently.
+3. Ask for observable performance; never use "Do you understand?" as the only check.
+4. Choose a task form that can actually establish the requested dimension. A choice cannot prove explanation/derivation/transfer, and a numeric result cannot prove explanation. Declare response mode, item family, novelty scope, supported dimensions, and scoring profile.
+5. Choose an immediate, delayed-retention, near-transfer, or far-transfer window. Save item/episode identity, the task contract, scorer/rubric/calibration provenance, independence, local answer hash, response summary, scores, feedback, and rationale with `record-evidence`. Prefer Core deterministic scoring only when its narrow answer contract fits.
+6. Run `assess`. Let the CLI aggregate only the Atom/item/task/scorer intersection across qualified Evidence and enforce family/form/delayed/transfer policy.
+7. If not mastered, target the missing or weakest dimension and keep the Atom active. Disagreement, abstention, or low confidence must stay unresolved or go to the declared review path.
+8. If mastered, render progress, use `suggest-next`, and activate a successor only when the learner asks to continue or the active learning request clearly authorizes continuation.
 
-Never mark an Atom mastered without persisted qualified Evidence. Free model scores, unregistered or uncalibrated graders, self-report, and non-independent review may guide feedback but cannot independently trigger mastery or strategy promotion. A provisional skip is a learner-directed assumption with its own status, not Evidence. Never record Evidence for a non-Active Atom; activate the intended Atom first and let the CLI reject mismatched or locked targets.
+Never mark an Atom mastered without persisted qualified and task-compatible Evidence. Never copy one choice/numeric score across unrelated dimensions, and never let one response satisfy a multi-family policy. Free model scores, test-only fixtures, unregistered or uncalibrated graders, self-report, and non-independent review may guide feedback but cannot independently trigger mastery or strategy promotion. A provisional skip is a learner-directed assumption with its own status, not Evidence. Never record Evidence for a non-Active Atom; activate the intended Atom first and let the CLI reject mismatched, locked, or infeasible targets.
 
 ### Handle prerequisite backtracking
 
@@ -367,7 +369,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/QUESTION_ROUTING.md](references/QUESTION_ROUTING.md) when a learner asks a side question or reveals a prerequisite gap.
 - Read [references/CONCEPT_ROUTING.md](references/CONCEPT_ROUTING.md) when an explanation exposes an unfamiliar related concept and the learner needs to know whether it belongs now, before, later, on an optional branch, or outside the goal.
 - Read [references/MASTERY.md](references/MASTERY.md) when creating checks, grading Evidence, or scheduling remediation.
-- Read [references/MEASUREMENT.md](references/MEASUREMENT.md) when selecting a scorer, creating held-out retention or transfer items, calibrating open-response grading, migrating legacy Evidence, or interpreting measurement quality.
+- Read [references/MEASUREMENT.md](references/MEASUREMENT.md) when selecting a task form/scorer, running mastery feasibility, creating held-out retention or transfer items, calibrating open-response grading, migrating legacy Evidence, or interpreting measurement quality.
 - Read [references/ADAPTIVE_REVIEW.md](references/ADAPTIVE_REVIEW.md) before normalizing review observations, changing fixed/shadow/active scheduling, interpreting Atom memory, building a daily queue, or running a pilot replay.
 - Read [references/EVOLUTION.md](references/EVOLUTION.md) for the end-to-end evolution workflow.
 - Read [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md) before approval, application, or rollback.

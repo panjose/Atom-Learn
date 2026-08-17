@@ -16,7 +16,12 @@
 - `apply`: use it in a representative problem or procedure.
 - `discriminate`: identify boundaries, counterexamples, or common misconceptions.
 - `transfer`: use it in a modestly changed context.
-- `teach_back`: organize an explanation for another beginner and expose missing links.
+- `connect`: relate the Atom to prerequisite, successor, or sibling concepts without substituting those concepts for the current objective.
+- `compute`: produce a correct value under a declared numeric/unit contract.
+- `derive`: produce and justify the required intermediate steps.
+- `critique` / `evaluate`: assess a supplied claim, method, or artifact against declared criteria.
+
+`teach_back` is a task form that may measure `explain` and `connect`; it is not automatically a separate score dimension.
 
 Select dimensions that match the Atom objective. Do not force computation onto a conceptual distinction or accept verbal fluency for a procedural skill.
 
@@ -36,7 +41,7 @@ After all children are mastered, check the parent in `integrating` phase with a 
 
 ## Scoring
 
-Use [MEASUREMENT.md](MEASUREMENT.md) for Evidence v2 scorer provenance, item banks, held-out retention/transfer checks, calibration, eligibility, and legacy migration. The numeric rubric below defines educational meaning; it does not by itself qualify whoever produced the score.
+Use [MEASUREMENT.md](MEASUREMENT.md) for Evidence v3 task-form compatibility, immutable scorer provenance, feasibility preflight, item banks, held-out retention/transfer checks, calibration, eligibility, and legacy migration. The numeric rubric below defines educational meaning; it does not by itself qualify the task or scorer.
 
 Score each required dimension from 0.0 to 1.0:
 
@@ -46,9 +51,11 @@ Score each required dimension from 0.0 to 1.0:
 - `0.8–0.89`: correct and independently usable;
 - `0.9–1.0`: precise, robust, and transferable for the requested level.
 
-The CLI marks `mastered` only when the average meets `pass_threshold` and every required dimension meets `minimum_dimension_score`. It marks `partial` when the average is at least 0.5, otherwise `not_mastered`.
+The CLI aggregates compatible, qualified Evidence across items. It marks `mastered` only when every required dimension has an eligible score, the aggregate average meets `pass_threshold`, every dimension meets `minimum_dimension_score`, and the Atom's evidence-diversity/delayed/transfer policy passes. A single item may cover only a subset. The Atom remains Active while any required path is missing.
 
-Save the prompt, response summary, scores, feedback, rationale, measurement kind, item and episode IDs, registered grader/rubric/calibration provenance, independence claim, and a local answer hash. Core derives `required_dimension_scores`; never ask the caller to override them. Do not save a fabricated verbatim learner answer.
+Save the prompt, response summary, scores, feedback, rationale, measurement kind, item and episode IDs, task form, response mode, item family, novelty scope, supported dimensions, registered grader/rubric/calibration provenance, independence claim, and a local answer hash. Core derives `required_dimension_scores` from the Atom/item/task/scorer intersection; never ask the caller to override them. Do not save a fabricated verbatim learner answer.
+
+Run `atomlearn measure feasibility <workspace>` before activation when mastery dimensions or scorer availability change. For higher-risk claims, set at least two item families/forms and require delayed or held-out transfer Evidence as appropriate. If no valid path exists, narrow the claim or label the Atom reading/exploration instead of weakening the gate.
 
 Free model scores and other unregistered, uncalibrated, or non-independent graders may guide feedback but cannot independently master an Atom. Prefer a Core deterministic item when the answer contract is exact, otherwise use a registered calibrated, dual-independent, or human scorer. Raw responses stay local and are not copied into canonical Evidence.
 

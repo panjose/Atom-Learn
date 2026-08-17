@@ -11,6 +11,11 @@ settings:
   review_intervals_days: [1, 3, 7, 30]
   mastery_default_threshold: 0.8
   skip_policy: diagnostic_first
+  scorer_profile_ids:
+    - atomlearn/exact-choice-v1
+    - atomlearn/numeric-unit-v1
+    - atomlearn/dual-blind-v1
+    - atomlearn/human-adjudication-v1
 sources: []
 created_at: ""
 updated_at: ""
