@@ -369,7 +369,7 @@ def _capability_smoke(
     environment: dict[str, str],
 ) -> None:
     required = set(manifest["capabilities"]["required_smoke"])
-    supported = {"core", "bridge", "documents", "rag", "exam", "research"}
+    supported = {"core", "bridge", "documents", "rag", "exam", "research", "review"}
     unknown = sorted(required - supported)
     if unknown:
         raise ManagerError("Release requires unknown smoke capabilities: " + ", ".join(unknown))
@@ -382,12 +382,23 @@ def _capability_smoke(
     scratch = transaction_root / "capability-smoke"
     scratch.mkdir(parents=True, exist_ok=False)
     workspace = scratch / "workspace"
-    if {"documents", "rag", "exam", "research"} & required:
+    if {"documents", "rag", "exam", "research", "review"} & required:
         _smoke_command(
             prefix,
             ["init", str(workspace), "--course-id", "release.smoke", "--title", "Release smoke", "--goal", "Verify signed runtime"],
             environment,
         )
+    if "review" in required:
+        benchmark = _smoke_command(
+            prefix,
+            ["review", "benchmark", str(workspace), "--expected-revision", "0"],
+            environment,
+        )
+        if benchmark.get("status") != "passed":
+            raise ManagerError("Review smoke did not pass the signed memory-adapter benchmark")
+        review_status = _smoke_command(prefix, ["review", "status", str(workspace)], environment)
+        if review_status.get("benchmark_current") is not True or review_status.get("policy", {}).get("mode") != "fixed":
+            raise ManagerError("Review smoke did not preserve the fixed default and current benchmark gate")
     if {"documents", "rag"} & required:
         sources_dir = scratch / "sources"
         sources_dir.mkdir(parents=True, exist_ok=False)

@@ -46,7 +46,7 @@ jobs:
       - name: Run complete integration fault privacy replay and compatibility tests
         run: python -m pytest -m integration
       - name: Verify installed command surfaces
-        run: atomlearn --help && atomlearn version && atomlearn-manager --help && atomlearn-core --help && atomlearn-release --help && atomlearn-runtime-bundle --help
+        run: atomlearn --help && atomlearn version && atomlearn review --help && atomlearn-manager --help && atomlearn-core --help && atomlearn-release --help && atomlearn-runtime-bundle --help
       - name: Build complete offline runtime wheelhouse and deterministic bundle
         shell: pwsh
         run: |

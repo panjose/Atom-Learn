@@ -1,0 +1,24 @@
+profile_id: memory-core-v1
+model_version: atomlearn-memory-v1
+kind: deterministic-adapter-gate
+desired_retention: 0.90
+description: >-
+  Synthetic boundary and calibration fixtures for the Atom-level DSR adapter.
+  This gate verifies implementation behavior; it is not evidence of learning efficacy.
+thresholds:
+  brier_score_max: 0.40
+  successful_interval_monotonicity_min: 0.75
+  failure_shortening_rate_min: 1.0
+cases:
+  - atom_id: benchmark.definition
+    events:
+      - {at: '2026-01-01T00:00:00+00:00', correctness: 1.0, hint_count: 0, recalled: true}
+      - {at: '2026-01-04T00:00:00+00:00', correctness: 0.95, hint_count: 0, recalled: true}
+      - {at: '2026-01-10T00:00:00+00:00', correctness: 0.90, hint_count: 1, recalled: true}
+      - {at: '2026-01-24T00:00:00+00:00', correctness: 0.20, hint_count: 2, recalled: false}
+  - atom_id: benchmark.transfer
+    events:
+      - {at: '2026-02-01T00:00:00+00:00', correctness: 0.85, hint_count: 1, recalled: true}
+      - {at: '2026-02-03T00:00:00+00:00', correctness: 0.85, hint_count: 0, recalled: true}
+      - {at: '2026-02-08T00:00:00+00:00', correctness: 0.80, hint_count: 1, recalled: true}
+      - {at: '2026-02-25T00:00:00+00:00', correctness: 0.10, hint_count: 3, recalled: false}

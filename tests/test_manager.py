@@ -27,7 +27,7 @@ from atomlearn_manager.runtime import build_runtime_bundle, platform_identity
 from atomlearn_manager.manifest import key_fingerprint
 
 
-def test_release_capability_smoke_exercises_real_document_rag_exam_and_research_paths(tmp_path: Path) -> None:
+def test_release_capability_smoke_exercises_real_document_rag_exam_research_and_review_paths(tmp_path: Path) -> None:
     from atomlearn_manager.common import sha256_bytes
     from atomlearn_manager.manager import _capability_smoke
 
@@ -39,7 +39,7 @@ def test_release_capability_smoke_exercises_real_document_rag_exam_and_research_
     transaction_root = tmp_path / "transaction"
     transaction_root.mkdir()
     manifest = {
-        "capabilities": {"required_smoke": ["core", "bridge", "documents", "rag", "exam", "research"]},
+        "capabilities": {"required_smoke": ["core", "bridge", "documents", "rag", "exam", "research", "review"]},
         "smoke_fixture_sha256": sha256_bytes(fixture_source.read_bytes()),
     }
     environment = {**os.environ, "PYTHONUTF8": "1", "PYTHONDONTWRITEBYTECODE": "1"}
@@ -55,6 +55,9 @@ def test_release_capability_smoke_exercises_real_document_rag_exam_and_research_
     assert (workspace / ".atomlearn" / "rag" / "state.yaml").is_file()
     assert (workspace / ".atomlearn" / "exam" / "state.yaml").is_file()
     assert (workspace / ".atomlearn" / "research" / "state.yaml").is_file()
+    review_state = yaml.safe_load((workspace / ".atomlearn" / "reviews.yaml").read_text(encoding="utf-8"))
+    assert review_state["benchmark"]["status"] == "passed"
+    assert review_state["policy"]["mode"] == "fixed"
 
 
 def environment(*, fail_after: str | None = None, fake_free: int | None = None) -> dict[str, str]:
@@ -352,6 +355,26 @@ def runtime_matrix(tmp_path: Path, source: Path, version: str) -> list[Path]:
             )
             paths.append(Path(built["path"]))
     return paths
+
+
+def test_release_builder_rejects_review_runtime_without_packaged_assets(tmp_path: Path) -> None:
+    from atomlearn_manager.builder import _require_capability_runtime_payload
+    from atomlearn_manager.common import ManagerError
+
+    version = "0.14.0"
+    source = synthetic_source(tmp_path, version)
+    wheel_dir = synthetic_core_wheel(tmp_path, source, version)
+    built = build_runtime_bundle(
+        wheel_dir,
+        tmp_path / "review-runtime",
+        core_version=version,
+        system="windows",
+        architecture="amd64",
+        python_minor="3.13",
+    )
+    with pytest.raises(ManagerError, match="omits payload required by review smoke"):
+        _require_capability_runtime_payload(Path(built["path"]), ["core", "review"])
+    _require_capability_runtime_payload(Path(built["path"]), ["core", "bridge"])
 
 
 def build(

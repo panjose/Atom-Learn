@@ -27,6 +27,7 @@ MODULES = [
     "learning_study",
     "capsule",
     "measurement",
+    "review_scheduler",
 ]
 
 
@@ -69,11 +70,23 @@ def test_short_console_entry_point_and_supported_python_range_are_declared() -> 
     assert 'requires-python = ">=3.10"' in project
 
 
+def test_runtime_wheel_declares_read_only_core_assets() -> None:
+    project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    assert 'atomlearn_assets = "atom-learn"' in project
+    assert 'packages = ["atomlearn_assets"]' in project
+    assert 'include-package-data = false' in project
+    assert '"assets/benchmarks/*.yaml"' in project
+    assert '"assets/schemas/*.json"' in project
+    assert '"assets/templates/*.yaml"' in project
+    assert '"core_paths"' in project
+    assert (ROOT / "atom-learn" / "__init__.py").is_file()
+
+
 def test_package_version_matches_core_manifest() -> None:
     project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     manifest = (ROOT / "atom-learn" / "assets" / "core-manifest.yaml").read_text(encoding="utf-8")
-    assert 'version = "0.13.0"' in project
-    assert "core_version: 0.13.0" in manifest
+    assert 'version = "0.14.0"' in project
+    assert "core_version: 0.14.0" in manifest
 
 
 def test_core_renderer_produces_chinese_view_labels() -> None:

@@ -12,10 +12,11 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from atomlearn import iso
+from core_paths import CORE_ROOT
 
 
 EXTRACTOR_VERSION = "document-ir-v1"
-SCHEMA_PATH = Path(__file__).resolve().parents[1] / "assets" / "schemas" / "document-ir.schema.json"
+SCHEMA_PATH = CORE_ROOT / "assets" / "schemas" / "document-ir.schema.json"
 
 
 class DocumentIRError(RuntimeError):

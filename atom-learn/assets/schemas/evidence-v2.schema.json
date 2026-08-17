@@ -22,6 +22,7 @@
     "result": {"enum": ["pending", "mastered", "partial", "not_mastered"]},
     "created_at": {"type": "string", "format": "date-time"},
     "assessed_at": {"type": "string", "format": "date-time"},
+    "review_event_id": {"type": "string", "pattern": "^rve-[0-9]{6,}$"},
     "eligibility_block": {"const": "scorer_not_qualified_for_mastery"},
     "evidence_schema_version": {"const": 2},
     "measurement_kind": {"enum": ["immediate_mastery", "delayed_retention", "near_transfer", "far_transfer"]},
@@ -51,7 +52,18 @@
     "quality_reason": {"type": "string", "minLength": 3, "maxLength": 256},
     "mastery_eligible": {"type": "boolean"},
     "strategy_eligible": {"type": "boolean"},
-    "provenance_incomplete": {"type": "boolean"}
+    "provenance_incomplete": {"type": "boolean"},
+    "review_observation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["retrieval_mode", "hint_count", "delayed", "response_time_seconds"],
+      "properties": {
+        "retrieval_mode": {"enum": ["active_recall", "recognition", "passive_review"]},
+        "hint_count": {"type": "integer", "minimum": 0, "maximum": 20},
+        "delayed": {"type": "boolean"},
+        "response_time_seconds": {"type": "number", "minimum": 0, "maximum": 7200}
+      }
+    }
   },
   "$defs": {
     "scores": {

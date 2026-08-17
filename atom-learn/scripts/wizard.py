@@ -41,7 +41,9 @@ class WizardError(RuntimeError):
 
 
 def asset_path(*parts: str) -> Path:
-    return Path(__file__).resolve().parents[1].joinpath("assets", *parts)
+    from core_paths import CORE_ROOT
+
+    return CORE_ROOT.joinpath("assets", *parts)
 
 
 def validate_payload(payload: Any) -> dict[str, Any]:

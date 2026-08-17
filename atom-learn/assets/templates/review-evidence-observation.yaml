@@ -1,0 +1,6 @@
+# Merge this block into a kind: review Evidence payload.
+review_observation:
+  retrieval_mode: active_recall
+  hint_count: 0
+  delayed: true
+response_time_seconds: 90

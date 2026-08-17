@@ -60,6 +60,8 @@ Target the lowest-scoring dimension. Rebuild causal links for weak explanation, 
 
 ## Spaced review
 
-Use the course's configured intervals, defaulting to 1, 3, 7, and 30 days. On a successful review, schedule the next interval. On failure, keep historical Evidence, lower derived confidence, and create targeted remediation before rescheduling.
+Use the course's configured intervals, defaulting to 1, 3, 7, and 30 days. This fixed policy remains the default. On a successful review, schedule the next interval. On failure, keep historical Evidence, lower derived confidence, and create targeted remediation before rescheduling.
 
 Prefer due reviews before new material unless the learner has explicitly chosen a different session goal.
+
+For per-Atom memory, shadow suggestions, gated active scheduling, normalized active-retrieval observations, exam target windows, and the unified capacity-aware queue, read [ADAPTIVE_REVIEW.md](ADAPTIVE_REVIEW.md). Passive reading, recognition, self-report, satisfaction, chat duration, and response speed alone never update memory. A policy change does not rewrite pending or historical review dates.

@@ -38,7 +38,9 @@ class IntakeError(RuntimeError):
 
 
 def template_dir() -> Path:
-    return Path(__file__).resolve().parents[1] / "assets" / "templates"
+    from core_paths import CORE_ROOT
+
+    return CORE_ROOT / "assets" / "templates"
 
 
 def text(value: Any, label: str, *, allow_empty: bool = False, limit: int = 4000) -> str:

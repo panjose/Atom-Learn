@@ -1,7 +1,7 @@
 kind: atomlearn.capability-ledger
 schema_version: 1
-core_version: 0.13.0
-required_smoke: [core, bridge, documents, rag, exam, research]
+core_version: 0.14.0
+required_smoke: [core, bridge, documents, rag, exam, research, review]
 capabilities:
   - id: learning.atomic_state_machine
     title: Single-Active-Atom learning state machine and mastery Evidence guards
@@ -396,13 +396,43 @@ capabilities:
       - The stable CI runtime matrix currently targets amd64 Windows and Linux; the bundle schema also models arm64 for future release gates.
 
   - id: review.adaptive_memory_v1
-    title: Per-Atom adaptive memory state and workload-aware daily scheduling
-    status: planned
-    default_mode: unavailable
-    public_claim: false
-    interfaces: []
-    implementation: []
-    verification: []
-    documentation: [docs/V0_14_REMEDIATION_DESIGN.md]
+    title: Qualified per-Atom memory shadow/active review and workload-aware daily queue
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    interfaces:
+      - review status
+      - review configure
+      - review benchmark
+      - review queue
+      - review pilot
+    implementation:
+      - path: atom-learn/scripts/review_scheduler.py
+        symbol: "def record_review_event"
+      - path: atom-learn/scripts/review_scheduler.py
+        symbol: "def apply_qualified_event"
+      - path: atom-learn/scripts/review_scheduler.py
+        symbol: "def daily_queue"
+      - path: atom-learn/scripts/core_paths.py
+        symbol: "def resolve_core_root"
+      - path: manager/atomlearn_manager/builder.py
+        symbol: "def _require_capability_runtime_payload"
+    verification:
+      - path: tests/test_review_scheduler.py
+        symbol: "test_shadow_review_updates_memory_without_replacing_fixed_due_date"
+      - path: tests/test_review_scheduler.py
+        symbol: "test_passive_review_is_audited_but_does_not_create_memory"
+      - path: tests/test_review_scheduler.py
+        symbol: "test_active_mode_requires_benchmark_and_opt_in"
+      - path: tests/test_manager.py
+        symbol: "test_release_builder_rejects_review_runtime_without_packaged_assets"
+    documentation:
+      - README.md
+      - README.zh-CN.md
+      - atom-learn/SKILL.md
+      - atom-learn/references/ADAPTIVE_REVIEW.md
+      - docs/V0_14_PHASE7_IMPLEMENTATION.md
     limitations:
-      - This is a v0.14 implementation target, not a current capability.
+      - atomlearn-memory-v1 is a deterministic DSR/FSRS-like adapter with verified defaults, not a claim to implement or outperform a particular FSRS release.
+      - The bundled benchmark is an engineering gate; workspace pilot replay remains observational and cannot establish a causal learning benefit.
+      - Fixed scheduling remains the default and active scheduling requires a current passing benchmark plus explicit learner opt-in.

@@ -1,7 +1,7 @@
 kind: atomlearn.core-manifest
 manifest_version: 1
 skill_name: atom-learn
-core_version: 0.13.0
+core_version: 0.14.0
 skill_protocol_version: 1
 capability_ledger: atom-learn/assets/capabilities.yaml
 smoke_fixtures: atom-learn/assets/smoke-fixtures.json

@@ -343,7 +343,11 @@ class Workspace:
         }
         workspace.questions = {"schema_version": SCHEMA_VERSION, "revision": 0, "items": []}
         workspace.evidence = {"schema_version": SCHEMA_VERSION, "revision": 0, "items": []}
-        workspace.reviews = {"schema_version": SCHEMA_VERSION, "revision": 0, "items": []}
+        from review_scheduler import initialize_review_state
+
+        workspace.reviews = initialize_review_state(
+            {"schema_version": SCHEMA_VERSION, "revision": 0, "items": []}
+        )
         workspace._write_all()
         atomic_text(workspace.meta / "events.ndjson", "")
         from evolution import initialize_evolution
@@ -361,6 +365,9 @@ class Workspace:
         self.questions = read_data(self.meta / "questions.yaml")
         self.evidence = read_data(self.meta / "evidence.yaml")
         self.reviews = read_data(self.meta / "reviews.yaml")
+        from review_scheduler import initialize_review_state
+
+        initialize_review_state(self.reviews)
         self.atoms = {}
         if not self.atom_dir.is_dir():
             raise AtomLearnError(f"Required directory not found: {self.atom_dir}")
@@ -523,7 +530,10 @@ class Workspace:
                 errors.append(str(exc))
 
         active_status_ids: list[str] = []
-        evidence_ids = {item.get("id") for item in self.evidence.get("items", []) if isinstance(item, dict)}
+        evidence_by_id = {
+            item.get("id"): item for item in self.evidence.get("items", []) if isinstance(item, dict)
+        }
+        evidence_ids = set(evidence_by_id)
         for atom_id, atom in self.atoms.items():
             try:
                 require_id(atom_id, "atom key")
@@ -1034,7 +1044,10 @@ class Workspace:
     def _validate_reviews(self, errors: list[str]) -> None:
         ids: set[str] = set()
         pending_by_atom: dict[str, int] = defaultdict(int)
-        evidence_ids = {item.get("id") for item in self.evidence.get("items", []) if isinstance(item, dict)}
+        evidence_by_id = {
+            item.get("id"): item for item in self.evidence.get("items", []) if isinstance(item, dict)
+        }
+        evidence_ids = set(evidence_by_id)
         for item in self.reviews.get("items", []):
             if not isinstance(item, dict):
                 errors.append("reviews.items contains a non-mapping")
@@ -1061,6 +1074,9 @@ class Workspace:
         for atom_id, atom in self.atoms.items():
             if atom.get("status") == "review_due" and pending_by_atom.get(atom_id, 0) != 1:
                 errors.append(f"Review-due Atom {atom_id} must have exactly one pending review")
+        from review_scheduler import validate_state
+
+        errors.extend(validate_state(self.reviews, set(self.atoms), evidence_by_id))
 
     def _validate_aliases(self, errors: list[str]) -> None:
         aliases = self.graph.get("aliases", {})
@@ -2164,6 +2180,16 @@ class Workspace:
             "created_at": iso(),
             **measurement,
         }
+        observation = payload.get("review_observation")
+        if observation is not None:
+            if kind != "review":
+                raise AtomLearnError("review_observation may be recorded only for review Evidence")
+            from review_scheduler import ReviewSchedulerError, validate_observation
+
+            try:
+                item["review_observation"] = validate_observation(observation)
+            except ReviewSchedulerError as exc:
+                raise AtomLearnError(str(exc)) from exc
         self.evidence["items"].append(item)
         self.atoms[atom_id].setdefault("evidence_ids", []).append(evidence_id)
         self.current["phase"] = "checking"
@@ -2207,6 +2233,13 @@ class Workspace:
         atom["attempts"] = int(atom.get("attempts", 0)) + 1
         atom["confidence"] = round(average, 3)
         atom["last_reviewed_at"] = iso(at)
+        if evidence.get("kind") == "review":
+            from review_scheduler import ReviewSchedulerError, record_review_event
+
+            try:
+                record_review_event(self.reviews, evidence, atom, at or now_utc())
+            except ReviewSchedulerError as exc:
+                raise AtomLearnError(str(exc)) from exc
         if result == "mastered":
             atom["status"] = "mastered"
             self.current["active_atom_id"] = None
@@ -2214,7 +2247,7 @@ class Workspace:
             self.current["current_question"] = None
             self.current["learner_confusions"] = []
             self.current["next_action"] = "Review progress and choose the next available Atom."
-            self._complete_due_review(atom_id, evidence_id)
+            self._complete_due_review(atom_id, evidence_id, at or now_utc())
             self._schedule_next_review(atom_id, at or now_utc())
             self._advance_expansion_after_mastery(atom_id, at or now_utc())
         else:
@@ -2245,7 +2278,7 @@ class Workspace:
             migrated.append(item.get("id"))
         return {"migrated_count": len(migrated), "evidence_ids": migrated, "strategy_eligible": False}
 
-    def _complete_due_review(self, atom_id: str, evidence_id: str) -> None:
+    def _complete_due_review(self, atom_id: str, evidence_id: str, at: datetime) -> None:
         due = [
             item for item in self.reviews["items"]
             if item.get("atom_id") == atom_id and item.get("status") == "pending"
@@ -2256,7 +2289,7 @@ class Workspace:
         item = due[0]
         item["status"] = "completed"
         item["evidence_id"] = evidence_id
-        item["completed_at"] = iso()
+        item["completed_at"] = iso(at)
 
     def _schedule_next_review(self, atom_id: str, base: datetime) -> None:
         intervals = self.course.get("settings", {}).get("review_intervals_days", [1, 3, 7, 30])
@@ -2268,22 +2301,28 @@ class Workspace:
         if pending:
             return
         next_index = (max(completed_indexes) + 1) if completed_indexes else 0
-        if next_index >= len(intervals):
+        fixed_interval = intervals[next_index] if next_index < len(intervals) else None
+        from review_scheduler import ReviewSchedulerError, link_scheduled_event, schedule_choice
+
+        try:
+            choice = schedule_choice(self.reviews, atom_id, base, fixed_interval)
+        except ReviewSchedulerError as exc:
+            raise AtomLearnError(str(exc)) from exc
+        if choice is None:
             return
         review_id = next_record_id("rv", self.reviews["items"])
-        self.reviews["items"].append(
-            {
+        review = {
                 "id": review_id,
                 "atom_id": atom_id,
                 "interval_index": next_index,
-                "interval_days": intervals[next_index],
-                "due_at": iso(base + timedelta(days=intervals[next_index])),
                 "status": "pending",
                 "evidence_id": None,
                 "created_at": iso(base),
                 "completed_at": None,
+                **choice,
             }
-        )
+        self.reviews["items"].append(review)
+        link_scheduled_event(self.reviews, atom_id, review_id, choice)
 
     def refresh_reviews(self, at: datetime) -> list[str]:
         due_ids: list[str] = []
@@ -2751,6 +2790,9 @@ def build_parser() -> argparse.ArgumentParser:
     measure_parser = sub.add_parser("measure", help="Grade and calibrate versioned learning measurements", add_help=False)
     measure_parser.add_argument("-h", "--help", action="store_true", dest="measure_help")
     measure_parser.add_argument("measure_args", nargs=argparse.REMAINDER)
+    review_parser = sub.add_parser("review", help="Manage qualified Atom memory and the unified daily queue", add_help=False)
+    review_parser.add_argument("-h", "--help", action="store_true", dest="review_help")
+    review_parser.add_argument("review_args", nargs=argparse.REMAINDER)
     start_parser = sub.add_parser("start", help="Create or resume a course from one request", add_help=False)
     start_parser.add_argument("-h", "--help", action="store_true", dest="start_help")
     start_parser.add_argument("start_args", nargs=argparse.REMAINDER)
@@ -2967,6 +3009,14 @@ def run(args: argparse.Namespace) -> None:
         try:
             run_measurement(["--help"] if args.measure_help else args.measure_args)
         except (MeasurementError, OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
+    if args.command == "review":
+        from review_scheduler import ReviewSchedulerError, run as run_review
+
+        try:
+            run_review(["--help"] if args.review_help else args.review_args)
+        except (ReviewSchedulerError, OSError, ValueError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
     if args.command == "start":

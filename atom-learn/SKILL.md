@@ -314,6 +314,23 @@ Never mark an Atom mastered without persisted qualified Evidence. Free model sco
 4. Run `resume` only after the remedial Atom is mastered and no Atom remains active.
 5. Continue the saved parent question and next action.
 
+### Schedule review and daily work
+
+1. Read [references/ADAPTIVE_REVIEW.md](references/ADAPTIVE_REVIEW.md) before configuring adaptive review, interpreting memory state, or building a daily queue.
+2. Keep `fixed` as the default. Use `adaptive-shadow` to collect qualified history without changing real due dates.
+3. For review Evidence, record `review_observation` only from an observed attempt. Never infer active recall, hints, delay, or response time from reading, satisfaction, or chat duration.
+4. Run `review benchmark` before considering active scheduling. Enable `adaptive-active` only when the report is current and the learner explicitly opts in; never rewrite an existing pending review.
+5. Use `review queue` to merge failure remediation, due reviews, blocking prerequisites, new Atoms, and exam practice under the learner's capacity. Report backlog and overdue history honestly.
+6. Treat `review pilot` as observational shadow replay. It never promotes the adapter or supports a causal learning claim; use the separately consented `study` workflow for that question.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py review benchmark <workspace> --expected-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py review configure <workspace> --input <review-policy.yaml> --expected-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py review status <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py review queue <workspace> --date <YYYY-MM-DD> --minutes 60
+python <SKILL_DIR>/scripts/atomlearn.py review pilot <workspace>
+```
+
 ### Review and restructure
 
 - Run `refresh-reviews` at the beginning of a study session. Prefer a due review before a new Atom unless the learner asks otherwise.
@@ -351,6 +368,7 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/CONCEPT_ROUTING.md](references/CONCEPT_ROUTING.md) when an explanation exposes an unfamiliar related concept and the learner needs to know whether it belongs now, before, later, on an optional branch, or outside the goal.
 - Read [references/MASTERY.md](references/MASTERY.md) when creating checks, grading Evidence, or scheduling remediation.
 - Read [references/MEASUREMENT.md](references/MEASUREMENT.md) when selecting a scorer, creating held-out retention or transfer items, calibrating open-response grading, migrating legacy Evidence, or interpreting measurement quality.
+- Read [references/ADAPTIVE_REVIEW.md](references/ADAPTIVE_REVIEW.md) before normalizing review observations, changing fixed/shadow/active scheduling, interpreting Atom memory, building a daily queue, or running a pilot replay.
 - Read [references/EVOLUTION.md](references/EVOLUTION.md) for the end-to-end evolution workflow.
 - Read [references/EVOLUTION_POLICY.md](references/EVOLUTION_POLICY.md) before approval, application, or rollback.
 - Read [references/EVOLUTION_CAPSULE.md](references/EVOLUTION_CAPSULE.md) before building, linting, previewing, exporting, ingesting, or converting a privacy-minimized product feedback Capsule.
@@ -381,4 +399,4 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a related-concept question, show the relationship and impact before structural mutation, name a scheduled destination when one exists, and require confirmation for a new prerequisite or optional branch. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, optional branches, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For exam preparation, require source locators, count only reviewed mappings, distinguish structural/official/empirical difficulty, disclose corpus limits, keep prerequisite order, and report infeasible calendar gaps. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have claim-level locators, structured conditional differences are retained, theme proposals are reviewed, open questions and contradictions are explicit, and bounded search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. When outline or topic intake exists, require a passed RAG coverage report for the current intake revision; for every intake, complete only after source traceability passes. For a related-concept question, show the relationship and impact before structural mutation, name a scheduled destination when one exists, and require confirmation for a new prerequisite or optional branch. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, optional branches, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For adaptive review, count only qualified active-retrieval Evidence, preserve fixed fallback and pending dates, require benchmark plus opt-in for active mode, and disclose queue backlog and pilot limits. For exam preparation, require source locators, count only reviewed mappings, distinguish structural/official/empirical difficulty, disclose corpus limits, keep prerequisite order, and report infeasible calendar gaps. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have claim-level locators, structured conditional differences are retained, theme proposals are reviewed, open questions and contradictions are explicit, and bounded search limits are stated.

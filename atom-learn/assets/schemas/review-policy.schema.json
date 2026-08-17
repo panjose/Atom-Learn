@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/review-policy.schema.json",
+  "title": "AtomLearn bounded review policy update",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "mode": {"enum": ["fixed", "adaptive-shadow", "adaptive-active"]},
+    "desired_retention": {"type": "number", "minimum": 0.70, "maximum": 0.97},
+    "objective": {"enum": ["long_term", "exam"]},
+    "exam_target_date": {
+      "oneOf": [
+        {"type": "string", "format": "date"},
+        {"type": "null"}
+      ]
+    },
+    "final_review_days": {"type": "integer", "minimum": 1, "maximum": 60},
+    "active_opt_in": {"type": "boolean"}
+  }
+}

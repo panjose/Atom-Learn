@@ -11,9 +11,10 @@ from typing import Any
 from jsonschema import Draft202012Validator
 
 from atomlearn import iso
+from core_paths import CORE_ROOT
 
 
-ASSETS = Path(__file__).resolve().parents[1] / "assets" / "schemas"
+ASSETS = CORE_ROOT / "assets" / "schemas"
 ACTION_SCHEMA = ASSETS / "workflow-action.schema.json"
 SUBMISSION_SCHEMA = ASSETS / "workflow-submission.schema.json"
 SUBMISSION_SCHEMA_ID = "https://atomlearn.dev/schemas/workflow-submission.schema.json"

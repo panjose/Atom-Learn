@@ -1,6 +1,6 @@
 [project]
 name = "atom-learn"
-version = "0.13.0"
+version = "0.14.0"
 description = "Atomic source-grounded learning with closed-loop hybrid RAG, concept routing, research, exams, and knowledge maps"
 requires-python = ">=3.10"
 dependencies = [
@@ -22,7 +22,9 @@ semantic = ["sentence-transformers>=5.2,<6"]
 dev = ["pytest>=8.0", "hypothesis>=6.120"]
 
 [tool.setuptools]
-package-dir = {"" = "atom-learn/scripts"}
+package-dir = {"" = "atom-learn/scripts", atomlearn_assets = "atom-learn"}
+packages = ["atomlearn_assets"]
+include-package-data = false
 py-modules = [
   "atomlearn",
   "wizard",
@@ -46,6 +48,20 @@ py-modules = [
   "learning_study",
   "capsule",
   "measurement",
+  "review_scheduler",
+  "core_paths",
+]
+
+[tool.setuptools.package-data]
+atomlearn_assets = [
+  "assets/*.yaml",
+  "assets/*.json",
+  "assets/benchmarks/*.yaml",
+  "assets/benchmarks/*.json",
+  "assets/benchmarks/rag/*.yaml",
+  "assets/benchmarks/rag/*.json",
+  "assets/schemas/*.json",
+  "assets/templates/*.yaml",
 ]
 
 [tool.pytest.ini_options]

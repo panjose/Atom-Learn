@@ -1,0 +1,6 @@
+mode: adaptive-shadow
+desired_retention: 0.90
+objective: long_term
+exam_target_date: null
+final_review_days: 7
+active_opt_in: false

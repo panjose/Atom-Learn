@@ -1,3 +1,21 @@
 schema_version: 1
 revision: 0
+policy:
+  mode: fixed
+  desired_retention: 0.90
+  objective: long_term
+  exam_target_date: null
+  final_review_days: 7
+  active_opt_in: false
+  model_version: atomlearn-memory-v1
+  updated_at: null
+memory: {}
+events: []
+benchmark:
+  profile_id: memory-core-v1
+  profile_sha256: null
+  model_version: atomlearn-memory-v1
+  status: not_run
+  metrics: null
+  run_at: null
 items: []

@@ -10,6 +10,7 @@
 - Flexible progression state
 - Detailed expansion state
 - Concept routing and optional branches
+- Per-Atom review state
 - Revisions and timestamps
 
 ## Workspace layout
@@ -47,6 +48,12 @@ Course statuses are `orientation`, `active`, `completed`, `completed_with_skips`
 Use these question classifications: `in_atom`, `blocking_prerequisite`, `non_blocking`, `future_atom`, `optional_extension`, and `out_of_scope`.
 
 Use Evidence scores from `0.0` through `1.0`. The CLI derives the result from required dimensions, `pass_threshold`, and `minimum_dimension_score`.
+
+## Per-Atom review state
+
+`.atomlearn/reviews.yaml` retains scheduled review items and also owns `policy`, `memory`, normalized `events`, and the versioned `benchmark` report. Older workspaces without these fields load with fixed defaults. Policy modes are `fixed`, `adaptive-shadow`, and `adaptive-active`; active mode is valid only with explicit opt-in and a current passing profile hash. Memory entries belong to existing Atoms, and normalized events link one-to-one to persisted review Evidence.
+
+Review Evidence may add the optional `review_observation` defined by `evidence-v2.schema.json`. Its exact fields are `retrieval_mode`, `hint_count`, `delayed`, and `response_time_seconds`. Once assessed by v0.14, the Evidence also stores `review_event_id`; legacy Evidence without that link remains readable and cannot silently become adaptive history. The response time is normalized to a bucket for audit but excluded from the memory update. See [ADAPTIVE_REVIEW.md](ADAPTIVE_REVIEW.md) and `assets/schemas/review-policy.schema.json`.
 
 ## Course intake
 

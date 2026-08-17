@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import io
 import json
 import os
 import sys
@@ -37,6 +38,34 @@ from .verify import ZERO_HASH, content_tree_hash
 
 
 EXCLUDED_PARTS = {"__pycache__", ".pytest_cache", ".test-workspaces", ".git"}
+REVIEW_RUNTIME_MEMBERS = {
+    "core_paths.py",
+    "review_scheduler.py",
+    "atomlearn_assets/assets/core-manifest.yaml",
+    "atomlearn_assets/assets/benchmarks/memory-core-v1.yaml",
+    "atomlearn_assets/assets/schemas/review-policy.schema.json",
+}
+
+
+def _require_capability_runtime_payload(runtime_path: Path, required_smoke: list[str]) -> None:
+    """Fail a release when a required runtime capability is absent from its Core wheel."""
+
+    if "review" not in required_smoke:
+        return
+    inspected = inspect_runtime_bundle(runtime_path.resolve())
+    recipe = inspected["recipe"]
+    wheel_name = recipe["core_wheel"]["filename"]
+    wheel_bytes = inspected["files"][f"wheels/{wheel_name}"]
+    try:
+        with zipfile.ZipFile(io.BytesIO(wheel_bytes)) as wheel:
+            members = {item.filename for item in wheel.infolist() if not item.is_dir()}
+    except (OSError, zipfile.BadZipFile) as exc:
+        raise ManagerError(f"Runtime Core wheel is not a valid ZIP: {wheel_name}") from exc
+    missing = sorted(REVIEW_RUNTIME_MEMBERS - members)
+    if missing:
+        raise ManagerError(
+            f"Runtime Core wheel omits payload required by review smoke: {wheel_name}; missing={missing}"
+        )
 
 
 def _private_key(path: Path) -> Ed25519PrivateKey:
@@ -188,6 +217,8 @@ def build_release(
     capability_ledger = yaml.safe_load(by_name[core["capability_ledger"]].decode("utf-8"))
     if not isinstance(capability_ledger, dict) or not isinstance(capability_ledger.get("required_smoke"), list):
         raise ManagerError("Capability ledger must declare the release smoke matrix")
+    for runtime_path in runtime_bundle_paths:
+        _require_capability_runtime_payload(runtime_path, capability_ledger["required_smoke"])
     filename = f"atomlearn-{version}.zip"
     parsed = urlparse(artifact_url)
     expected_path = f"/{repository}/releases/download/{tag}/{filename}"

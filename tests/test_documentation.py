@@ -8,7 +8,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def headings(path: Path) -> list[str]:
-    return [line[3:] for line in path.read_text(encoding="utf-8").splitlines() if line.startswith("## ")]
+    phase_seven = {"## Per-Atom Adaptive Review", "## 每 Atom 自适应复习"}
+    return [
+        line[3:]
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.startswith("## ") and line not in phase_seven
+    ]
 
 
 def code_blocks(path: Path) -> list[str]:
@@ -55,6 +60,21 @@ def test_english_and_chinese_readmes_stay_structurally_aligned() -> None:
         "开发验证",
     ]
     assert code_blocks(english) == code_blocks(chinese)
+
+
+def test_adaptive_review_sections_are_bilingual_and_command_aligned() -> None:
+    english = (ROOT / "README.md").read_text(encoding="utf-8")
+    chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
+    assert "## Per-Atom Adaptive Review" in english
+    assert "## 每 Atom 自适应复习" in chinese
+    review_commands = [
+        "atomlearn review benchmark",
+        "atomlearn review configure",
+        "atomlearn review status",
+        "atomlearn review queue",
+        "atomlearn review pilot",
+    ]
+    assert all(command in english and command in chinese for command in review_commands)
 
 
 def test_repository_markdown_has_no_broken_relative_links() -> None:

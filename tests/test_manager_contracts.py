@@ -36,7 +36,7 @@ def test_capability_ledger_is_strict_versioned_and_truthful() -> None:
     ledger = yaml.safe_load((ROOT / "atom-learn" / "assets" / "capabilities.yaml").read_text(encoding="utf-8"))
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(ledger)
-    assert ledger["core_version"] == "0.13.0"
+    assert ledger["core_version"] == "0.14.0"
     identifiers = [item["id"] for item in ledger["capabilities"]]
     assert len(identifiers) == len(set(identifiers))
     for capability in ledger["capabilities"]:
@@ -122,7 +122,7 @@ def test_release_gate_report_requires_attested_ci_and_never_overwrites(tmp_path:
         str(ROOT / "release" / "gate.py"),
         "write",
         "--tag",
-        "v0.13.0",
+        "v0.14.0",
         "--commit-sha",
         "b" * 40,
         "--output",

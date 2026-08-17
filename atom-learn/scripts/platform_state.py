@@ -15,8 +15,8 @@ import yaml
 from jsonschema import Draft202012Validator
 from platformdirs import user_data_dir
 
+from core_paths import CORE_ROOT
 
-CORE_ROOT = Path(__file__).resolve().parents[1]
 MANIFEST_PATH = CORE_ROOT / "assets" / "core-manifest.yaml"
 MANIFEST_SCHEMA_PATH = CORE_ROOT / "assets" / "schemas" / "core-manifest.schema.json"
 DATA_DIR_ENV = "ATOMLEARN_DATA_DIR"

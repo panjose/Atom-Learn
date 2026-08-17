@@ -23,6 +23,7 @@ from urllib.parse import urlparse
 import yaml
 from jsonschema import Draft202012Validator
 
+from core_paths import CORE_ROOT
 from document_ir import DocumentIRError, build_document_ir, require_valid as require_valid_ir, retrieval_sections
 from semantic import (
     SemanticAdapterError,
@@ -61,8 +62,8 @@ VECTOR_DIM = 768
 DEFAULT_EMBEDDING_MODEL = "atomlearn/multilingual-hash-v1"
 RERANKER_MODEL = "atomlearn/deterministic-reranker-v1"
 DEFAULT_DENSE_BRUTEFORCE_LIMIT = 2000
-BENCHMARK_PROFILE_DIR = Path(__file__).resolve().parents[1] / "assets" / "benchmarks" / "rag"
-SCHEMA_DIR = Path(__file__).resolve().parents[1] / "assets" / "schemas"
+BENCHMARK_PROFILE_DIR = CORE_ROOT / "assets" / "benchmarks" / "rag"
+SCHEMA_DIR = CORE_ROOT / "assets" / "schemas"
 AUTHORITY_PRIORS = {
     "primary": 1.0,
     "official": 1.0,

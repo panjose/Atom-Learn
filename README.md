@@ -21,7 +21,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Show whether an unfamiliar related concept belongs now, before, later, on an optional branch, or outside the goal
 - Evaluate mastery through explain/apply/discriminate/transfer/teach-back Evidence
 - Restore state across sessions with revision conflict protection and event auditing
-- Schedule reviews at 1/3/7/30-day intervals, with course-level overrides
+- Keep 1/3/7/30 reviews as the fixed default, with qualified per-Atom memory, shadow suggestions, and gated active scheduling
 - Split or merge Atoms with user confirmation while preserving stable ID aliases
 - Discover, screen, refresh, and citation-expand a research field through a protocol-bound paper graph
 - Guide one Active Paper through locator-grounded structured claims and reviewable cross-paper synthesis
@@ -67,7 +67,7 @@ atomlearn status courses/calculus --json
 
 Every course render writes the five English views plus aligned `*.zh-CN.md` generated views, including `LEARNING_MAP.zh-CN.md`, `CURRENT.zh-CN.md`, and `PROGRESS.zh-CN.md`. Atom titles and learner content stay unchanged; navigation labels, statuses, and operational text are localized. See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teaching behavior, and [SCHEMA.md](atom-learn/references/SCHEMA.md) for structured input formats. Runtime course state is stored in the learner's selected course workspace, not in the Skill installation directory.
 
-Core `0.13.0` adds a read-only compatibility manifest and deterministic migration planning. `atomlearn migrate status|plan|validate` never applies a migration; checking status does not create the platform user-data directory. See [Core Version and Migrations](atom-learn/references/MIGRATIONS.md).
+Core `0.14.0` retains read-only compatibility and deterministic migration planning while adding the remediation gates documented below. `atomlearn migrate status|plan|validate` never applies a migration; checking status does not create the platform user-data directory. See [Core Version and Migrations](atom-learn/references/MIGRATIONS.md).
 
 Cross-course personalization remains off until the learner explicitly runs `atomlearn profile enable <workspace>`. Global profiles contain only allowlisted enum signals, never import old workspace history automatically, and can be disabled, retired, exported, or reset without deleting their audit trail. `atomlearn policy effective|explain` merges current-turn, workspace, global, strategy, and Core layers with per-value provenance. See [User Profiles](atom-learn/references/USER_PROFILE.md) and [Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md).
 
@@ -92,6 +92,22 @@ atomlearn study enroll study-transfer-pilot --input enrollment.yaml
 atomlearn study status study-transfer-pilot
 atomlearn study withdraw study-transfer-pilot --confirmed --expected-study-revision 2
 ```
+
+## Per-Atom Adaptive Review
+
+Fixed 1/3/7/30 scheduling remains the default and fallback. A review updates per-Atom stability, retrievability, and difficulty only when normal Active Atom Evidence proves a delayed, A/B-quality active-recall attempt. Recognition, passive rereading, legacy or unqualified scoring, satisfaction, chat duration, and response speed alone cannot update memory. Response time is retained only as an audit bucket and is excluded from the adapter calculation.
+
+`adaptive-shadow` computes a suggested date without changing the real queue. `adaptive-active` changes only future schedules after the versioned engineering benchmark passes and the learner explicitly opts in; it never rewrites an existing pending date. Exam objectives respect a target and final-review window. The unified read-only daily queue fits failure remediation, due reviews, blocking prerequisites, new Atoms, and exam practice to time and cognitive-load capacity, returning a visible backlog when work does not fit.
+
+```powershell
+atomlearn review benchmark courses/calculus --expected-revision 7
+atomlearn review configure courses/calculus --input atom-learn/assets/templates/review-policy.yaml --expected-revision 8
+atomlearn review status courses/calculus
+atomlearn review queue courses/calculus --date 2026-08-16 --minutes 60
+atomlearn review pilot courses/calculus
+```
+
+The benchmark verifies deterministic adapter invariants, not learning benefit. A workspace pilot is observational, always blocks automatic promotion, and requires the separately consented study workflow before any causal learning-effect claim. See [Per-Atom Adaptive Review](atom-learn/references/ADAPTIVE_REVIEW.md) and the [Phase 7 implementation record](docs/V0_14_PHASE7_IMPLEMENTATION.md).
 
 ## Flexible Course Intake
 
@@ -276,13 +292,14 @@ atomlearn-core version
 
 Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for fingerprint verification, key rotation, bridge repair, update planning, runtime construction, recovery, rollback, and transport boundaries.
 
-All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.13.0 Release Notes](docs/releases/v0.13.0.md), and [Changelog](CHANGELOG.md).
+All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.14.0 Release Notes](docs/releases/v0.14.0.md), and [Changelog](CHANGELOG.md).
 
 ## Design Documentation
 
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 Exam and Research Implementation](docs/V0_14_PHASE6_IMPLEMENTATION.md)
+- [v0.14 Phase 7 Adaptive Review Implementation](docs/V0_14_PHASE7_IMPLEMENTATION.md)
 - [Self-Evolution Design](docs/SELF_EVOLUTION_DESIGN.md)
 - [Self-Evolution v2 Proposal](docs/SELF_EVOLUTION_V2_DESIGN.md)
 - [Self-Evolution v2 Implementation Plan](docs/SELF_EVOLUTION_V2_IMPLEMENTATION_PLAN.md)
@@ -300,6 +317,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 - [Signed Release Manager Operations](atom-learn/references/RELEASE_MANAGER.md)
 - [Self-Evolution v2 Operations and Recovery](docs/SELF_EVOLUTION_V2_OPERATIONS.md)
 - [0.13.0 Release Notes](docs/releases/v0.13.0.md)
+- [0.14.0 Release Notes](docs/releases/v0.14.0.md)
 
 ## Development Validation
 

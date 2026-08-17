@@ -16,8 +16,8 @@ from typing import Any
 import yaml
 from jsonschema import Draft202012Validator
 
+from core_paths import CORE_ROOT
 
-CORE_ROOT = Path(__file__).resolve().parents[1]
 ASSET_ROOT = CORE_ROOT / "assets"
 SCHEMA_ROOT = ASSET_ROOT / "schemas"
 SCORER_REGISTRY = ASSET_ROOT / "scorer-registry.yaml"
@@ -113,6 +113,16 @@ def validate_evidence_item(value: Any) -> None:
         raise MeasurementError("Review Evidence must be delayed_retention")
     if value["kind"] != "review" and value["measurement_kind"] == "delayed_retention":
         raise MeasurementError("Delayed-retention Evidence must use kind review")
+    observation = value.get("review_observation")
+    if observation is not None:
+        if value["kind"] != "review":
+            raise MeasurementError("review_observation may be stored only on review Evidence")
+        from review_scheduler import ReviewSchedulerError, validate_observation
+
+        try:
+            validate_observation(observation)
+        except ReviewSchedulerError as exc:
+            raise MeasurementError(str(exc)) from exc
 
 
 def scorer_registry() -> dict[str, Any]:
