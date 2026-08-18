@@ -15,11 +15,11 @@
     "workflow": {"const": "start"},
     "workflow_revision": {"type": "integer", "minimum": 1},
     "stage": {"enum": [
-      "clarify_goal", "inventory_sources", "evidence_discovery", "coverage_judgment",
+      "clarify_goal", "topic_diagnostic", "inventory_sources", "evidence_discovery", "coverage_judgment",
       "course_planning", "plan_validation", "phase_confirmation", "first_atom", "complete"
     ]},
     "action": {"enum": [
-      "clarify_goal", "inventory_sources", "web_search", "judge_coverage",
+      "clarify_goal", "diagnose_topic", "inventory_sources", "web_search", "judge_coverage",
       "generate_course_plan", "validate_plan", "confirm_phase", "activate_first_atom", "done"
     ]},
     "display": {
@@ -37,7 +37,7 @@
       "required": ["capability", "parameters", "required_result_fields"],
       "properties": {
         "capability": {"enum": [
-          "harness.clarify", "harness.source_inventory", "harness.web_search",
+          "harness.clarify", "harness.topic_diagnostic", "harness.source_inventory", "harness.web_search",
           "harness.coverage_judgment", "harness.course_plan", "core.plan_validation",
           "user.phase_confirmation", "core.activate_atom", "none"
         ]},

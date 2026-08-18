@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -143,10 +144,27 @@ def test_local_learned_embedding_is_explicit_hashed_and_queryable() -> None:
 
 def test_named_multidomain_benchmark_is_a_nonempty_release_gate() -> None:
     path, engine = workspace("benchmark")
-    report = engine.run_benchmark_profile("core-multidomain-v1")
+    report = engine.run_benchmark_profile("core-release-v2")
     assert report["quality_gate"] == "pass"
-    assert report["benchmark_profile"]["id"] == "core-multidomain-v1"
+    assert report["benchmark_profile"]["id"] == "core-release-v2"
     assert len(report["benchmark_profile"]["dimensions"]) >= 9
+    assert report["release_gate"] == {
+        "passed": True,
+        "metric_gate": True,
+        "profile_gates": True,
+        "structured_parser_gate": True,
+        "read_only_held_out": True,
+    }
+    assert {item["id"] for item in report["evaluation_profile_results"]} == {
+        "lexical-baseline", "true-cross-lingual", "domain-shift", "hard-negatives",
+        "structured-docs", "ocr-layout", "grounding-adversarial",
+    }
+    assert all(item["quality_gate"] == "pass" for item in report["evaluation_profile_results"])
+    assert report["uncertainty"]["recall_at_k"]["resamples"] == 1000
+    assert report["failure_taxonomy"]["generation_grounding"] == 2
+    assert all(item["passed"] for item in report["structured_parser_results"])
+    assert report["promotion_boundary"]["baseline_is_learned_semantic"] is False
+    assert report["promotion_boundary"]["benchmark_establishes_learning_effect"] is False
     assert report["threshold_results"]
     assert report["metrics"]["source_diversity"] == 1.0
     assert report["metrics"]["freshness"] == 1.0
@@ -157,7 +175,7 @@ def test_named_multidomain_benchmark_is_a_nonempty_release_gate() -> None:
         engine.evaluate(
             {
                 **engine._benchmark_evaluation_payload(
-                    engine.load_benchmark_profile("core-multidomain-v1")
+                    engine.load_benchmark_profile("core-release-v2")
                 ),
                 "thresholds": {
                     "recall_at_k": 0.0,
@@ -170,13 +188,41 @@ def test_named_multidomain_benchmark_is_a_nonempty_release_gate() -> None:
         )
 
 
+def test_release_profile_rejects_tiny_permissive_or_cross_language_leaking_fixtures() -> None:
+    profile = RagEngine.load_benchmark_profile("core-release-v2")
+    schema = json.loads(
+        (ROOT / "atom-learn" / "assets" / "schemas" / "rag-benchmark-profile.schema.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    tiny = json.loads(json.dumps(profile))
+    tiny.pop("profile_sha256")
+    tiny["queries"] = tiny["queries"][:3]
+    assert any(list(error.path) == ["queries"] for error in Draft202012Validator(schema).iter_errors(tiny))
+
+    permissive = json.loads(json.dumps(profile))
+    permissive["thresholds"]["recall_at_k"] = 0.0
+    with pytest.raises(RagError, match="universally permissive"):
+        RagEngine._validate_release_benchmark_profile(permissive)
+
+    leaking = json.loads(json.dumps(profile))
+    leaking_source = next(item for item in leaking["sources"] if item["id"] == "cross-causal-en")
+    leaking_source["language"] = "zh"
+    with pytest.raises(RagError, match="same-language or multilingual leakage"):
+        RagEngine._validate_release_benchmark_profile(leaking)
+
+    hard = next(item for item in profile["evaluation_profiles"] if item["id"] == "hard-negatives")
+    traps = {item["trap"] for item in profile["queries"] if item["id"] in hard["query_ids"]}
+    assert traps == {"condition", "negation", "direction", "synonym"}
+
+
 def test_cross_encoder_requires_a_passing_portable_benchmark_report() -> None:
     benchmark_path, benchmark_engine = workspace("reranker-benchmark")
-    benchmark_engine.run_benchmark_profile("core-multidomain-v1")
+    benchmark_engine.run_benchmark_profile("core-release-v2")
     model = safe_model(benchmark_path, "cross-encoder")
     report = benchmark_engine.evaluate_reranker(
         {
-            "profile": "core-multidomain-v1",
+            "profile": "core-release-v2",
             "model": {
                 "model_id": "test/cross-encoder",
                 "revision": "r1",
@@ -215,7 +261,7 @@ def test_cross_encoder_requires_a_passing_portable_benchmark_report() -> None:
     activated = target.activate_reranker(
         {"report_path": str(report_path.resolve()), "confirmed": True}
     )
-    assert activated["benchmark_profile"] == "core-multidomain-v1"
+    assert activated["benchmark_profile"] == "core-release-v2"
     search = target.search(
         {"query": "retrieval", "top_k": 1, "candidate_k": 5},
         record=False,

@@ -1,0 +1,82 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/topic-diagnostic.schema.json",
+  "title": "AtomLearn low-burden topic diagnostic result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "strategy", "items", "recommendations", "privacy"],
+  "properties": {
+    "kind": {"const": "atomlearn.topic-diagnostic"},
+    "schema_version": {"const": 1},
+    "strategy": {"enum": ["adaptive_diagnostic", "start_from_basics", "map_first", "use_defaults"]},
+    "items": {
+      "type": "array",
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "decision", "prompt", "response_status", "signal", "scorer"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
+          "decision": {"enum": ["starting_point", "target_depth", "use_case"]},
+          "prompt": {"type": "string", "minLength": 1, "maxLength": 2000},
+          "response_status": {"enum": ["answered", "dont_know", "skipped"]},
+          "signal": {"enum": ["secure", "needs_foundation", "preference", "unknown"]},
+          "scorer": {"enum": ["deterministic", "human", "harness_unverified"]}
+        }
+      }
+    },
+    "recommendations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["starting_point", "target_depth", "use_case", "test_out_recommended"],
+      "properties": {
+        "starting_point": {"$ref": "#/$defs/startingPoint"},
+        "target_depth": {"$ref": "#/$defs/targetDepth"},
+        "use_case": {"$ref": "#/$defs/useCase"},
+        "test_out_recommended": {"type": "boolean"}
+      }
+    },
+    "privacy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["raw_responses_stored", "skipped_penalized", "mastery_evidence_written"],
+      "properties": {
+        "raw_responses_stored": {"const": false},
+        "skipped_penalized": {"const": false},
+        "mastery_evidence_written": {"const": false}
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"strategy": {"const": "adaptive_diagnostic"}}},
+      "then": {"properties": {"items": {"minItems": 2, "maxItems": 5}}},
+      "else": {"properties": {"items": {"maxItems": 0}}}
+    }
+  ],
+  "$defs": {
+    "source": {"enum": ["learner_choice", "diagnostic_signal", "default"]},
+    "startingPoint": {
+      "type": "object", "additionalProperties": false, "required": ["value", "source"],
+      "properties": {
+        "value": {"enum": ["foundations", "current_boundary", "advanced_boundary", "map_first", "use_default"]},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    },
+    "targetDepth": {
+      "type": "object", "additionalProperties": false, "required": ["value", "source"],
+      "properties": {
+        "value": {"enum": ["overview", "working", "advanced", "expert"]},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    },
+    "useCase": {
+      "type": "object", "additionalProperties": false, "required": ["value", "source"],
+      "properties": {
+        "value": {"enum": ["orientation", "working_knowledge", "exam", "project", "research"]},
+        "source": {"$ref": "#/$defs/source"}
+      }
+    }
+  }
+}

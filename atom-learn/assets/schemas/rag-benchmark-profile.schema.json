@@ -10,7 +10,7 @@
   ],
   "properties": {
     "kind": {"const": "atomlearn.rag-benchmark-profile"},
-    "schema_version": {"const": 1},
+    "schema_version": {"enum": [1, 2]},
     "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
     "version": {"type": "integer", "minimum": 1},
     "title": {"type": "string", "minLength": 1, "maxLength": 1000},
@@ -30,18 +30,30 @@
     },
     "sources": {"type": "array", "minItems": 3, "items": {"$ref": "#/$defs/source"}},
     "queries": {"type": "array", "minItems": 3, "items": {"$ref": "#/$defs/query"}},
-    "claims": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/claim"}}
-    ,"workflow_cases": {"$ref": "#/$defs/workflowCases"}
+    "claims": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/claim"}},
+    "workflow_cases": {"$ref": "#/$defs/workflowCases"},
+    "release_protocol": {"$ref": "#/$defs/releaseProtocol"},
+    "evaluation_profiles": {
+      "type": "array", "minItems": 7, "maxItems": 7,
+      "items": {"$ref": "#/$defs/evaluationProfile"}
+    }
   },
   "$defs": {
     "source": {
       "type": "object", "additionalProperties": false,
-      "required": ["id", "title", "authority", "passages"],
+      "required": ["id", "title", "authority"],
       "properties": {
         "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
         "title": {"type": "string", "minLength": 1, "maxLength": 1000},
         "authority": {"enum": ["primary", "official", "peer_reviewed", "textbook", "user", "secondary", "unknown"]},
         "version": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "language": {"enum": ["en", "zh", "ja", "multilingual"]},
+        "fixture": {"enum": ["smoke_html", "smoke_docx", "smoke_pdf", "ocr_pdf"]},
+        "fixture_text": {"type": "string", "minLength": 1, "maxLength": 50000},
+        "expected_block_kinds": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"enum": ["heading", "paragraph", "list", "table", "formula", "ocr_text"]}
+        },
         "passages": {
           "type": "array", "minItems": 1,
           "items": {
@@ -54,7 +66,8 @@
             }
           }
         }
-      }
+      },
+      "oneOf": [{"required": ["passages"]}, {"required": ["fixture", "expected_block_kinds"]}]
     },
     "thresholds": {
       "type": "object", "additionalProperties": false,
@@ -65,6 +78,7 @@
         "ndcg_at_k": {"type": "number", "minimum": 0, "maximum": 1},
         "citation_correctness": {"type": "number", "minimum": 0, "maximum": 1},
         "unsupported_claim_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "grounding_detection_accuracy": {"type": "number", "minimum": 0, "maximum": 1},
         "source_diversity": {"type": "number", "minimum": 0, "maximum": 1},
         "freshness": {"type": "number", "minimum": 0, "maximum": 1},
         "correction_success_rate": {"type": "number", "minimum": 0, "maximum": 1},
@@ -86,6 +100,12 @@
         "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
         "query": {"type": "string", "minLength": 1, "maxLength": 2000},
         "alternate_queries": {"type": "array", "items": {"type": "string", "minLength": 1}},
+        "language": {"enum": ["en", "zh", "ja"]},
+        "profile_ids": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"}
+        },
+        "trap": {"enum": ["condition", "negation", "direction", "synonym"]},
         "relevant": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/locatorRef"}}
       }
     },
@@ -96,7 +116,66 @@
         "id": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"},
         "cited": {"type": "array", "items": {"$ref": "#/$defs/locatorRef"}},
         "supported": {"type": "array", "items": {"$ref": "#/$defs/locatorRef"}},
-        "abstained": {"type": "boolean"}
+        "abstained": {"type": "boolean"},
+        "profile_ids": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"}
+        },
+        "role": {"enum": ["quality_measurement", "detector_test"]},
+        "expected_supported": {"type": "boolean"}
+      }
+    },
+    "releaseProtocol": {
+      "type": "object", "additionalProperties": false,
+      "required": [
+        "dataset_revision", "parser_revision", "embedding_profile", "reranker_profile",
+        "split", "read_only", "training_use", "bootstrap", "runtime_profiles", "hardware", "claim_boundary"
+      ],
+      "properties": {
+        "dataset_revision": {"type": "string", "minLength": 1},
+        "parser_revision": {"type": "string", "minLength": 1},
+        "embedding_profile": {"type": "string", "minLength": 1},
+        "reranker_profile": {"type": "string", "minLength": 1},
+        "split": {"const": "held_out_release"},
+        "read_only": {"const": true},
+        "training_use": {"const": "forbidden"},
+        "runtime_profiles": {
+          "type": "array", "minItems": 1, "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"}
+        },
+        "hardware": {"const": "cpu_portable_no_accelerator_required"},
+        "claim_boundary": {"const": "retrieval_and_grounding_engineering_only_not_learning_effect"},
+        "bootstrap": {
+          "type": "object", "additionalProperties": false,
+          "required": ["method", "resamples", "confidence_level", "seed"],
+          "properties": {
+            "method": {"const": "percentile_bootstrap"},
+            "resamples": {"type": "integer", "minimum": 500, "maximum": 10000},
+            "confidence_level": {"type": "number", "exclusiveMinimum": 0.5, "exclusiveMaximum": 1},
+            "seed": {"type": "integer", "minimum": 0, "maximum": 2147483647}
+          }
+        }
+      }
+    },
+    "evaluationProfile": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "version", "query_ids", "claim_ids", "minimum_queries", "purpose"],
+      "properties": {
+        "id": {"enum": [
+          "lexical-baseline", "true-cross-lingual", "domain-shift", "hard-negatives",
+          "structured-docs", "ocr-layout", "grounding-adversarial"
+        ]},
+        "version": {"type": "integer", "minimum": 1},
+        "purpose": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "query_ids": {
+          "type": "array", "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"}
+        },
+        "claim_ids": {
+          "type": "array", "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$"}
+        },
+        "minimum_queries": {"type": "integer", "minimum": 0, "maximum": 1000}
       }
     },
     "workflowCases": {
@@ -142,5 +221,19 @@
         }
       }
     }
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"schema_version": {"const": 2}}},
+      "then": {
+        "required": ["release_protocol", "evaluation_profiles"],
+        "properties": {
+          "sources": {"minItems": 12},
+          "queries": {"minItems": 18},
+          "claims": {"minItems": 4},
+          "thresholds": {"required": ["grounding_detection_accuracy"]}
+        }
+      }
+    }
+  ]
 }

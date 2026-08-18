@@ -1,4 +1,4 @@
-profile: core-multidomain-v1
+profile: core-release-v2
 model:
   model_id: organization/multilingual-reranker
   revision: immutable-model-revision

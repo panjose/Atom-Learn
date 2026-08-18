@@ -58,9 +58,47 @@ def workspace(name: str) -> Path:
     return RUN_ROOT / f"wizard-{name}-{uuid.uuid4().hex}"
 
 
-def test_short_topic_start_creates_all_runtime_layers_and_search_tasks() -> None:
+def test_short_topic_start_uses_low_burden_diagnostic_before_search() -> None:
     path = workspace("topic")
-    result = output(invoke("start", path, "--topic", "causal inference", "--json"))
+    started = output(invoke("start", path, "--topic", "causal inference", "--json"))
+
+    assert started["status"] == "topic_diagnostic_required"
+    assert started["workflow_action"]["action"] == "diagnose_topic"
+    assert started["workflow_action"]["tool_contract"]["capability"] == "harness.topic_diagnostic"
+    assert started["workflow_action"]["tool_contract"]["parameters"]["alternatives"] == [
+        "start_from_basics", "map_first", "use_defaults"
+    ]
+    result = output(
+        invoke(
+            "start",
+            path,
+            "--submission",
+            submission(
+                "topic-default",
+                started["workflow_action"],
+                {
+                    "topic_diagnostic": {
+                        "kind": "atomlearn.topic-diagnostic",
+                        "schema_version": 1,
+                        "strategy": "use_defaults",
+                        "items": [],
+                        "recommendations": {
+                            "starting_point": {"value": "use_default", "source": "default"},
+                            "target_depth": {"value": "working", "source": "default"},
+                            "use_case": {"value": "working_knowledge", "source": "default"},
+                            "test_out_recommended": False,
+                        },
+                        "privacy": {
+                            "raw_responses_stored": False,
+                            "skipped_penalized": False,
+                            "mastery_evidence_written": False,
+                        },
+                    }
+                },
+            ),
+            "--json",
+        )
+    )
 
     assert result["status"] == "web_search_required"
     assert result["workflow_action"]["action"] == "web_search"
@@ -206,6 +244,7 @@ def test_start_clarification_submission_reenters_evidence_discovery() -> None:
         {
             "topic": "alignment",
             "ambiguities": ["Does alignment mean AI alignment or sequence alignment?"],
+            "entry_strategy": "use_defaults",
         },
     )
     started = output(invoke("start", path, "--input", request, "--json"))
@@ -235,12 +274,105 @@ def test_start_clarification_submission_reenters_evidence_discovery() -> None:
 
 def test_start_default_console_is_bilingual_and_requires_no_yaml_editing() -> None:
     path = workspace("console")
-    result = invoke("start", path, "--topic", "linear algebra")
+    result = invoke("start", path, "--topic", "linear algebra", "--entry-strategy", "use_defaults")
 
     assert "Find authoritative evidence" in result.stdout
     assert "查找权威证据" in result.stdout
     assert "Status: web_search_required" in result.stdout
     assert not result.stdout.lstrip().startswith("{")
+
+
+def test_adaptive_topic_diagnostic_is_minimized_non_penalizing_and_not_mastery_evidence() -> None:
+    path = workspace("adaptive-topic")
+    started = output(invoke("start", path, "--topic", "statistical mechanics", "--json"))
+    action = started["workflow_action"]
+    diagnostic = {
+        "kind": "atomlearn.topic-diagnostic",
+        "schema_version": 1,
+        "strategy": "adaptive_diagnostic",
+        "items": [
+            {
+                "id": "diagnostic.prerequisite",
+                "decision": "starting_point",
+                "prompt": "Can the learner use logarithms in a short derivation?",
+                "response_status": "answered",
+                "signal": "secure",
+                "scorer": "deterministic",
+            },
+            {
+                "id": "diagnostic.depth",
+                "decision": "target_depth",
+                "prompt": "Which mathematical depth is useful?",
+                "response_status": "skipped",
+                "signal": "unknown",
+                "scorer": "harness_unverified",
+            },
+            {
+                "id": "diagnostic.use-case",
+                "decision": "use_case",
+                "prompt": "Is the goal research paper reading?",
+                "response_status": "answered",
+                "signal": "preference",
+                "scorer": "human",
+            },
+        ],
+        "recommendations": {
+            "starting_point": {"value": "current_boundary", "source": "diagnostic_signal"},
+            "target_depth": {"value": "working", "source": "default"},
+            "use_case": {"value": "research", "source": "diagnostic_signal"},
+            "test_out_recommended": True,
+        },
+        "privacy": {
+            "raw_responses_stored": False,
+            "skipped_penalized": False,
+            "mastery_evidence_written": False,
+        },
+    }
+    result = output(
+        invoke(
+            "start", path, "--submission",
+            submission("adaptive-diagnostic", action, {"topic_diagnostic": diagnostic}),
+            "--json",
+        )
+    )
+    assert result["status"] == "web_search_required"
+    persisted = yaml.safe_load((path / ".atomlearn" / "topic-diagnostic.yaml").read_text(encoding="utf-8"))
+    assert persisted["items"][1]["response_status"] == "skipped"
+    assert persisted["items"][1]["signal"] == "unknown"
+    assert "prompt" not in persisted["items"][0]
+    assert persisted["mastery_evidence_written"] is False
+    intake = yaml.safe_load((path / ".atomlearn" / "intake.yaml").read_text(encoding="utf-8"))
+    assert intake["desired_outcome"] == "research"
+    assert not list((path / ".atomlearn" / "evidence").glob("*.json"))
+
+
+def test_topic_diagnostic_rejects_penalizing_skip_signal() -> None:
+    path = workspace("penalizing-topic")
+    started = output(invoke("start", path, "--topic", "probability", "--json"))
+    bad = {
+        "kind": "atomlearn.topic-diagnostic",
+        "schema_version": 1,
+        "strategy": "adaptive_diagnostic",
+        "items": [
+            {"id": "d.start", "decision": "starting_point", "prompt": "Start?", "response_status": "skipped", "signal": "needs_foundation", "scorer": "harness_unverified"},
+            {"id": "d.depth", "decision": "target_depth", "prompt": "Depth?", "response_status": "answered", "signal": "preference", "scorer": "human"},
+            {"id": "d.use", "decision": "use_case", "prompt": "Use?", "response_status": "answered", "signal": "preference", "scorer": "human"},
+        ],
+        "recommendations": {
+            "starting_point": {"value": "foundations", "source": "diagnostic_signal"},
+            "target_depth": {"value": "working", "source": "diagnostic_signal"},
+            "use_case": {"value": "working_knowledge", "source": "diagnostic_signal"},
+            "test_out_recommended": False,
+        },
+        "privacy": {"raw_responses_stored": False, "skipped_penalized": False, "mastery_evidence_written": False},
+    }
+    rejected = invoke(
+        "start", path, "--submission",
+        submission("bad-diagnostic", started["workflow_action"], {"topic_diagnostic": bad}),
+        "--json", check=False,
+    )
+    assert rejected.returncode == 2
+    assert "don't-know and skipped" in rejected.stderr
 
 
 def test_start_payload_is_checked_against_the_public_json_schema() -> None:

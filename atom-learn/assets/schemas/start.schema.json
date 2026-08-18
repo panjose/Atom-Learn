@@ -12,6 +12,7 @@
     "mode": {"enum": ["sources", "outline", "topic"]},
     "desired_outcome": {"enum": ["orientation", "working_knowledge", "exam", "project", "research"]},
     "target_depth": {"enum": ["overview", "working", "advanced", "expert"]},
+    "entry_strategy": {"enum": ["adaptive_diagnostic", "start_from_basics", "map_first", "use_defaults"]},
     "prior_knowledge": {"$ref": "#/$defs/stringList"},
     "constraints": {"$ref": "#/$defs/stringList"},
     "ambiguities": {"$ref": "#/$defs/stringList"},

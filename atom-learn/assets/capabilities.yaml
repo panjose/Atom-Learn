@@ -292,12 +292,12 @@ capabilities:
       - Sources indexed before Document IR remain searchable but must be reingested before exam or research IR consumers can attach them.
 
   - id: orchestration.typed_start_v1
-    title: Revision-bound harness orchestration from one request to first Atom confirmation
+    title: Revision-bound low-burden harness orchestration from one request to first Atom confirmation
     status: implemented
     default_mode: enabled
     public_claim: true
     availability: *stable_core
-    interfaces: [start --json, start --submission, start --confirm, start --activate-first]
+    interfaces: [start --json, start --submission, start --entry-strategy, start --confirm, start --activate-first]
     implementation:
       - path: atom-learn/scripts/workflow.py
         symbol: "def make_action"
@@ -305,6 +305,10 @@ capabilities:
         symbol: "def validate_submission"
       - path: atom-learn/scripts/wizard.py
         symbol: "def apply_submission"
+      - path: atom-learn/scripts/wizard.py
+        symbol: "def validate_topic_diagnostic"
+      - path: atom-learn/assets/schemas/topic-diagnostic.schema.json
+        symbol: '"title": "AtomLearn low-burden topic diagnostic result"'
       - path: atom-learn/scripts/intake.py
         symbol: "def _build_goal_contract"
     verification:
@@ -314,11 +318,14 @@ capabilities:
         symbol: "test_start_clarification_submission_reenters_evidence_discovery"
       - path: tests/test_wizard.py
         symbol: "test_mixed_input_preserves_every_goal_contract_anchor"
+      - path: tests/test_wizard.py
+        symbol: "test_adaptive_topic_diagnostic_is_minimized_non_penalizing_and_not_mastery_evidence"
       - path: tests/test_intake.py
         symbol: "test_legacy_sources_state_is_upgraded_in_memory_without_rewriting"
     documentation: [README.md, README.zh-CN.md, atom-learn/references/START_WIZARD.md, atom-learn/references/WORKFLOW_ACTIONS.md]
     limitations:
       - Harness-native Web Search and model reasoning remain harness responsibilities; Core validates submissions and owns state but does not embed another agent.
+      - Topic item content and bounded routing signals are harness or learner inputs; Core minimizes and validates them, never treats skipped items as negative, and never upgrades the pre-Atom diagnostic to mastery Evidence.
 
   - id: rag.learned_local_scale_v1
     title: Learned local multilingual embeddings HNSW and cross-encoder reranking
@@ -356,6 +363,8 @@ capabilities:
         symbol: "test_cross_encoder_requires_a_passing_portable_benchmark_report"
       - path: tests/test_semantic_rag.py
         symbol: "test_named_multidomain_benchmark_is_a_nonempty_release_gate"
+      - path: tests/test_semantic_rag.py
+        symbol: "test_release_profile_rejects_tiny_permissive_or_cross_language_leaking_fixtures"
     documentation:
       - README.md
       - README.zh-CN.md
@@ -366,6 +375,7 @@ capabilities:
       - Models are user-supplied local directories; AtomLearn never silently downloads them and rejects pickle-capable weights or custom model code.
       - USearch and sentence-transformers remain developer/source optional extras and are not distributed in the signed v0.14.2 base runtime; the zero-provider deterministic path stays available for small corpora.
       - Cross-encoders are activated only from a passing, current bundled benchmark profile and can be bypassed per query.
+      - The held-out release suite establishes retrieval, parsing, citation, and grounding engineering performance only. Its default hash path is an explicitly non-learned baseline, and a learned profile still needs its distributed runtime plus the unchanged release set before a stable delivery claim.
 
   - id: mastery.calibrated_evidence_v2
     title: Typed deterministic and calibrated open-response Evidence scoring

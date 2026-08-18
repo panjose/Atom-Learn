@@ -12,21 +12,22 @@ python <SKILL_DIR>/scripts/atomlearn.py start <workspace> --input <start.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py start <workspace> --json
 ```
 
-The shortest form infers a stable course ID, title, goal, topic intake, initial coverage requirements, and disclosed default assumptions. The structured form accepts complete sources, a compact outline, a topic, or mixed inputs with an explicit primary `mode`. The default console is a short English/Chinese status; `--json` exposes the typed protocol used by the harness.
+The shortest form infers a stable course ID, title, goal, topic intake, initial coverage requirements, and disclosed default assumptions. If starting point, target depth, or use case remains unresolved, it next offers `start_from_basics`, `map_first`, and `use_defaults`, or a single 2–5 item adaptive diagnostic. The structured form accepts complete sources, a compact outline, a topic, or mixed inputs with an explicit primary `mode`. The default console is a short English/Chinese status; `--json` exposes the typed protocol used by the harness.
 
 The learner makes one request and does not edit intermediate YAML. The harness translates that request into the initial payload, executes the returned actions, and submits typed results. Read [WORKFLOW_ACTIONS.md](WORKFLOW_ACTIONS.md) for that loop and its trust boundary.
 
 ## State machine
 
 1. `initialized` / `clarification_required`: create course, intake, RAG, and Document IR state; ask only high-impact scope questions.
-2. `coverage_judgment_required`: retrieve candidates for every Goal Contract anchor and ask the harness to judge only those candidates.
-3. `web_search_required` or `corpus_gap_reported`: correct unsupported anchors only when Corpus Policy permits external expansion; otherwise expose the gap and ask the learner to narrow the goal, add sources, or explicitly change policy.
-4. `course_plan_required`: return a plan contract listing allowed source IDs, the Goal Contract, Corpus Policy, and grounding rules.
-5. `phase_confirmation_required`: validate the proposed plan in a preview workspace and ask for confirmation before importing it.
-6. `first_atom_confirmation_required`: complete intake and show the first eligible Atom without activating it.
-7. `complete`: activate the learner-confirmed first Atom and hand off to atomic teaching.
+2. `topic_diagnostic_required`: for unresolved topic-only entry decisions, offer the three one-click paths first or collect one bounded adaptive diagnostic.
+3. `coverage_judgment_required`: retrieve candidates for every Goal Contract anchor and ask the harness to judge only those candidates.
+4. `web_search_required` or `corpus_gap_reported`: correct unsupported anchors only when Corpus Policy permits external expansion; otherwise expose the gap and ask the learner to narrow the goal, add sources, or explicitly change policy.
+5. `course_plan_required`: return a plan contract listing allowed source IDs, the Goal Contract, Corpus Policy, minimized diagnostic summary, and grounding rules.
+6. `phase_confirmation_required`: validate the proposed plan in a preview workspace and ask for confirmation before importing it.
+7. `first_atom_confirmation_required`: complete intake and show the first eligible Atom without activating it.
+8. `complete`: activate the learner-confirmed first Atom and hand off to atomic teaching.
 
-Run the same command again to resume. With `--json` and no new payload, Core returns the exact current action without changing the revision. `.atomlearn/start.yaml` stores stage, revisions, source IDs, and the current typed action. Full private source text remains in RAG and Document IR, not in wizard state. `START.md` is generated and non-canonical.
+Run the same command again to resume. With `--json` and no new payload, Core returns the exact current action without changing the revision. `.atomlearn/start.yaml` stores stage, revisions, source IDs, and the current typed action. `.atomlearn/topic-diagnostic.yaml` stores only item identity, decision, prompt hash, response status, bounded signal, scorer class, and recommendation; it never stores the answer text. Full private source text remains in RAG and Document IR, not in wizard state. `START.md` is generated and non-canonical.
 
 ## One payload contract
 
@@ -41,7 +42,7 @@ Initial fields include:
 - `topic` or `topic_terms`: one name or a list;
 - `outline`: title strings or objects with stable IDs and optional parents;
 - `sources`: path, inline text, or structured passages with source metadata;
-- optional `course_id`, `title`, `goal`, outcome, depth, prior knowledge, constraints, assumptions, explicit `mandatory_anchors`, `corpus_policy`, and OCR settings.
+- optional `course_id`, `title`, `goal`, outcome, depth, prior knowledge, constraints, assumptions, explicit `mandatory_anchors`, `corpus_policy`, OCR settings, and `entry_strategy`.
 
 Resume fields include:
 
@@ -53,6 +54,12 @@ Resume fields include:
 The schema deliberately permits a resume-only payload. Runtime stateful validation requires initial content when the workspace does not exist and rejects plan import until universal Goal Contract coverage passes.
 
 The public action and submission contracts are [workflow-action.schema.json](../assets/schemas/workflow-action.schema.json) and [workflow-submission.schema.json](../assets/schemas/workflow-submission.schema.json). Prefer `--submission <file> --json` for harness operation. An action is bound to its ID, wizard revision, and idempotency key; stale or cross-action submissions are rejected.
+
+## Topic diagnostic boundary
+
+The diagnostic contract is [topic-diagnostic.schema.json](../assets/schemas/topic-diagnostic.schema.json). Adaptive mode must contain 2–5 items and cover every unresolved high-value decision. `dont_know` and `skipped` require `signal: unknown`; they cannot justify a diagnostic-signal recommendation. Test-out may be suggested only after an answered secure prerequisite signal. `start_from_basics`, `map_first`, and `use_defaults` contain no items and preserve their explicit choice source.
+
+This interaction chooses an entry boundary; it is not an assessment of personality or general ability. No Atom is Active yet, so Core fixes `mastery_evidence_written: false`. Later test-out uses the normal Active-Atom scorer and Evidence rules instead of upgrading this routing diagnostic into mastery evidence.
 
 ## Source and outline normalization
 

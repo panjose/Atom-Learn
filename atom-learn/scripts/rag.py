@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import hashlib
 import html
 import json
 import math
 import os
+import random
 import re
 import sqlite3
 import sys
@@ -61,6 +63,7 @@ MAX_QUERY_CHARS = 2_000
 VECTOR_DIM = 768
 DEFAULT_EMBEDDING_MODEL = "atomlearn/multilingual-hash-v1"
 RERANKER_MODEL = "atomlearn/deterministic-reranker-v1"
+DEFAULT_BENCHMARK_PROFILE = "core-release-v2"
 DEFAULT_DENSE_BRUTEFORCE_LIMIT = 2000
 BENCHMARK_PROFILE_DIR = CORE_ROOT / "assets" / "benchmarks" / "rag"
 SCHEMA_DIR = CORE_ROOT / "assets" / "schemas"
@@ -1892,10 +1895,215 @@ class RagEngine:
             raise RagError(f"invalid bundled RAG benchmark profile {profile_id}: {details}")
         if profile["id"] != profile_id:
             raise RagError("RAG benchmark filename and profile id disagree")
+        RagEngine._validate_release_benchmark_profile(profile)
         return {
             **profile,
             "profile_sha256": "sha256:" + hashlib.sha256(raw.encode("utf-8")).hexdigest(),
         }
+
+    @staticmethod
+    def _text_contains_language(text: str, language: str) -> bool:
+        if language == "zh":
+            return bool(re.search(r"[\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff]", text))
+        if language == "ja":
+            return bool(re.search(r"[\u3040-\u30ff]", text))
+        if language == "en":
+            return bool(re.search(r"[A-Za-z]", text))
+        return False
+
+    @staticmethod
+    def _validate_release_benchmark_profile(profile: dict[str, Any]) -> None:
+        if profile.get("schema_version") != 2:
+            return
+        expected_profiles = {
+            "lexical-baseline",
+            "true-cross-lingual",
+            "domain-shift",
+            "hard-negatives",
+            "structured-docs",
+            "ocr-layout",
+            "grounding-adversarial",
+        }
+        profiles = profile["evaluation_profiles"]
+        profile_ids = [item["id"] for item in profiles]
+        if len(profile_ids) != len(set(profile_ids)) or set(profile_ids) != expected_profiles:
+            raise RagError("release benchmark must define each required evaluation profile exactly once")
+        source_by_id = {item["id"]: item for item in profile["sources"]}
+        query_by_id = {item["id"]: item for item in profile["queries"]}
+        claim_by_id = {item["id"]: item for item in profile["claims"]}
+        if len(source_by_id) != len(profile["sources"]):
+            raise RagError("release benchmark source IDs must be unique")
+        if len(query_by_id) != len(profile["queries"]):
+            raise RagError("release benchmark query IDs must be unique")
+        if len(claim_by_id) != len(profile["claims"]):
+            raise RagError("release benchmark claim IDs must be unique")
+        for source in profile["sources"]:
+            if source.get("language") not in {"en", "zh", "ja", "multilingual"}:
+                raise RagError(f"release benchmark source {source['id']} requires an explicit language")
+        memberships: dict[str, set[str]] = defaultdict(set)
+        claim_memberships: dict[str, set[str]] = defaultdict(set)
+        for evaluation_profile in profiles:
+            query_ids = evaluation_profile["query_ids"]
+            claim_ids = evaluation_profile["claim_ids"]
+            if len(query_ids) < evaluation_profile["minimum_queries"]:
+                raise RagError(f"benchmark profile {evaluation_profile['id']} is below its minimum query count")
+            unknown_queries = sorted(set(query_ids) - set(query_by_id))
+            unknown_claims = sorted(set(claim_ids) - set(claim_by_id))
+            if unknown_queries or unknown_claims:
+                raise RagError(
+                    f"benchmark profile {evaluation_profile['id']} references unknown cases: "
+                    + ", ".join(unknown_queries + unknown_claims)
+                )
+            for query_id in query_ids:
+                memberships[query_id].add(evaluation_profile["id"])
+            for claim_id in claim_ids:
+                claim_memberships[claim_id].add(evaluation_profile["id"])
+        for query in profile["queries"]:
+            if query.get("language") not in {"en", "zh", "ja"} or not query.get("profile_ids"):
+                raise RagError(f"release benchmark query {query['id']} requires language and profile_ids")
+            if set(query["profile_ids"]) != memberships[query["id"]]:
+                raise RagError(f"release benchmark query {query['id']} profile membership is inconsistent")
+            for reference in query["relevant"]:
+                source = source_by_id.get(reference["source_id"])
+                if source is None:
+                    raise RagError(f"release benchmark query {query['id']} references an unknown source")
+                if "passages" in source and not any(
+                    passage["locator"] == reference["locator"] for passage in source["passages"]
+                ):
+                    raise RagError(f"release benchmark query {query['id']} references an unknown locator")
+        for claim in profile["claims"]:
+            if set(claim.get("profile_ids", [])) != claim_memberships[claim["id"]]:
+                raise RagError(f"release benchmark claim {claim['id']} profile membership is inconsistent")
+            if claim.get("role") not in {"quality_measurement", "detector_test"}:
+                raise RagError(f"release benchmark claim {claim['id']} requires an explicit role")
+            if not isinstance(claim.get("expected_supported"), bool):
+                raise RagError(f"release benchmark claim {claim['id']} requires expected_supported")
+            for reference in [*claim["cited"], *claim["supported"]]:
+                source = source_by_id.get(reference["source_id"])
+                if source is None:
+                    raise RagError(f"release benchmark claim {claim['id']} references an unknown source")
+                if "passages" in source and not any(
+                    passage["locator"] == reference["locator"] for passage in source["passages"]
+                ):
+                    raise RagError(f"release benchmark claim {claim['id']} references an unknown locator")
+        for source in profile["sources"]:
+            if source.get("fixture") == "ocr_pdf" and not source.get("fixture_text"):
+                raise RagError(f"OCR benchmark fixture {source['id']} requires fixture_text")
+        cross_profile = next(item for item in profiles if item["id"] == "true-cross-lingual")
+        for query_id in cross_profile["query_ids"]:
+            query = query_by_id[query_id]
+            for reference in query["relevant"]:
+                source = source_by_id[reference["source_id"]]
+                if source["language"] == query["language"] or source["language"] == "multilingual":
+                    raise RagError(f"true cross-lingual case {query_id} has same-language or multilingual leakage")
+                passage = next(
+                    (item for item in source.get("passages", []) if item["locator"] == reference["locator"]),
+                    None,
+                )
+                if passage is None or RagEngine._text_contains_language(passage["text"], query["language"]):
+                    raise RagError(f"true cross-lingual case {query_id} leaks the query language into its relevant block")
+        hard_profile = next(item for item in profiles if item["id"] == "hard-negatives")
+        traps = {query_by_id[query_id].get("trap") for query_id in hard_profile["query_ids"]}
+        if traps != {"condition", "negation", "direction", "synonym"}:
+            raise RagError("hard-negatives must cover condition, negation, direction, and synonym traps")
+        structured_profile = next(item for item in profiles if item["id"] == "structured-docs")
+        structured_sources = {
+            reference["source_id"]
+            for query_id in structured_profile["query_ids"]
+            for reference in query_by_id[query_id]["relevant"]
+        }
+        fixture_kinds = {source_by_id[source_id].get("fixture") for source_id in structured_sources}
+        if not {"smoke_html", "smoke_docx", "smoke_pdf", "ocr_pdf"} <= fixture_kinds:
+            raise RagError("structured-docs must exercise HTML, DOCX, PDF, and OCR fixtures")
+        grounding_profile = next(item for item in profiles if item["id"] == "grounding-adversarial")
+        detector_claims = [
+            claim_by_id[claim_id]
+            for claim_id in grounding_profile["claim_ids"]
+            if claim_by_id[claim_id].get("role") == "detector_test"
+        ]
+        if len(detector_claims) < 3 or any("expected_supported" not in item for item in detector_claims):
+            raise RagError("grounding-adversarial requires at least three expected detector tests")
+        thresholds = profile["thresholds"]
+        if (
+            thresholds["recall_at_k"] <= 0
+            or thresholds["mrr"] <= 0
+            or thresholds["ndcg_at_k"] <= 0
+            or thresholds["citation_correctness"] <= 0
+            or thresholds["grounding_detection_accuracy"] <= 0
+            or thresholds["unsupported_claim_rate"] >= 1
+        ):
+            raise RagError("release benchmark thresholds cannot be empty or universally permissive")
+
+    def _materialize_benchmark_sources(self, profile: dict[str, Any]) -> list[dict[str, Any]]:
+        fixture_root = self.benchmark_dir / "fixtures" / profile["id"]
+        fixture_root.mkdir(parents=True, exist_ok=True)
+        smoke = json.loads((CORE_ROOT / "assets" / "smoke-fixtures.json").read_text(encoding="utf-8"))
+        result: list[dict[str, Any]] = []
+        for source in profile["sources"]:
+            common = {
+                key: source[key]
+                for key in ["id", "title", "authority", "version", "passages"]
+                if key in source
+            }
+            fixture = source.get("fixture")
+            if fixture is None:
+                result.append(common)
+                continue
+            if fixture == "smoke_html":
+                path = fixture_root / f"{source['id']}.html"
+                atomic_text(path, smoke["html"])
+            elif fixture == "smoke_docx":
+                from docx import Document
+
+                path = fixture_root / f"{source['id']}.docx"
+                document = Document()
+                spec = smoke["docx"]
+                document.add_heading(spec["heading"], level=1)
+                document.add_paragraph(spec["paragraph"])
+                rows = spec["table"]
+                table = document.add_table(rows=len(rows), cols=max(len(row) for row in rows))
+                for row_index, row in enumerate(rows):
+                    for column_index, value in enumerate(row):
+                        table.cell(row_index, column_index).text = str(value)
+                document.save(path)
+            elif fixture == "smoke_pdf":
+                path = fixture_root / f"{source['id']}.pdf"
+                path.write_bytes(base64.b64decode(smoke["pdf_base64"]))
+            else:
+                from pypdf import PdfWriter
+
+                path = fixture_root / f"{source['id']}.pdf"
+                writer = PdfWriter()
+                writer.add_blank_page(width=612, height=792)
+                with path.open("wb") as handle:
+                    writer.write(handle)
+                atomic_text(path.with_suffix(path.suffix + ".ocr.txt"), source["fixture_text"])
+            common["path"] = str(path.resolve())
+            if fixture == "ocr_pdf":
+                common["ocr"] = "required"
+            result.append(common)
+        return result
+
+    def _structured_benchmark_results(self, profile: dict[str, Any]) -> list[dict[str, Any]]:
+        results: list[dict[str, Any]] = []
+        for source in profile["sources"]:
+            expected = source.get("expected_block_kinds")
+            if not expected:
+                continue
+            document = self.document_ir(source["id"])
+            actual = sorted({block["kind"] for block in document["blocks"]})
+            missing = sorted(set(expected) - set(actual))
+            results.append(
+                {
+                    "source_id": source["id"],
+                    "fixture": source["fixture"],
+                    "expected_block_kinds": expected,
+                    "actual_block_kinds": actual,
+                    "missing_block_kinds": missing,
+                    "passed": not missing,
+                }
+            )
+        return results
 
     def _locator_chunk_ids(self, references: Any, label: str) -> list[str]:
         if not isinstance(references, list):
@@ -1925,6 +2133,9 @@ class RagEngine:
                     "id": item["id"],
                     "query": item["query"],
                     "alternate_queries": item.get("alternate_queries", []),
+                    "benchmark_profile_ids": item.get("profile_ids", []),
+                    "language": item.get("language"),
+                    "trap": item.get("trap"),
                     "relevant_chunk_ids": self._locator_chunk_ids(
                         item["relevant"], f"benchmark query {item['id']}.relevant"
                     ),
@@ -1941,6 +2152,9 @@ class RagEngine:
                         item["supported"], f"benchmark claim {item['id']}.supported"
                     ),
                     "abstained": item["abstained"],
+                    "benchmark_profile_ids": item.get("profile_ids", []),
+                    "role": item.get("role", "quality_measurement"),
+                    "expected_supported": item.get("expected_supported", True),
                 }
                 for item in profile["claims"]
             ],
@@ -1972,11 +2186,183 @@ class RagEngine:
         profile = self.load_benchmark_profile(profile_id)
         if self.revision != 0 or self._source_registry()["sources"]:
             raise RagError("bundled RAG benchmarks require a fresh empty RAG workspace")
-        self.ingest({"sources": profile["sources"]}, "inline")
+        self.ingest({"sources": self._materialize_benchmark_sources(profile)}, "inline")
         report = self.evaluate(self._benchmark_evaluation_payload(profile))
+        if profile.get("schema_version") == 2:
+            report = self._augment_release_benchmark_report(
+                profile, report, self._structured_benchmark_results(profile)
+            )
         report_path = self.benchmark_dir / f"{profile_id}.report.json"
         atomic_text(report_path, json.dumps(report, ensure_ascii=False, indent=2) + "\n")
         return {**report, "report_path": str(report_path)}
+
+    @staticmethod
+    def _bootstrap_interval(values: list[float], protocol: dict[str, Any], seed_offset: int) -> dict[str, Any]:
+        if not values:
+            return {"sample_size": 0, "status": "not_applicable"}
+        resamples = protocol["resamples"]
+        confidence = float(protocol["confidence_level"])
+        generator = random.Random(int(protocol["seed"]) + seed_offset)
+        means = sorted(
+            sum(generator.choice(values) for _ in values) / len(values)
+            for _ in range(resamples)
+        )
+        tail = (1.0 - confidence) / 2.0
+        lower_index = max(0, min(resamples - 1, math.floor(tail * resamples)))
+        upper_index = max(0, min(resamples - 1, math.ceil((1.0 - tail) * resamples) - 1))
+        return {
+            "method": protocol["method"],
+            "sample_size": len(values),
+            "resamples": resamples,
+            "confidence_level": confidence,
+            "point_estimate": round(sum(values) / len(values), 6),
+            "lower": round(means[lower_index], 6),
+            "upper": round(means[upper_index], 6),
+        }
+
+    def _augment_release_benchmark_report(
+        self,
+        profile: dict[str, Any],
+        report: dict[str, Any],
+        structured_results: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        query_by_id = {item["id"]: item for item in report["query_results"]}
+        claim_by_id = {item["id"]: item for item in report["claim_results"]}
+        thresholds = profile["thresholds"]
+        protocol = profile["release_protocol"]["bootstrap"]
+
+        uncertainty_inputs = {
+            "recall_at_k": [float(item["recall_at_k"]) for item in report["query_results"]],
+            "mrr": [float(item["reciprocal_rank"]) for item in report["query_results"]],
+            "ndcg_at_k": [float(item["ndcg_at_k"]) for item in report["query_results"]],
+            "citation_correctness": [
+                float(item["citation_correctness"])
+                for item in report["claim_results"]
+                if item["role"] == "quality_measurement" and item["citation_count"]
+            ],
+            "unsupported_claim_rate": [
+                float(item["unsupported"])
+                for item in report["claim_results"]
+                if item["role"] == "quality_measurement" and not item["abstained"]
+            ],
+            "grounding_detection_accuracy": [
+                float(item["grounding_detection_passed"])
+                for item in report["claim_results"]
+                if item["role"] == "detector_test"
+            ],
+        }
+        uncertainty = {
+            name: self._bootstrap_interval(values, protocol, index)
+            for index, (name, values) in enumerate(uncertainty_inputs.items(), start=1)
+        }
+        evaluation_results: list[dict[str, Any]] = []
+        for profile_index, evaluation_profile in enumerate(profile["evaluation_profiles"], start=1):
+            queries = [query_by_id[query_id] for query_id in evaluation_profile["query_ids"]]
+            claims = [claim_by_id[claim_id] for claim_id in evaluation_profile["claim_ids"]]
+            retrieval_metrics = {
+                "queries": len(queries),
+                "recall_at_k": round(sum(item["recall_at_k"] for item in queries) / len(queries), 6)
+                if queries else None,
+                "mrr": round(sum(item["reciprocal_rank"] for item in queries) / len(queries), 6)
+                if queries else None,
+                "ndcg_at_k": round(sum(item["ndcg_at_k"] for item in queries) / len(queries), 6)
+                if queries else None,
+            }
+            checks = {
+                "minimum_queries": len(queries) >= evaluation_profile["minimum_queries"],
+            }
+            if queries:
+                checks.update(
+                    {
+                        "recall_at_k": retrieval_metrics["recall_at_k"] >= thresholds["recall_at_k"],
+                        "mrr": retrieval_metrics["mrr"] >= thresholds["mrr"],
+                        "ndcg_at_k": retrieval_metrics["ndcg_at_k"] >= thresholds["ndcg_at_k"],
+                    }
+                )
+            detector = [item for item in claims if item["role"] == "detector_test"]
+            grounding_accuracy = (
+                round(sum(item["grounding_detection_passed"] for item in detector) / len(detector), 6)
+                if detector
+                else None
+            )
+            if detector:
+                checks["grounding_detection_accuracy"] = (
+                    grounding_accuracy >= thresholds["grounding_detection_accuracy"]
+                )
+            profile_uncertainty = {
+                "recall_at_k": self._bootstrap_interval(
+                    [float(item["recall_at_k"]) for item in queries], protocol, 100 + profile_index * 10
+                ),
+                "mrr": self._bootstrap_interval(
+                    [float(item["reciprocal_rank"]) for item in queries], protocol, 101 + profile_index * 10
+                ),
+                "ndcg_at_k": self._bootstrap_interval(
+                    [float(item["ndcg_at_k"]) for item in queries], protocol, 102 + profile_index * 10
+                ),
+            }
+            evaluation_results.append(
+                {
+                    "id": evaluation_profile["id"],
+                    "version": evaluation_profile["version"],
+                    "query_ids": evaluation_profile["query_ids"],
+                    "claim_ids": evaluation_profile["claim_ids"],
+                    "metrics": {**retrieval_metrics, "grounding_detection_accuracy": grounding_accuracy},
+                    "uncertainty": profile_uncertainty,
+                    "threshold_results": checks,
+                    "quality_gate": "pass" if all(checks.values()) else "fail",
+                }
+            )
+        parser_pass = bool(structured_results) and all(item["passed"] for item in structured_results)
+        profile_pass = all(item["quality_gate"] == "pass" for item in evaluation_results)
+        metric_gate = report["quality_gate"]
+        release_pass = metric_gate == "pass" and parser_pass and profile_pass
+        stages = [item["failure_stage"] for item in report["query_results"]]
+        stages.extend(
+            item["failure_stage"]
+            for item in report["claim_results"]
+            if item["failure_stage"] != "none"
+        )
+        stages.extend("locator" for item in structured_results if not item["passed"])
+        failure_taxonomy = {
+            stage: stages.count(stage)
+            for stage in ["retrieval", "reranking", "locator", "generation_grounding"]
+        }
+        report["benchmark_profile"].update(
+            {
+                "schema_version": profile["schema_version"],
+                "release_protocol": profile["release_protocol"],
+                "evaluation_profiles": [
+                    {"id": item["id"], "version": item["version"]}
+                    for item in profile["evaluation_profiles"]
+                ],
+            }
+        )
+        report.update(
+            {
+                "metric_quality_gate": metric_gate,
+                "quality_gate": "pass" if release_pass else "fail",
+                "release_gate": {
+                    "passed": release_pass,
+                    "metric_gate": metric_gate == "pass",
+                    "profile_gates": profile_pass,
+                    "structured_parser_gate": parser_pass,
+                    "read_only_held_out": True,
+                },
+                "evaluation_profile_results": evaluation_results,
+                "uncertainty": uncertainty,
+                "structured_parser_results": structured_results,
+                "failure_taxonomy": failure_taxonomy,
+                "claim_boundary": profile["release_protocol"]["claim_boundary"],
+                "promotion_boundary": {
+                    "baseline_is_learned_semantic": False,
+                    "baseline_label": "deterministic_lexical_hash_hybrid",
+                    "learned_profile_requires_runtime_distribution": True,
+                    "learned_profile_requires_this_release_set": True,
+                    "benchmark_establishes_learning_effect": False,
+                },
+            }
+        )
+        return report
 
     @staticmethod
     def _ranking_metrics(
@@ -2007,7 +2393,7 @@ class RagEngine:
         if not isinstance(payload, dict) or set(payload) - {"model", "profile"}:
             raise RagError("reranker evaluation accepts only model and profile")
         profile = self.load_benchmark_profile(
-            limited_text(payload.get("profile", "core-multidomain-v1"), "benchmark profile", limit=200)
+            limited_text(payload.get("profile", DEFAULT_BENCHMARK_PROFILE), "benchmark profile", limit=200)
         )
         model_profile = normalize_model_profile(payload.get("model"), "cross_encoder")
         evaluation = self._benchmark_evaluation_payload(profile)
@@ -2189,7 +2575,16 @@ class RagEngine:
         if not isinstance(k, int) or isinstance(k, bool) or not 1 <= k <= 50:
             raise RagError("evaluation k must be an integer between 1 and 50")
         with self._connect() as connection:
-            active_ids = {row[0] for row in connection.execute("SELECT chunk_id FROM chunks WHERE active = 1")}
+            active_rows = list(
+                connection.execute(
+                    "SELECT chunk_id, locator, document_ir_json FROM chunks WHERE active = 1"
+                )
+            )
+        active_ids = {str(row["chunk_id"]) for row in active_rows}
+        locator_valid = {
+            str(row["chunk_id"]): bool(row["locator"] and json.loads(row["document_ir_json"] or "[]"))
+            for row in active_rows
+        }
         query_results: list[dict[str, Any]] = []
         recalls: list[float] = []
         reciprocal_ranks: list[float] = []
@@ -2209,14 +2604,16 @@ class RagEngine:
                 {
                     "query": query,
                     "alternate_queries": item.get("alternate_queries", []),
-                    "top_k": k,
-                    "candidate_k": max(50, k),
+                    "top_k": 50,
+                    "candidate_k": 50,
                 },
                 record=False,
             )
-            ranked = [result["chunk_id"] for result in search["results"]]
+            candidates = [result["chunk_id"] for result in search["results"]]
+            ranked = candidates[:k]
             hits = [rank for rank, chunk_id in enumerate(ranked, start=1) if chunk_id in relevant]
             recall = len(set(ranked) & relevant) / len(relevant)
+            candidate_recall = len(set(candidates) & relevant) / len(relevant)
             reciprocal_rank = 1.0 / hits[0] if hits else 0.0
             dcg = sum(1.0 / math.log2(rank + 1) for rank in hits)
             ideal = sum(1.0 / math.log2(rank + 1) for rank in range(1, min(k, len(relevant)) + 1))
@@ -2224,14 +2621,28 @@ class RagEngine:
             recalls.append(recall)
             reciprocal_ranks.append(reciprocal_rank)
             ndcgs.append(ndcg)
+            if candidate_recall == 0:
+                failure_stage = "retrieval"
+            elif recall == 0:
+                failure_stage = "reranking"
+            elif not all(locator_valid.get(chunk_id, False) for chunk_id in relevant & set(ranked)):
+                failure_stage = "locator"
+            else:
+                failure_stage = "none"
             query_results.append(
                 {
                     "id": query_id,
                     "retrieved_chunk_ids": ranked,
+                    "candidate_chunk_ids": candidates,
                     "relevant_chunk_ids": sorted(relevant),
                     "recall_at_k": round(recall, 6),
+                    "candidate_recall": round(candidate_recall, 6),
                     "reciprocal_rank": round(reciprocal_rank, 6),
                     "ndcg_at_k": round(ndcg, 6),
+                    "benchmark_profile_ids": item.get("benchmark_profile_ids", []),
+                    "language": item.get("language"),
+                    "trap": item.get("trap"),
+                    "failure_stage": failure_stage,
                 }
             )
 
@@ -2243,6 +2654,7 @@ class RagEngine:
         citation_count = 0
         unsupported = 0
         asserted = 0
+        grounding_detection: list[bool] = []
         for index, item in enumerate(claims):
             if not isinstance(item, dict):
                 raise RagError(f"claims[{index}] must be a mapping")
@@ -2257,20 +2669,41 @@ class RagEngine:
             abstained = item.get("abstained", False)
             if not isinstance(abstained, bool):
                 raise RagError(f"{claim_id}.abstained must be boolean")
+            missing_citations = sorted(cited - active_ids)
+            if missing_citations:
+                raise RagError(f"{claim_id} cites missing or inactive chunks: {', '.join(missing_citations)}")
+            role = item.get("role", "quality_measurement")
+            if role not in {"quality_measurement", "detector_test"}:
+                raise RagError(f"{claim_id}.role must be quality_measurement or detector_test")
+            expected_supported = item.get("expected_supported", True)
+            if not isinstance(expected_supported, bool):
+                raise RagError(f"{claim_id}.expected_supported must be boolean")
             correct = cited & supported_by
-            citation_count += len(cited)
-            correct_citations += len(correct)
             is_unsupported = not abstained and not correct
-            if not abstained:
-                asserted += 1
-                unsupported += int(is_unsupported)
+            detected = expected_supported == (not is_unsupported)
+            if role == "quality_measurement":
+                citation_count += len(cited)
+                correct_citations += len(correct)
+                if not abstained:
+                    asserted += 1
+                    unsupported += int(is_unsupported)
+            else:
+                grounding_detection.append(detected)
             claim_results.append(
                 {
                     "id": claim_id,
                     "abstained": abstained,
                     "supported": not is_unsupported,
+                    "unsupported": is_unsupported,
+                    "role": role,
+                    "expected_supported": expected_supported,
+                    "grounding_detection_passed": detected,
+                    "benchmark_profile_ids": item.get("benchmark_profile_ids", []),
+                    "citation_count": len(cited),
+                    "citation_correctness": round(len(correct) / len(cited), 6) if cited else 1.0,
                     "correct_citation_ids": sorted(correct),
                     "incorrect_citation_ids": sorted(cited - supported_by),
+                    "failure_stage": "generation_grounding" if is_unsupported else "none",
                 }
             )
         metrics = {
@@ -2282,6 +2715,12 @@ class RagEngine:
             "citation_correctness": round(correct_citations / citation_count, 6) if citation_count else 1.0,
             "unsupported_claim_rate": round(unsupported / asserted, 6) if asserted else 0.0,
         }
+        if grounding_detection or (benchmark_profile is not None and benchmark_profile.get("schema_version") == 2):
+            metrics["grounding_detection_accuracy"] = (
+                round(sum(grounding_detection) / len(grounding_detection), 6)
+                if grounding_detection
+                else 1.0
+            )
         workflow_keys = {"diversity_cases", "freshness_cases", "correction_cases"}
         supplied_workflow_keys = workflow_keys & set(payload)
         if supplied_workflow_keys and supplied_workflow_keys != workflow_keys:
@@ -2420,7 +2859,8 @@ class RagEngine:
             "correction_success_rate",
             "residual_gap_rate",
         }
-        threshold_names = base_threshold_names | extended_threshold_names
+        grounding_threshold_names = {"grounding_detection_accuracy"}
+        threshold_names = base_threshold_names | extended_threshold_names | grounding_threshold_names
         unknown_thresholds = sorted(set(thresholds) - threshold_names)
         if unknown_thresholds:
             raise RagError("evaluation contains unknown thresholds: " + ", ".join(unknown_thresholds))
@@ -2435,9 +2875,9 @@ class RagEngine:
         if thresholds:
             if extended_threshold_names & set(thresholds) and not supplied_workflow_keys:
                 raise RagError("extended evaluation thresholds require all three workflow case lists")
-            required_names = (
-                threshold_names if supplied_workflow_keys else base_threshold_names
-            )
+            required_names = base_threshold_names | (extended_threshold_names if supplied_workflow_keys else set())
+            if benchmark_profile is not None and benchmark_profile.get("schema_version") == 2:
+                required_names |= grounding_threshold_names
             required_thresholds = sorted(required_names - set(thresholds))
             if required_thresholds:
                 raise RagError(
@@ -2452,6 +2892,10 @@ class RagEngine:
                     "unsupported_claim_rate", 1.0
                 ),
             }
+            if "grounding_detection_accuracy" in thresholds:
+                comparisons["grounding_detection_accuracy"] = metrics["grounding_detection_accuracy"] >= threshold(
+                    "grounding_detection_accuracy", 0.0
+                )
             if supplied_workflow_keys:
                 comparisons.update(
                     {
@@ -2769,7 +3213,7 @@ def build_parser() -> argparse.ArgumentParser:
     index_build.add_argument("--expected-rag-revision", type=int, help="Reject the build unless the current RAG revision matches")
     benchmark = sub.add_parser("benchmark", help=simple_help["benchmark"])
     benchmark.add_argument("workspace", help="Fresh dedicated AtomLearn benchmark workspace")
-    benchmark.add_argument("--profile", default="core-multidomain-v1", help="Bundled versioned benchmark profile ID")
+    benchmark.add_argument("--profile", default=DEFAULT_BENCHMARK_PROFILE, help="Bundled versioned benchmark profile ID")
     benchmark.add_argument("--expected-rag-revision", type=int, help="Normally 0 for the required fresh RAG workspace")
     evaluate_reranker = sub.add_parser(
         "evaluate-reranker",

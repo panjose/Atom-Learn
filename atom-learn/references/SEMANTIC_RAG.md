@@ -60,22 +60,22 @@ Search results identify the exact supporting chunk and its Document IR block IDs
 
 ## Named retrieval gate
 
-The bundled `core-multidomain-v1` profile is validated by `assets/schemas/rag-benchmark-profile.schema.json`. It covers textbook, research, and exam sources; English, Chinese, and cross-language queries; formulas, tables, OCR, multi-column text, synonyms, cross-section retrieval, and global synthesis. Its non-empty thresholds gate recall@k, MRR, nDCG, citation correctness, unsupported-claim rate, source diversity, freshness, correction success, and residual gaps.
+The bundled `core-release-v2` profile is validated by `assets/schemas/rag-benchmark-profile.schema.json`. It is an explicit read-only held-out release set with fixed dataset, parser, embedding, reranker, base-runtime, and bootstrap identities. Seven named/versioned profiles cover an honest lexical baseline, true cross-lingual retrieval without bilingual relevant blocks, domain shift, four hard-negative trap types, production structured-document parsing, OCR/layout, and adversarial grounding. Its non-empty thresholds gate recall@k, MRR, nDCG, citation correctness, unsupported-claim rate, grounding detection, source diversity, freshness, correction success, and residual gaps.
 
 Run it only in a fresh dedicated RAG workspace because the command ingests its immutable fixtures:
 
 ```text
-atomlearn rag benchmark <benchmark-workspace> --profile core-multidomain-v1 --expected-rag-revision 0
+atomlearn rag benchmark <benchmark-workspace> --profile core-release-v2 --expected-rag-revision 0
 ```
 
-Ad hoc `rag evaluate` without thresholds remains `report_only`. A named `profile` and explicit `thresholds` are mutually exclusive, so a stable gate cannot be converted into a pass by supplying permissive values.
+The report records percentile-bootstrap uncertainty, per-profile gates, real HTML/DOCX/PDF/OCR parser results, and retrieval/reranking/locator/generation-grounding failure stages. Ad hoc `rag evaluate` without thresholds remains `report_only`. A named `profile` and explicit `thresholds` are mutually exclusive, so a stable gate cannot be converted into a pass by supplying permissive values. The default hash projection remains labeled a non-learned baseline. A candidate learned profile additionally needs its actual distributed runtime and this unchanged held-out set before any stable delivery claim; neither result is a learning-effect claim.
 
 ## Cross-encoder evaluation and activation
 
 Cross-encoders use the same local-model safety policy and Sentence Transformers' official [CrossEncoder interface](https://www.sbert.net/docs/package_reference/cross_encoder/model.html). Evaluate the model against the already-ingested bundled benchmark workspace:
 
 ```yaml
-profile: core-multidomain-v1
+profile: core-release-v2
 model:
   model_id: organization/multilingual-reranker
   revision: immutable-model-revision

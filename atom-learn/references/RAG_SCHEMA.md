@@ -193,7 +193,7 @@ Every `evidence_chunk_id` must also belong to the freshly retrieved candidate se
 ## Evaluation
 
 ```yaml
-profile: core-multidomain-v1 # optional named thresholds; mutually exclusive with thresholds
+profile: core-release-v2 # optional named thresholds; mutually exclusive with thresholds
 k: 10
 queries:
   - id: calculus-chain-rule
@@ -212,7 +212,9 @@ thresholds:
   unsupported_claim_rate: 0.05
 ```
 
-`rag evaluate` reports mean recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate. Retrieval labels and support labels are active chunk IDs. With no profile or thresholds the result is `quality_gate: report_only`. To request an ad hoc deterministic `pass`/`fail` gate, provide all five core threshold values from 0 through 1; partial sets are rejected. Named profiles additionally bind source-diversity, freshness, correction-success, and residual-gap cases and thresholds. Stable release gates must use a bundled named profile. `rag benchmark` runs that profile only in a fresh RAG workspace and persists the report.
+`rag evaluate` reports mean recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate. Retrieval labels and support labels are active chunk IDs. With no profile or thresholds the result is `quality_gate: report_only`. To request an ad hoc deterministic `pass`/`fail` gate, provide all five core threshold values from 0 through 1; partial sets are rejected. Named profiles additionally bind source-diversity, freshness, correction-success, and residual-gap cases and thresholds.
+
+Stable release gates use `core-release-v2`. Its schema-v2 contract fixes a read-only held-out split; dataset, parser, embedding, reranker, runtime, seed, resample count, and claim boundary; seven named evaluation profiles; at least 18 queries and 12 sources; all core thresholds plus grounding-detection accuracy; and real structured fixtures. The runner reports bootstrap intervals, per-profile gates, parser block-kind regression, and retrieval/reranking/locator/generation-grounding failure stages. It rejects tiny, empty-threshold, cross-language-leaking, hard-negative-incomplete, or structured-format-incomplete profiles before ingestion. `rag benchmark` runs only in a fresh RAG workspace and persists the report. The report cannot be cited as a learning-effect result.
 
 ## Commands
 
@@ -229,7 +231,7 @@ python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace> [--context 
 python <SKILL_DIR>/scripts/atomlearn.py rag coverage <workspace> --input <coverage.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag correct <workspace> --input <rag-correction.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag evaluate <workspace> --input <rag-evaluation.yaml>
-python <SKILL_DIR>/scripts/atomlearn.py rag benchmark <workspace> --profile core-multidomain-v1
+python <SKILL_DIR>/scripts/atomlearn.py rag benchmark <workspace> --profile core-release-v2
 python <SKILL_DIR>/scripts/atomlearn.py rag evaluate-reranker <workspace> --input <reranker.yaml> --output <report.json>
 python <SKILL_DIR>/scripts/atomlearn.py rag activate-reranker <workspace> --input <activation.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py rag document-ir <workspace> <source-id> [--revision <revision>]

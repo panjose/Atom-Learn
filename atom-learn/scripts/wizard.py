@@ -34,6 +34,7 @@ from workflow import WorkflowError, make_action, validate_submission
 
 START_SCHEMA_VERSION = 1
 SOURCE_TYPES = {"pdf", "book", "notes", "documentation", "website", "database", "outline", "exam", "other"}
+TOPIC_DECISIONS = ("starting_point", "target_depth", "use_case")
 
 
 class WizardError(RuntimeError):
@@ -57,6 +58,71 @@ def validate_payload(payload: Any) -> dict[str, Any]:
             location = ".".join(str(item) for item in error.absolute_path) or "$"
             formatted.append(f"{location}: {error.message}")
         raise WizardError("start payload does not match start.schema.json:\n- " + "\n- ".join(formatted))
+    return payload
+
+
+def validate_topic_diagnostic(payload: Any, unresolved: list[str]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise WorkflowError("topic_diagnostic must be a mapping")
+    schema = json.loads(asset_path("schemas", "topic-diagnostic.schema.json").read_text(encoding="utf-8"))
+    errors = sorted(Draft202012Validator(schema).iter_errors(payload), key=lambda item: list(item.path))
+    if errors:
+        details = [
+            (".".join(str(part) for part in error.absolute_path) or "$") + ": " + error.message
+            for error in errors
+        ]
+        raise WorkflowError("topic diagnostic is invalid:\n- " + "\n- ".join(details))
+    strategy = payload["strategy"]
+    items = payload["items"]
+    item_ids = [item["id"] for item in items]
+    if len(item_ids) != len(set(item_ids)):
+        raise WorkflowError("topic diagnostic item IDs must be unique")
+    if strategy == "adaptive_diagnostic":
+        decisions = {item["decision"] for item in items}
+        missing = sorted(set(unresolved) - decisions)
+        if missing:
+            raise WorkflowError("topic diagnostic must cover every unresolved decision: " + ", ".join(missing))
+        for item in items:
+            if item["response_status"] in {"dont_know", "skipped"} and item["signal"] != "unknown":
+                raise WorkflowError("don't-know and skipped diagnostic items must use signal: unknown")
+            if item["response_status"] == "answered" and item["signal"] == "unknown":
+                raise WorkflowError("answered diagnostic items must provide a bounded non-unknown signal")
+        for decision in TOPIC_DECISIONS:
+            recommendation = payload["recommendations"][decision]
+            if recommendation["source"] != "diagnostic_signal":
+                continue
+            informative = any(
+                item["decision"] == decision
+                and item["response_status"] == "answered"
+                and item["signal"] != "unknown"
+                for item in items
+            )
+            if not informative:
+                raise WorkflowError(
+                    f"{decision} cannot cite diagnostic_signal when its items were skipped or answered don't know"
+                )
+        secure_start = any(
+            item["decision"] == "starting_point" and item["signal"] == "secure"
+            for item in items
+        )
+        if payload["recommendations"]["test_out_recommended"] and not secure_start:
+            raise WorkflowError("test-out can be recommended only from an answered secure starting-point signal")
+    else:
+        expected = {
+            "start_from_basics": ("foundations", "learner_choice"),
+            "map_first": ("map_first", "learner_choice"),
+            "use_defaults": ("use_default", "default"),
+        }[strategy]
+        starting = payload["recommendations"]["starting_point"]
+        if (starting["value"], starting["source"]) != expected:
+            raise WorkflowError(f"{strategy} requires starting_point {expected[0]} from {expected[1]}")
+        if any(
+            payload["recommendations"][decision]["source"] == "diagnostic_signal"
+            for decision in TOPIC_DECISIONS
+        ):
+            raise WorkflowError(f"{strategy} cannot cite diagnostic_signal because it contains no items")
+        if payload["recommendations"]["test_out_recommended"]:
+            raise WorkflowError(f"{strategy} cannot recommend test-out without diagnostic signals")
     return payload
 
 
@@ -188,6 +254,7 @@ class WizardEngine:
         self.state = state
         self.path = workspace.meta / "start.yaml"
         self.events_path = workspace.meta / "start-events.ndjson"
+        self.diagnostic_path = workspace.meta / "topic-diagnostic.yaml"
 
     @classmethod
     def initialize(cls, workspace_path: str, payload: dict[str, Any], base_dir: Path) -> "WizardEngine":
@@ -262,12 +329,51 @@ class WizardEngine:
         if rag_sources:
             rag.ingest({"sources": rag_sources}, "local")
         timestamp = iso()
+        unresolved_decisions = [
+            decision
+            for decision, supplied in [
+                ("starting_point", "prior_knowledge" in payload),
+                ("target_depth", "target_depth" in payload),
+                ("use_case", "desired_outcome" in payload),
+            ]
+            if mode == "topic" and not supplied
+        ]
+        entry_strategy = payload.get(
+            "entry_strategy", "adaptive_diagnostic" if unresolved_decisions else "use_defaults"
+        )
+        topic_diagnostic = {
+            "status": (
+                "not_applicable"
+                if mode != "topic" or not unresolved_decisions
+                else "pending"
+                if entry_strategy == "adaptive_diagnostic"
+                else "choice_applied"
+            ),
+            "strategy": entry_strategy,
+            "unresolved_decisions": unresolved_decisions,
+            "mastery_evidence_written": False,
+        }
+        if topic_diagnostic["status"] == "choice_applied":
+            topic_diagnostic["recommendations"] = {
+                "starting_point": {
+                    "value": {
+                        "start_from_basics": "foundations",
+                        "map_first": "map_first",
+                        "use_defaults": "use_default",
+                    }[entry_strategy],
+                    "source": "default" if entry_strategy == "use_defaults" else "learner_choice",
+                },
+                "target_depth": {"value": intake_payload["target_depth"], "source": "default"},
+                "use_case": {"value": intake_payload["desired_outcome"], "source": "default"},
+                "test_out_recommended": False,
+            }
         state = {
             "schema_version": START_SCHEMA_VERSION,
             "revision": 0,
             "mode": mode,
             "course_id": course_id,
             "source_ids": [item["id"] for item in intake_sources] + ([outline_source_id] if outline else []),
+            "topic_diagnostic": topic_diagnostic,
             "stage": "initialized",
             "created_at": timestamp,
             "updated_at": timestamp,
@@ -275,6 +381,8 @@ class WizardEngine:
         }
         engine = cls(load_workspace(str(workspace.root)), state)
         write_yaml(engine.path, state)
+        if topic_diagnostic["status"] == "choice_applied":
+            write_yaml(engine.diagnostic_path, topic_diagnostic)
         atomic_text(engine.events_path, "")
         return engine
 
@@ -345,6 +453,11 @@ class WizardEngine:
             return {"verdicts": result["verdicts"]}
         if action == "generate_course_plan":
             return {"course_plan": result["course_plan"]}
+        if action == "diagnose_topic":
+            diagnostic = validate_topic_diagnostic(
+                result["topic_diagnostic"], self.state.get("topic_diagnostic", {}).get("unresolved_decisions", [])
+            )
+            return {"_topic_diagnostic": diagnostic, "_rerun_correction": True}
         if action == "confirm_phase":
             if result.get("confirmed") is not True:
                 raise WorkflowError("phase confirmation requires result.confirmed: true")
@@ -363,6 +476,40 @@ class WizardEngine:
                 "_rerun_correction": True,
             }
         raise WorkflowError(f"Action {action} does not accept a submission")
+
+    def _apply_topic_diagnostic(self, diagnostic: dict[str, Any]) -> None:
+        recommendations = diagnostic["recommendations"]
+        intake = IntakeEngine.load(str(self.workspace.root))
+        update: dict[str, Any] = {}
+        if recommendations["target_depth"]["source"] != "default":
+            update["target_depth"] = recommendations["target_depth"]["value"]
+        if recommendations["use_case"]["source"] != "default":
+            update["desired_outcome"] = recommendations["use_case"]["value"]
+        if update:
+            intake.update(update)
+            intake.commit("intake.topic_diagnostic_applied", {"fields": sorted(update)})
+        sanitized = {
+            "status": "completed",
+            "strategy": diagnostic["strategy"],
+            "unresolved_decisions": self.state.get("topic_diagnostic", {}).get("unresolved_decisions", []),
+            "items": [
+                {
+                    "id": item["id"],
+                    "decision": item["decision"],
+                    "prompt_sha256": "sha256:" + hashlib.sha256(item["prompt"].encode("utf-8")).hexdigest(),
+                    "response_status": item["response_status"],
+                    "signal": item["signal"],
+                    "scorer": item["scorer"],
+                }
+                for item in diagnostic["items"]
+            ],
+            "recommendations": recommendations,
+            "privacy": diagnostic["privacy"],
+            "mastery_evidence_written": False,
+            "completed_at": iso(),
+        }
+        self.state["topic_diagnostic"] = sanitized
+        write_yaml(self.diagnostic_path, sanitized)
 
     def _add_discovery_sources(self, payload: dict[str, Any]) -> None:
         if not payload.get("web_evidence"):
@@ -430,7 +577,9 @@ class WizardEngine:
                 "Produce a prerequisite DAG rather than copying source order.",
                 "Every non-archived Atom must cite a registered source ID and stable locator.",
                 "Keep each Atom independently teachable and assessable.",
+                "Use the topic diagnostic only to choose the entry boundary; it is not mastery Evidence.",
             ],
+            "topic_diagnostic": self.state.get("topic_diagnostic", {}),
             "submit_as": "course_plan in the next start payload",
             "schema_reference": "atom-learn/references/SCHEMA.md",
         }
@@ -467,6 +616,44 @@ class WizardEngine:
             }
             self.commit("start.clarification_required", result)
             return result
+        diagnostic_state = self.state.get("topic_diagnostic", {})
+        if diagnostic_state.get("status") == "pending":
+            if payload.get("_topic_diagnostic") is not None:
+                self._apply_topic_diagnostic(payload["_topic_diagnostic"])
+                intake = IntakeEngine.load(str(self.workspace.root))
+            else:
+                self.state["stage"] = "topic_diagnostic"
+                result = {
+                    "ok": True,
+                    "status": "topic_diagnostic_required",
+                    "workspace": str(self.workspace.root),
+                    "wizard_revision": self.state.get("revision", 0) + 1,
+                    "assumptions": intake.state.get("assumptions", []),
+                    "workflow_action": self._action(
+                        "topic_diagnostic",
+                        "diagnose_topic",
+                        {
+                            "topic_terms": intake.state.get("topic_terms", []),
+                            "unresolved_decisions": diagnostic_state.get("unresolved_decisions", []),
+                            "item_policy": {
+                                "minimum": 2,
+                                "maximum": 5,
+                                "prioritize": ["key_prerequisites", "target_boundary"],
+                                "adaptive": True,
+                                "dont_know_or_skip": "unknown_not_penalized",
+                                "mastery_evidence": "forbidden_before_an_Atom_and_qualified_scorer_exist",
+                            },
+                            "alternatives": ["start_from_basics", "map_first", "use_defaults"],
+                            "submission_schema": "atom-learn/assets/schemas/topic-diagnostic.schema.json",
+                        },
+                        ["topic_diagnostic"],
+                    ),
+                    "next_action": (
+                        "Offer the three one-click paths or ask only 2-5 adaptive items that resolve the listed decisions."
+                    ),
+                }
+                self.commit("start.topic_diagnostic_required", result)
+                return result
         coverage = self._coverage(payload, initial=initial)
         if coverage and coverage.get("status") == "coverage_judgment_required":
             self.state["stage"] = "coverage_judgment_required"
@@ -711,6 +898,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--title", help="Optional title used with --topic")
     parser.add_argument("--goal", help="Optional learning goal used with --topic")
     parser.add_argument("--course-id", help="Optional stable course ID used with --topic")
+    parser.add_argument(
+        "--entry-strategy",
+        choices=["adaptive_diagnostic", "start_from_basics", "map_first", "use_defaults"],
+        help="Topic entry path; adaptive diagnostic is the shortest-topic default",
+    )
     parser.add_argument("--print-schema", action="store_true", help="Print the JSON Schema and exit")
     parser.add_argument("--confirm", action="store_true", help="Confirm the pending first learning phase")
     parser.add_argument("--activate-first", action="store_true", help="Confirm and activate the proposed first Atom")
@@ -732,7 +924,7 @@ def run(argv: list[str] | None = None) -> None:
         base_dir = Path(args.submission).resolve().parent
     elif args.topic:
         payload = validate_payload(
-            {key: value for key, value in {"topic": args.topic, "title": args.title, "goal": args.goal, "course_id": args.course_id}.items() if value is not None}
+            {key: value for key, value in {"topic": args.topic, "title": args.title, "goal": args.goal, "course_id": args.course_id, "entry_strategy": args.entry_strategy}.items() if value is not None}
         )
         base_dir = Path.cwd()
     else:

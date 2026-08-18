@@ -1,0 +1,318 @@
+kind: atomlearn.rag-benchmark-profile
+schema_version: 2
+id: core-release-v2
+version: 2
+title: AtomLearn held-out retrieval and grounding release suite
+dimensions:
+  - domain:textbook
+  - domain:research
+  - domain:exam
+  - language:english
+  - language:chinese
+  - language:cross_language
+  - structure:formula
+  - structure:table
+  - structure:ocr
+  - structure:multi_column
+  - retrieval:synonym
+  - retrieval:cross_section
+  - retrieval:global
+release_protocol:
+  dataset_revision: atomlearn-rag-heldout-2026-08-18
+  parser_revision: document-ir-v1
+  embedding_profile: atomlearn/multilingual-hash-v1
+  reranker_profile: atomlearn/deterministic-reranker-v1
+  split: held_out_release
+  read_only: true
+  training_use: forbidden
+  runtime_profiles: [base]
+  hardware: cpu_portable_no_accelerator_required
+  claim_boundary: retrieval_and_grounding_engineering_only_not_learning_effect
+  bootstrap:
+    method: percentile_bootstrap
+    resamples: 1000
+    confidence_level: 0.95
+    seed: 151502
+evaluation_profiles:
+  - id: lexical-baseline
+    version: 1
+    purpose: Honest deterministic lexical and hash-hybrid baseline without a learned-semantic claim.
+    query_ids: [lexical.derivative, lexical.scheduler, lexical.mitosis]
+    claim_ids: []
+    minimum_queries: 3
+  - id: true-cross-lingual
+    version: 1
+    purpose: Monolingual relevant blocks queried in another language; translated query expansion is explicit.
+    query_ids: [cross.zh-en-causal, cross.en-zh-tree, cross.ja-en-gradient]
+    claim_ids: []
+    minimum_queries: 3
+  - id: domain-shift
+    version: 1
+    purpose: Terminology and evidence boundaries across medicine, law, and climate research.
+    query_ids: [shift.medicine, shift.law, shift.climate]
+    claim_ids: []
+    minimum_queries: 3
+  - id: hard-negatives
+    version: 1
+    purpose: Condition, negation, direction, and synonym traps with near-match distractors.
+    query_ids: [hard.condition, hard.negation, hard.direction, hard.synonym]
+    claim_ids: []
+    minimum_queries: 4
+  - id: structured-docs
+    version: 1
+    purpose: HTML table, DOCX table, PDF formula, and OCR sidecar parser-to-grounding regression.
+    query_ids: [structured.html, structured.docx, structured.pdf, structured.ocr]
+    claim_ids: []
+    minimum_queries: 4
+  - id: ocr-layout
+    version: 1
+    purpose: OCR text, formula recovery, and PDF table or multi-column layout locators.
+    query_ids: [structured.ocr, ocr.equation, ocr.pdf-layout]
+    claim_ids: []
+    minimum_queries: 3
+  - id: grounding-adversarial
+    version: 1
+    purpose: Correct citations, unsupported citations, missing citations, and abstention detection.
+    query_ids: [ground.policy, ground.replication, ground.derivative]
+    claim_ids: [claim.derivative, claim.policy, detect.wrong-citation, detect.no-citation, detect.abstention]
+    minimum_queries: 3
+thresholds:
+  recall_at_k: 0.90
+  mrr: 0.72
+  ndcg_at_k: 0.72
+  citation_correctness: 1.0
+  unsupported_claim_rate: 0.0
+  grounding_detection_accuracy: 1.0
+  source_diversity: 1.0
+  freshness: 1.0
+  correction_success_rate: 1.0
+  residual_gap_rate: 0.0
+reranker_thresholds:
+  mrr: 0.72
+  ndcg_at_k: 0.72
+  maximum_ndcg_regression: 0.02
+sources:
+  - id: lexical-calculus
+    title: Calculus lexical fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: derivative, section: Derivative, text: "The derivative is the instantaneous rate of change and tangent slope."}
+  - id: lexical-scheduler
+    title: Scheduler lexical fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: round-robin, section: Scheduling, text: "Round-robin scheduling assigns each runnable process a fixed time quantum."}
+  - id: lexical-mitosis
+    title: Biology lexical fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: metaphase, section: Mitosis, text: "During metaphase chromosomes align at the cell equator."}
+  - id: cross-causal-en
+    title: Monolingual causal identification fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: assumptions, section: Identification, text: "Causal identification requires consistency, exchangeability, and positivity."}
+  - id: cross-tree-zh
+    title: 单语树论资料
+    authority: textbook
+    language: zh
+    passages:
+      - {locator: 定理, section: 树的定理, text: "每一棵有限树的边数都比顶点数少一。"}
+  - id: cross-gradient-en
+    title: Monolingual optimization fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: gradient, section: Optimization, text: "The negative gradient gives the direction of steepest descent."}
+  - id: shift-medicine
+    title: Clinical domain-shift fixture
+    authority: peer_reviewed
+    language: en
+    passages:
+      - {locator: endpoint, section: Clinical endpoint, text: "The prespecified composite endpoint combines cardiovascular death and nonfatal myocardial infarction."}
+  - id: shift-law
+    title: Legal domain-shift fixture
+    authority: official
+    language: en
+    passages:
+      - {locator: review, section: Judicial review, text: "Strict scrutiny requires a compelling governmental interest and narrow tailoring."}
+  - id: shift-climate
+    title: Climate domain-shift fixture
+    authority: peer_reviewed
+    language: en
+    version: fixture-2026
+    passages:
+      - {locator: forcing, section: Attribution, text: "Effective radiative forcing separates the imposed perturbation from the resulting climate response."}
+  - id: hard-condition-source
+    title: Conditional validity fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: valid, section: Positivity condition, text: "The intervention contrast is identifiable only when positivity holds in every required stratum."}
+      - {locator: distractor, section: Invalid shortcut, text: "The intervention contrast is identifiable even when positivity fails in required strata."}
+  - id: hard-negation-source
+    title: Negation fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: not-estimated, section: Estimand boundary, text: "This estimator does not recover the natural direct effect."}
+      - {locator: distractor, section: Nearby estimand, text: "This estimator recovers the natural direct effect."}
+  - id: hard-direction-source
+    title: Direction fixture
+    authority: textbook
+    language: en
+    passages:
+      - {locator: forward, section: Direction, text: "The graph encodes that treatment causes outcome, not that outcome causes treatment."}
+      - {locator: distractor, section: Reversed direction, text: "The graph encodes that outcome causes treatment."}
+  - id: hard-synonym-source
+    title: Synonym fixture
+    authority: official
+    language: en
+    passages:
+      - {locator: infarction, section: Diagnosis, text: "Myocardial infarction is the clinical term for a heart attack."}
+      - {locator: distractor, section: Different diagnosis, text: "Cardiac arrest is not a synonym for myocardial infarction."}
+  - id: structured-html
+    title: HTML table parser fixture
+    authority: textbook
+    language: en
+    fixture: smoke_html
+    expected_block_kinds: [heading, paragraph, table]
+  - id: structured-docx
+    title: DOCX table parser fixture
+    authority: textbook
+    language: en
+    fixture: smoke_docx
+    expected_block_kinds: [heading, paragraph, table]
+  - id: structured-pdf
+    title: PDF formula and table parser fixture
+    authority: textbook
+    language: en
+    fixture: smoke_pdf
+    expected_block_kinds: [paragraph, formula, table]
+  - id: structured-ocr-tree
+    title: OCR tree theorem fixture
+    authority: textbook
+    language: en
+    fixture: ocr_pdf
+    fixture_text: "Recovered scan: every finite tree has exactly one fewer edge than vertices."
+    expected_block_kinds: [heading, ocr_text]
+  - id: structured-ocr-equation
+    title: OCR equation fixture
+    authority: textbook
+    language: en
+    fixture: ocr_pdf
+    fixture_text: "Recovered equation: Euler characteristic V minus E plus F equals two."
+    expected_block_kinds: [heading, ocr_text]
+  - id: grounding-policy
+    title: Grounding policy fixture
+    authority: official
+    language: en
+    passages:
+      - {locator: evidence-rule, section: Evidence rule, text: "Every asserted claim must cite a supporting active chunk; otherwise the answer must abstain."}
+  - id: grounding-replication
+    title: Retrieval replication fixture
+    authority: peer_reviewed
+    language: en
+    version: fixture-2026
+    passages:
+      - {locator: limitations, section: Limitations, text: "Replication gains weakened under domain shift, leaving benchmark coverage as a limitation."}
+  - id: grounding-distractor
+    title: Grounding distractor
+    authority: secondary
+    language: en
+    passages:
+      - {locator: orchard, section: Orchard, text: "Apples and pears are harvested in autumn."}
+queries:
+  - {id: lexical.derivative, query: "instantaneous rate of change tangent slope", language: en, profile_ids: [lexical-baseline], relevant: [{source_id: lexical-calculus, locator: derivative}]}
+  - {id: lexical.scheduler, query: "round-robin runnable process fixed time quantum", language: en, profile_ids: [lexical-baseline], relevant: [{source_id: lexical-scheduler, locator: round-robin}]}
+  - {id: lexical.mitosis, query: "metaphase chromosomes align cell equator", language: en, profile_ids: [lexical-baseline], relevant: [{source_id: lexical-mitosis, locator: metaphase}]}
+  - id: cross.zh-en-causal
+    query: "因果识别需要哪些假设"
+    alternate_queries: ["causal identification consistency exchangeability positivity"]
+    language: zh
+    profile_ids: [true-cross-lingual]
+    relevant: [{source_id: cross-causal-en, locator: assumptions}]
+  - id: cross.en-zh-tree
+    query: "finite tree edge count relative to vertices"
+    alternate_queries: ["有限树 边数 顶点数 少一"]
+    language: en
+    profile_ids: [true-cross-lingual]
+    relevant: [{source_id: cross-tree-zh, locator: 定理}]
+  - id: cross.ja-en-gradient
+    query: "最急降下の方向は何ですか"
+    alternate_queries: ["negative gradient direction steepest descent"]
+    language: ja
+    profile_ids: [true-cross-lingual]
+    relevant: [{source_id: cross-gradient-en, locator: gradient}]
+  - {id: shift.medicine, query: "prespecified composite endpoint cardiovascular death nonfatal myocardial infarction", language: en, profile_ids: [domain-shift], relevant: [{source_id: shift-medicine, locator: endpoint}]}
+  - {id: shift.law, query: "strict scrutiny compelling governmental interest narrow tailoring", language: en, profile_ids: [domain-shift], relevant: [{source_id: shift-law, locator: review}]}
+  - {id: shift.climate, query: "effective radiative forcing imposed perturbation climate response", language: en, profile_ids: [domain-shift], relevant: [{source_id: shift-climate, locator: forcing}]}
+  - {id: hard.condition, query: "identifiable only when positivity holds every required stratum", language: en, profile_ids: [hard-negatives], trap: condition, relevant: [{source_id: hard-condition-source, locator: valid}]}
+  - {id: hard.negation, query: "estimator does not recover natural direct effect", language: en, profile_ids: [hard-negatives], trap: negation, relevant: [{source_id: hard-negation-source, locator: not-estimated}]}
+  - {id: hard.direction, query: "treatment causes outcome not outcome causes treatment", language: en, profile_ids: [hard-negatives], trap: direction, relevant: [{source_id: hard-direction-source, locator: forward}]}
+  - {id: hard.synonym, query: "myocardial infarction clinical term heart attack", language: en, profile_ids: [hard-negatives], trap: synonym, relevant: [{source_id: hard-synonym-source, locator: infarction}]}
+  - {id: structured.html, query: "HTML derivative local rate table", language: en, profile_ids: [structured-docs], relevant: [{source_id: structured-html, locator: "lines 1-7"}]}
+  - {id: structured.docx, query: "DOCX gradient steepest ascent direction table", language: en, profile_ids: [structured-docs], relevant: [{source_id: structured-docx, locator: "table 1"}]}
+  - {id: structured.pdf, query: "PDF formula f x equals x squared", language: en, profile_ids: [structured-docs], relevant: [{source_id: structured-pdf, locator: "page 1, formulas"}]}
+  - {id: structured.ocr, query: "recovered scan finite tree one fewer edge vertices", language: en, profile_ids: [structured-docs, ocr-layout], relevant: [{source_id: structured-ocr-tree, locator: "page 1 [OCR]"}]}
+  - {id: ocr.equation, query: "recovered equation Euler characteristic V minus E plus F equals two", language: en, profile_ids: [ocr-layout], relevant: [{source_id: structured-ocr-equation, locator: "page 1 [OCR]"}]}
+  - {id: ocr.pdf-layout, query: "PDF secant quotient tangent slope table", language: en, profile_ids: [ocr-layout], relevant: [{source_id: structured-pdf, locator: "page 1"}]}
+  - {id: ground.policy, query: "asserted claim cite supporting active chunk otherwise abstain", language: en, profile_ids: [grounding-adversarial], relevant: [{source_id: grounding-policy, locator: evidence-rule}]}
+  - {id: ground.replication, query: "replication gains weakened domain shift benchmark coverage limitation", language: en, profile_ids: [grounding-adversarial], relevant: [{source_id: grounding-replication, locator: limitations}]}
+  - {id: ground.derivative, query: "derivative instantaneous rate tangent slope", language: en, profile_ids: [grounding-adversarial], relevant: [{source_id: lexical-calculus, locator: derivative}]}
+claims:
+  - id: claim.derivative
+    cited: [{source_id: lexical-calculus, locator: derivative}]
+    supported: [{source_id: lexical-calculus, locator: derivative}]
+    abstained: false
+    profile_ids: [grounding-adversarial]
+    role: quality_measurement
+    expected_supported: true
+  - id: claim.policy
+    cited: [{source_id: grounding-policy, locator: evidence-rule}]
+    supported: [{source_id: grounding-policy, locator: evidence-rule}]
+    abstained: false
+    profile_ids: [grounding-adversarial]
+    role: quality_measurement
+    expected_supported: true
+  - id: detect.wrong-citation
+    cited: [{source_id: grounding-distractor, locator: orchard}]
+    supported: [{source_id: grounding-replication, locator: limitations}]
+    abstained: false
+    profile_ids: [grounding-adversarial]
+    role: detector_test
+    expected_supported: false
+  - id: detect.no-citation
+    cited: []
+    supported: [{source_id: grounding-policy, locator: evidence-rule}]
+    abstained: false
+    profile_ids: [grounding-adversarial]
+    role: detector_test
+    expected_supported: false
+  - id: detect.abstention
+    cited: []
+    supported: []
+    abstained: true
+    profile_ids: [grounding-adversarial]
+    role: detector_test
+    expected_supported: true
+workflow_cases:
+  source_diversity:
+    - id: diversity.grounding
+      cited:
+        - {source_id: grounding-policy, locator: evidence-rule}
+        - {source_id: grounding-replication, locator: limitations}
+      minimum_sources: 2
+  freshness:
+    - id: freshness.replication
+      source_id: grounding-replication
+      acceptable_versions: [fixture-2026]
+  correction:
+    - id: correction.replication
+      before_status: missing
+      after_status: supported
+      evidence: [{source_id: grounding-replication, locator: limitations}]

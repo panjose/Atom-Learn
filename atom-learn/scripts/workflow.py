@@ -19,6 +19,7 @@ ACTION_SCHEMA = ASSETS / "workflow-action.schema.json"
 SUBMISSION_SCHEMA = ASSETS / "workflow-submission.schema.json"
 SUBMISSION_SCHEMA_ID = "https://atomlearn.dev/schemas/workflow-submission.schema.json"
 ACTION_DETAILS = {
+    "diagnose_topic": ("harness.topic_diagnostic", "Choose a low-burden starting path", "选择低负担的起步方式"),
     "clarify_goal": ("harness.clarify", "Clarify the learning goal", "澄清学习目标"),
     "inventory_sources": ("harness.source_inventory", "Inventory supplied sources", "清点已提供资料"),
     "web_search": ("harness.web_search", "Find authoritative evidence", "查找权威证据"),
