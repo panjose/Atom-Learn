@@ -1412,6 +1412,7 @@ class RagEngine:
                 {
                     "chunk_id": chunk_id,
                     "source_id": row["source_id"],
+                    "source_revision": row["source_revision"],
                     "title": row["title"],
                     "section": row["section"],
                     "locator": row["locator"],

@@ -247,24 +247,29 @@ python atom-learn/scripts/atomlearn.py research status courses/agent-research
 
 ## 试题分析与针对性备考
 
-AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理为来源可追踪的考试语料。它会联合题干、答案和 rubric 证据提出可复核 Atom 映射，pending 映射不会计入覆盖率；它会分开五因素结构复杂度、官方难度和带来源的经验难度，提出可复核的跨试卷题族、测量 held-out 迁移风险，并生成经过容量校验的每日计划。
+AtomLearn 可以把用户提供的往年题、样题、模拟题或题库整理为来源可追踪的考试语料。它会联合题干、答案、rubric 和精确 source locator 证据提出可复核 Atom 映射；所有自动映射在复核前都保持 pending。确定性 lexical 映射始终可用；可选 semantic 候选只有在 learned embedding profile 与 reranker benchmark 都处于当前有效状态时才会参与，否则 `auto` 会报告有类型的 lexical fallback，`required` 则会失败关闭。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
 python atom-learn/scripts/atomlearn.py exam process-source courses/calculus --source-id past-paper --paper-id paper-2026 --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
-python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
-python atom-learn/scripts/atomlearn.py exam record-empirical courses/calculus --input exam-empirical-difficulty.yaml --expected-exam-revision 3
-python atom-learn/scripts/atomlearn.py exam propose-families courses/calculus --expected-exam-revision 4
-python atom-learn/scripts/atomlearn.py exam review-families courses/calculus --input exam-family-review.yaml --expected-exam-revision 5
+python atom-learn/scripts/atomlearn.py exam record-official courses/calculus --input exam-official-difficulty.yaml --expected-exam-revision 2
+python atom-learn/scripts/atomlearn.py exam set-target courses/calculus --target-date 2027-01-17 --expected-exam-revision 3
+python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 4
+python atom-learn/scripts/atomlearn.py exam record-empirical courses/calculus --input exam-empirical-difficulty.yaml --expected-exam-revision 5
+python atom-learn/scripts/atomlearn.py exam propose-families courses/calculus --expected-exam-revision 6
+python atom-learn/scripts/atomlearn.py exam review-families courses/calculus --input exam-family-review.yaml --expected-exam-revision 7
 python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
 python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
 python atom-learn/scripts/atomlearn.py exam daily-plan courses/calculus --input exam-daily-plan.yaml
+python atom-learn/scripts/atomlearn.py exam replan courses/calculus --input exam-daily-plan.yaml --reason initial --expected-schedule-revision 0
+python atom-learn/scripts/atomlearn.py exam plan-status courses/calculus
+python atom-learn/scripts/atomlearn.py exam record-day courses/calculus --input exam-day-outcome.yaml --expected-schedule-revision 1
 # For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-`exam process-source` 会消费 RAG 共用的同一份 Document IR，并在规范状态只保存简短摘要、关联和 locator 的同时保留准确 block provenance。经验难度只有在至少 30 次且带来源 locator 的作答聚合下才会生效；否则产品只表述官方难度或结构复杂度。题族必须复核，`memorization_risk` 描述 seen/held-out 迁移而不判断用户动机。无法容纳全部任务的日计划会返回 `infeasible` 和工作量缺口，不会降低 mastery。频率只描述用户提供的样本，绝不是未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)和[Phase 6 实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)。
+`exam process-source` 会消费 RAG 共用的同一份 Document IR，并在规范状态只保存简短摘要、关联和 locator 的同时保留准确 block provenance。结构复杂度永远不会覆盖已经复核且带 locator 的官方难度，也不会覆盖满足至少 30 次作答、明确群体和完整时间窗门槛的经验难度。`daily-plan` 是只读预览；`replan` 会写入具有独立 revision 的规范日程。新 Evidence、漏学或可用时间变化、考试/映射/难度变更、撤销跳过、插入前置或课程计划变化都会使日程失效。`plan-status` 会暴露 `due`、`overdue`、`replanned` 和 `infeasible` 结果，且不降低 mastery。外部提醒 adapter 可以消费这些事件，但仅使用 CLI 也能完成闭环。频率只描述用户提供的样本，绝不是未来命题预测。详见[试题分析与备考工作流](atom-learn/references/EXAM_PREPARATION.md)、[v0.14 Phase 6 实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)和[v0.15 Phase 7 实施记录](docs/V0_15_PHASE7_IMPLEMENTATION.md)。
 
 ## 基于 Session 的自适应
 
@@ -344,6 +349,7 @@ bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root�
 - [v0.15 Phase 4 稳定 Bootstrap 与迁移实施记录](docs/V0_15_PHASE4_IMPLEMENTATION.md)
 - [v0.15 Phase 5 Topic 诊断与 RAG 评测实施记录](docs/V0_15_PHASE5_IMPLEMENTATION.md)
 - [v0.15 Phase 6 Episode 与 Harness 行为实施记录](docs/V0_15_PHASE6_IMPLEMENTATION.md)
+- [v0.15 Phase 7 考试闭环实施记录](docs/V0_15_PHASE7_IMPLEMENTATION.md)
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 考试与科研实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 自适应复习实施记录](docs/V0_14_PHASE7_IMPLEMENTATION.md)
@@ -372,7 +378,7 @@ bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root�
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/bootstrap.py manager/atomlearn_manager/codex.py manager/atomlearn_manager/manifest.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/exam_schedule.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/bootstrap.py manager/atomlearn_manager/codex.py manager/atomlearn_manager/manifest.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 快速测试覆盖 CLI/帮助契约、打包、文档、Schema 和确定性辅助逻辑；集成测试覆盖完整的文件系统与子进程工作流。CI 会在 Ubuntu 与 Windows 上使用 Python 3.10、3.11、3.12 和 3.13 运行两层测试。测试使用 `.test-workspaces/` 中的独立工作区，不会修改示例文件。

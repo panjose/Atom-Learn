@@ -104,7 +104,7 @@ capabilities:
       - AtomLearn does not silently download a model or send source content to an embedding provider.
 
   - id: exam.reviewable_heuristics_v1
-    title: Reviewable joint question mapping calibrated difficulty item families and feasible daily plans
+    title: Reviewable hybrid question mapping provenance-qualified difficulty item families and revisioned daily plans
     status: implemented
     default_mode: opt_in
     public_claim: true
@@ -113,12 +113,17 @@ capabilities:
       - exam process-source
       - exam process
       - exam review-mappings
+      - exam record-official
+      - exam set-target
       - exam record-empirical
       - exam propose-families
       - exam review-families
       - exam analyze
       - exam plan
       - exam daily-plan
+      - exam replan
+      - exam plan-status
+      - exam record-day
     implementation:
       - path: atom-learn/scripts/exam.py
         symbol: "def process_documents"
@@ -126,6 +131,8 @@ capabilities:
         symbol: "def record_empirical_difficulty"
       - path: atom-learn/scripts/exam.py
         symbol: "def daily_plan"
+      - path: atom-learn/scripts/exam_schedule.py
+        symbol: "class ExamScheduleEngine"
     verification:
       - path: tests/test_exam.py
         symbol: "test_exam_process_splits_questions_links_marking_and_proposes_reviewable_atom_mappings"
@@ -135,10 +142,21 @@ capabilities:
         symbol: "test_item_families_require_review_and_report_held_out_memorization_risk"
       - path: tests/test_exam.py
         symbol: "test_daily_exam_plan_fails_closed_when_capacity_cannot_fit_required_work"
-    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/EXAM_PREPARATION.md]
+      - path: tests/test_exam.py
+        symbol: "test_semantic_mapping_gate_fails_closed_and_hybrid_candidates_keep_rag_provenance"
+      - path: tests/test_exam.py
+        symbol: "test_revisioned_schedule_survives_missed_day_and_replans_without_lowering_mastery"
+      - path: tests/test_exam.py
+        symbol: "test_canonical_replan_emits_infeasible_and_mapping_review_invalidates_it"
+      - path: tests/test_exam.py
+        symbol: "test_new_learning_evidence_invalidates_a_bound_exam_schedule"
+    documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/EXAM_PREPARATION.md, docs/V0_15_PHASE7_IMPLEMENTATION.md]
     limitations:
       - Automatic boundaries, joint Atom mappings, and item families remain proposals until their explicit review gates pass.
-      - Empirical difficulty becomes effective only from a source-located aggregate with at least 30 attempts; otherwise the product says structural complexity or official difficulty.
+      - Semantic mapping requires user-supplied learned/provider embeddings plus a current benchmark-approved reranker; the base runtime retains a deterministic lexical fallback.
+      - Empirical difficulty becomes effective only from a source-located aggregate with at least 30 attempts, a named population, and a complete time window; official difficulty also requires reviewed source provenance.
+      - Core validates official-difficulty reviewer identifiers as auditable provenance but cannot authenticate the asserted human identity.
+      - Schedule events are exposed through Core and CLI; notifications remain the responsibility of optional external adapters.
 
   - id: research.guided_corpus_v1
     title: Protocol-bound literature discovery screening citation expansion and structured synthesis

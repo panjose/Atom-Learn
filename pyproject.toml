@@ -38,6 +38,7 @@ py-modules = [
   "evolution",
   "research",
   "exam",
+  "exam_schedule",
   "lineage",
   "platform_state",
   "migrations",

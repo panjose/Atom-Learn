@@ -21,6 +21,7 @@ WORKSPACE_TARGETS = {
     "workspace_rag": ".atomlearn/rag/state.yaml",
     "workspace_research": ".atomlearn/research/state.yaml",
     "workspace_exam": ".atomlearn/exam/state.yaml",
+    "workspace_exam_schedule": ".atomlearn/exam/schedule.yaml",
     "workspace_lineage": ".atomlearn/lineage/state.yaml",
     "workspace_profile_binding": ".atomlearn/profile-binding.yaml",
     "workspace_episodes": ".atomlearn/episodes/state.yaml",

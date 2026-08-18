@@ -3158,10 +3158,11 @@ def run(args: argparse.Namespace) -> None:
     if args.command == "exam":
         from exam import AtomLearnError as ExamAtomLearnError
         from exam import ExamError, run as run_exam
+        from exam_schedule import ExamScheduleError
 
         try:
             run_exam(["--help"] if args.exam_help else args.exam_args)
-        except (ExamError, ExamAtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+        except (ExamError, ExamScheduleError, ExamAtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
     if args.command == "adapt":

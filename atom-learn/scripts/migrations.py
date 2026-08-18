@@ -34,6 +34,7 @@ WORKSPACE_TARGETS = {
     "workspace_rag": ".atomlearn/rag/state.yaml",
     "workspace_research": ".atomlearn/research/state.yaml",
     "workspace_exam": ".atomlearn/exam/state.yaml",
+    "workspace_exam_schedule": ".atomlearn/exam/schedule.yaml",
     "workspace_lineage": ".atomlearn/lineage/state.yaml",
     "workspace_profile_binding": ".atomlearn/profile-binding.yaml",
     "workspace_episodes": ".atomlearn/episodes/state.yaml",
@@ -262,6 +263,7 @@ def validate_target(target: StateTarget, manifest: dict[str, Any]) -> list[str]:
         "user_strategy": "user-strategy",
         "workspace_profile_binding": "profile-binding",
         "workspace_episodes": "episode-checkpoint-state",
+        "workspace_exam_schedule": "exam-schedule-state",
     }
     schema_name = schema_names.get(target.namespace)
     if schema_name:

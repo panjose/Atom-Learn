@@ -98,10 +98,10 @@ python <SKILL_DIR>/scripts/atomlearn.py render <workspace>
 2. Treat past papers, sample exams, mock exams, and question banks as source material. Ingest PDFs, DOCX, text, or OCR into the workspace RAG index and preserve stable source revisions, Document IR blocks, and per-question locators.
 3. If questions are the only input, complete source intake and build a prerequisite-aware course before final Atom mapping. Do not build a course around memorized answer patterns.
 4. Retrieve the relevant question, marking scheme, syllabus, and course evidence. Use harness Web Search only to correct missing official context and ingest bounded evidence with provenance.
-5. Prefer `exam process-source` for an indexed paper; it consumes shared Document IR and retains block provenance without copying full text. Use `exam process` when separate question, answer, and marking artifacts must be linked, and `exam import` for already structured data.
-6. Inspect processing diagnostics and run `exam review-mappings` for every pending joint stem/answer/rubric proposal. Pending or rejected mappings do not count as coverage. Run `exam calibrate` when official anchors exist; use `exam record-empirical` only for source-located aggregates and call unqualified output structural complexity, not observed difficulty.
+5. Prefer `exam process-source` for an indexed paper; it consumes shared Document IR and retains block provenance without copying full text. Use `exam process` when separate question, answer, and marking artifacts must be linked, and `exam import` for already structured data. Keep `semantic_mapping: auto` unless the learner explicitly requires semantic retrieval: it may run only with a current learned profile plus passing reranker benchmark, otherwise `auto` exposes a typed lexical fallback and `required` fails closed.
+6. Inspect processing diagnostics and run `exam review-mappings` for every pending joint stem/answer/rubric proposal. Automatic mappings are always pending; only confirmed or corrected mappings count as coverage. Use `exam record-official` only for reviewed, source-located anchors before `exam calibrate`; use `exam record-empirical` only for source-located aggregates with a named population and complete time window. Call unqualified output structural complexity, not observed difficulty.
 7. Run `exam propose-families`, then explicitly confirm/correct/reject item-family candidates. Use held-out transfer aggregates for `memorization_risk`; never infer intent from the risk.
-8. Run `adapt guidance --context exam`, then `exam plan --mode learning|review|mixed`. When the learner supplies calendar capacity, run `exam daily-plan`; report `infeasible` gaps rather than weakening mastery.
+8. Run `adapt guidance --context exam`, then `exam plan --mode learning|review|mixed`. Use `exam daily-plan` only as a read-only preview. Persist the canonical calendar with `exam replan`; its target must match the exam target, changed only through `exam set-target`. Inspect `exam plan-status` and record each planned day with `exam record-day`. Replan after Evidence, missed/changed availability, exam/mapping/difficulty changes, revoked skips, inserted prerequisites, or course-plan changes; report `infeasible` gaps rather than weakening mastery.
 9. If lineage is initialized, run `lineage trace` on the top target. Explain its prerequisite chain and exam-relevant conceptual thread before teaching it.
 10. Teach or review the top eligible Atom. Withhold the solution during a diagnostic attempt, record normal Evidence, assess it, and rerun the plan.
 
@@ -113,6 +113,8 @@ python <SKILL_DIR>/scripts/atomlearn.py exam init <workspace> --title <title> --
 python <SKILL_DIR>/scripts/atomlearn.py exam process-source <workspace> --source-id <source-id> --paper-id <paper-id> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam process <workspace> --input <exam-process.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam review-mappings <workspace> --input <exam-mapping-review.yaml> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam record-official <workspace> --input <exam-official-difficulty.yaml> --expected-exam-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam set-target <workspace> --target-date <YYYY-MM-DD> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam calibrate <workspace> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam record-empirical <workspace> --input <exam-empirical-difficulty.yaml> --expected-exam-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam propose-families <workspace> --expected-exam-revision <revision>
@@ -121,6 +123,9 @@ python <SKILL_DIR>/scripts/atomlearn.py exam import <workspace> --input <exam-im
 python <SKILL_DIR>/scripts/atomlearn.py exam analyze <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py exam plan <workspace> --mode mixed --limit 10
 python <SKILL_DIR>/scripts/atomlearn.py exam daily-plan <workspace> --input <exam-daily-plan.yaml>
+python <SKILL_DIR>/scripts/atomlearn.py exam replan <workspace> --input <exam-daily-plan.yaml> --reason <reason> --expected-schedule-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py exam plan-status <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py exam record-day <workspace> --input <exam-day-outcome.yaml> --expected-schedule-revision <revision>
 python <SKILL_DIR>/scripts/atomlearn.py exam validate <workspace>
 ```
 

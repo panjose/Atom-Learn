@@ -35,6 +35,7 @@ from atomlearn import (
     write_yaml,
 )
 from rag import RagEngine, RagError
+from exam_schedule import ExamScheduleEngine, ExamScheduleError, REPLAN_REASONS
 
 
 PAPER_KINDS = {"official_past_exam", "sample_exam", "mock_exam", "question_bank", "practice_set"}
@@ -64,12 +65,12 @@ QUESTION_INPUT_KEYS = {
 KNOWLEDGE_POINT_KEYS = {"id", "label", "atom_id", "weight", "confidence", "basis"}
 KNOWLEDGE_POINT_AUTO_KEYS = {
     "review_status", "candidate_atom_ids", "candidate_scores", "mapping_method",
-    "evidence_locators", "rationale",
+    "evidence_locators", "rationale", "semantic_evidence",
 }
 MAPPING_REVIEW_STATUSES = {"pending", "confirmed", "corrected", "rejected"}
 MARKING_LINK_STATUSES = {"linked", "answer_only", "marking_only", "missing"}
 DIFFICULTY_REQUIRED_INPUT_KEYS = set(DIFFICULTY_FACTORS) | {"basis", "confidence", "official_level"}
-DIFFICULTY_OPTIONAL_INPUT_KEYS = {"empirical"}
+DIFFICULTY_OPTIONAL_INPUT_KEYS = {"empirical", "official"}
 DIFFICULTY_INPUT_KEYS = DIFFICULTY_REQUIRED_INPUT_KEYS | DIFFICULTY_OPTIONAL_INPUT_KEYS
 DIFFICULTY_OUTPUT_KEYS = {
     "estimated_level", "calibrated_level", "calibration_offset", "effective_level", "band",
@@ -198,6 +199,7 @@ class ExamEngine:
         self.root = workspace.meta / "exam"
         self.state = state
         self.bank = bank
+        self._semantic_mapping_context: tuple[RagEngine, dict[str, Any]] | None = None
 
     @classmethod
     def initialize(cls, workspace_path: str, title: str, target_date: str | None) -> "ExamEngine":
@@ -243,7 +245,16 @@ class ExamEngine:
         )
         bank = read_data(root / "bank.yaml")
         bank.setdefault("families", [])
-        return cls(workspace, state, bank)
+        engine = cls(workspace, state, bank)
+        # Legacy v1 banks remain readable without an eager rewrite. Re-normalizing
+        # in memory adds the source-location qualification fields and conservatively
+        # downgrades unlocated official labels until a reviewed locator is recorded.
+        for question in bank.get("questions", []):
+            difficulty = question.get("difficulty")
+            if isinstance(difficulty, dict):
+                raw = {key: value for key, value in difficulty.items() if key in DIFFICULTY_INPUT_KEYS}
+                question["difficulty"] = engine._normalize_difficulty(raw, f"{question.get('id', 'question')}.difficulty")
+        return engine
 
     @staticmethod
     def _target_date(value: str | None) -> str | None:
@@ -329,7 +340,9 @@ class ExamEngine:
             raise ExamError(f"{label}.candidate_scores must be a list")
         normalized_scores: list[dict[str, Any]] = []
         for index, score in enumerate(candidate_scores):
-            if not isinstance(score, dict) or set(score) != {"atom_id", "stem", "answer", "rubric", "joint"}:
+            score_fields = set(score) if isinstance(score, dict) else set()
+            base_fields = {"atom_id", "stem", "answer", "rubric", "joint"}
+            if frozenset(score_fields) not in {frozenset(base_fields), frozenset(base_fields | {"semantic"})}:
                 raise ExamError(f"{label}.candidate_scores[{index}] is invalid")
             candidate_id = require_id(score.get("atom_id"), f"{label}.candidate_scores[{index}].atom_id")
             if candidate_id not in self.workspace.atoms:
@@ -339,14 +352,18 @@ class ExamEngine:
                     "atom_id": candidate_id,
                     **{
                         field: round(float(require_number(score.get(field), f"{label}.candidate_scores[{index}].{field}", 0, 1)), 3)
-                        for field in ["stem", "answer", "rubric", "joint"]
+                        for field in [
+                            "stem", "answer", "rubric",
+                            *(["semantic"] if "semantic" in score else []),
+                            "joint",
+                        ]
                     },
                 }
             )
         evidence_locators = raw.get("evidence_locators", [])
         if not isinstance(evidence_locators, list) or any(not isinstance(item, str) for item in evidence_locators):
             raise ExamError(f"{label}.evidence_locators must be a string list")
-        return {
+        result = {
             "id": point_id,
             "label": limited_text(raw.get("label"), f"{label}.label", limit=300),
             "atom_id": atom_id,
@@ -362,13 +379,98 @@ class ExamEngine:
             "evidence_locators": unique(item.strip() for item in evidence_locators if item.strip()),
             "rationale": limited_text(raw.get("rationale", ""), f"{label}.rationale", allow_empty=True, limit=1000),
         }
+        if "semantic_evidence" in raw:
+            semantic = raw.get("semantic_evidence")
+            required = {
+                "gate", "reason_code", "rag_revision", "embedding_profile", "reranker_profile",
+                "benchmark_profile", "results",
+            }
+            if not isinstance(semantic, dict) or set(semantic) != required:
+                raise ExamError(f"{label}.semantic_evidence is invalid")
+            if semantic.get("gate") not in {"not_requested", "unavailable", "blocked", "used", "no_linked_candidates"}:
+                raise ExamError(f"{label}.semantic_evidence.gate is invalid")
+            rag_revision = semantic.get("rag_revision")
+            if rag_revision is not None and (
+                not isinstance(rag_revision, int) or isinstance(rag_revision, bool) or rag_revision < 0
+            ):
+                raise ExamError(f"{label}.semantic_evidence.rag_revision is invalid")
+            semantic_results = semantic.get("results")
+            if not isinstance(semantic_results, list) or len(semantic_results) > 20:
+                raise ExamError(f"{label}.semantic_evidence.results must be a bounded list")
+            normalized_semantic: list[dict[str, Any]] = []
+            for index, item in enumerate(semantic_results):
+                if not isinstance(item, dict) or set(item) != {
+                    "atom_id", "chunk_id", "source_id", "source_revision", "locator", "document_ir_block_ids", "score"
+                }:
+                    raise ExamError(f"{label}.semantic_evidence.results[{index}] is invalid")
+                atom_id = require_id(item.get("atom_id"), f"{label}.semantic_evidence.results[{index}].atom_id")
+                if atom_id not in self.workspace.atoms:
+                    raise ExamError(f"{label}.semantic_evidence.results[{index}] references an unknown Atom")
+                block_ids = item.get("document_ir_block_ids")
+                if not isinstance(block_ids, list) or any(not isinstance(value, str) for value in block_ids):
+                    raise ExamError(f"{label}.semantic_evidence.results[{index}].document_ir_block_ids is invalid")
+                source_revision = item.get("source_revision")
+                if (
+                    not isinstance(source_revision, int)
+                    or isinstance(source_revision, bool)
+                    or source_revision < 1
+                ):
+                    raise ExamError(f"{label}.semantic_evidence.results[{index}].source_revision is invalid")
+                normalized_semantic.append(
+                    {
+                        "atom_id": atom_id,
+                        "chunk_id": require_id(item.get("chunk_id"), f"{label}.semantic_evidence.results[{index}].chunk_id"),
+                        "source_id": require_id(item.get("source_id"), f"{label}.semantic_evidence.results[{index}].source_id"),
+                        "source_revision": source_revision,
+                        "locator": limited_text(item.get("locator"), f"{label}.semantic_evidence.results[{index}].locator", limit=1000),
+                        "document_ir_block_ids": unique(block_ids),
+                        "score": round(float(require_number(item.get("score"), f"{label}.semantic_evidence.results[{index}].score", 0, 1)), 3),
+                    }
+                )
+            result["semantic_evidence"] = {
+                "gate": semantic["gate"],
+                "reason_code": limited_text(semantic.get("reason_code"), f"{label}.semantic_evidence.reason_code", limit=100),
+                "rag_revision": rag_revision,
+                "embedding_profile": (
+                    limited_text(semantic["embedding_profile"], f"{label}.semantic_evidence.embedding_profile", limit=500)
+                    if semantic.get("embedding_profile") is not None else None
+                ),
+                "reranker_profile": (
+                    limited_text(semantic["reranker_profile"], f"{label}.semantic_evidence.reranker_profile", limit=500)
+                    if semantic.get("reranker_profile") is not None else None
+                ),
+                "benchmark_profile": (
+                    limited_text(semantic["benchmark_profile"], f"{label}.semantic_evidence.benchmark_profile", limit=200)
+                    if semantic.get("benchmark_profile") is not None else None
+                ),
+                "results": normalized_semantic,
+            }
+        return result
+
+    def _normalize_official(self, raw: Any, label: str, official_level: float | None) -> dict[str, Any] | None:
+        if raw is None:
+            return None
+        required = {"level", "source", "source_locator", "reviewer_id"}
+        if not isinstance(raw, dict) or set(raw) != required:
+            raise ExamError(f"{label} must contain exactly level, source, source_locator, and reviewer_id")
+        level = round(float(require_number(raw.get("level"), f"{label}.level", 1, 5)), 3)
+        if official_level is not None and abs(level - official_level) > 0.001:
+            raise ExamError(f"{label}.level must match official_level")
+        return {
+            "level": level,
+            "source": limited_text(raw.get("source"), f"{label}.source", limit=300),
+            "source_locator": limited_text(raw.get("source_locator"), f"{label}.source_locator", limit=1000),
+            "reviewer_id": require_id(raw.get("reviewer_id"), f"{label}.reviewer_id"),
+            "qualified": True,
+        }
 
     def _normalize_empirical(self, raw: Any, label: str) -> dict[str, Any] | None:
         if raw is None:
             return None
         required = {"attempt_count", "correct_rate", "median_seconds", "discrimination", "irt_b", "source", "source_locator"}
-        if not isinstance(raw, dict) or set(raw) != required:
-            raise ExamError(f"{label} must contain exactly {', '.join(sorted(required))}")
+        optional = {"population", "window_start", "window_end"}
+        if not isinstance(raw, dict) or not required.issubset(raw) or set(raw) - required - optional:
+            raise ExamError(f"{label} must contain the aggregate fields and optional population/time window")
         attempts = raw.get("attempt_count")
         if not isinstance(attempts, int) or isinstance(attempts, bool) or attempts < 0 or attempts > 10_000_000:
             raise ExamError(f"{label}.attempt_count must be an integer from 0 through 10000000")
@@ -380,7 +482,30 @@ class ExamEngine:
             raise ExamError(f"{label} requires correct_rate or irt_b")
         source = limited_text(raw.get("source"), f"{label}.source", limit=100)
         locator = limited_text(raw.get("source_locator"), f"{label}.source_locator", limit=1000)
-        qualified = attempts >= 30
+        population = raw.get("population")
+        if population is not None:
+            population = limited_text(population, f"{label}.population", limit=300)
+        window_start = raw.get("window_start")
+        window_end = raw.get("window_end")
+        if (window_start is None) != (window_end is None):
+            raise ExamError(f"{label} requires both window_start and window_end")
+        if window_start is not None:
+            try:
+                start = date.fromisoformat(str(window_start))
+                end = date.fromisoformat(str(window_end))
+            except ValueError as exc:
+                raise ExamError(f"{label} time window must use YYYY-MM-DD") from exc
+            if end < start:
+                raise ExamError(f"{label}.window_end cannot precede window_start")
+            window_start, window_end = start.isoformat(), end.isoformat()
+        qualification_reasons = []
+        if attempts < 30:
+            qualification_reasons.append("insufficient_attempts")
+        if population is None:
+            qualification_reasons.append("population_missing")
+        if window_start is None:
+            qualification_reasons.append("time_window_missing")
+        qualified = not qualification_reasons
         level = round(
             min(5.0, max(1.0, 3.0 + 0.5 * irt_b)) if irt_b is not None
             else 1.0 + 4.0 * (1.0 - float(correct_rate)),
@@ -399,8 +524,12 @@ class ExamEngine:
             "irt_b": irt_b,
             "source": source,
             "source_locator": locator,
+            "population": population,
+            "window_start": window_start,
+            "window_end": window_end,
             "level": level,
             "qualified": qualified,
+            "qualification_reasons": qualification_reasons,
             "sampling_uncertainty": sampling_uncertainty,
         }
 
@@ -421,6 +550,9 @@ class ExamEngine:
         official = optional_number(raw.get("official_level"), f"{label}.official_level", 1, 5)
         if basis == "official" and official is None:
             raise ExamError(f"{label}.official_level is required when basis is official")
+        official_input = self._normalize_official(raw.get("official"), f"{label}.official", official)
+        if official_input is not None:
+            official = official_input["level"]
         estimated = round(sum(factors[key] * weight for key, weight in DIFFICULTY_FACTORS.items()), 3)
         calibration = self.state.get("difficulty_calibration", {})
         offset = round(float(calibration.get("offset", 0.0)), 3)
@@ -430,8 +562,8 @@ class ExamEngine:
             effective = empirical_input["level"]
             effective_basis = "empirical"
             uncertainty = empirical_input["sampling_uncertainty"]
-        elif official is not None:
-            effective = official
+        elif official_input is not None:
+            effective = official_input["level"]
             effective_basis = "official"
             uncertainty = 0.0
         else:
@@ -443,9 +575,14 @@ class ExamEngine:
             **factors,
             "confidence": round(float(require_number(raw.get("confidence"), f"{label}.confidence", 0.5, 1)), 3),
             "official_level": official,
+            "official": (
+                {key: official_input[key] for key in ["level", "source", "source_locator", "reviewer_id"]}
+                if official_input else None
+            ),
             "empirical": (
                 {key: empirical_input[key] for key in [
-                    "attempt_count", "correct_rate", "median_seconds", "discrimination", "irt_b", "source", "source_locator"
+                    "attempt_count", "correct_rate", "median_seconds", "discrimination", "irt_b", "source", "source_locator",
+                    "population", "window_start", "window_end",
                 ]}
                 if empirical_input else None
             ),
@@ -460,7 +597,15 @@ class ExamEngine:
                 "confidence": round(float(raw.get("confidence")), 3),
                 "factors": factors,
             },
-            "official_difficulty": {"level": official, "available": official is not None},
+            "official_difficulty": {
+                "level": official,
+                "available": official is not None,
+                "qualified": official_input is not None,
+                "source": official_input["source"] if official_input else None,
+                "source_locator": official_input["source_locator"] if official_input else None,
+                "reviewer_id": official_input["reviewer_id"] if official_input else None,
+                "qualification_reasons": [] if official_input else (["source_locator_missing"] if official is not None else []),
+            },
             "empirical_difficulty": empirical_input,
             "effective_basis": effective_basis,
             "uncertainty": uncertainty,
@@ -666,7 +811,12 @@ class ExamEngine:
         rubric: str,
         review_threshold: float,
         evidence_locators: list[str],
+        semantic_mode: str = "auto",
     ) -> list[dict[str, Any]]:
+        semantic = self._semantic_mapping_evidence("\n".join(item for item in [stem, answer, rubric] if item), semantic_mode)
+        semantic_scores: dict[str, float] = {}
+        for item in semantic["results"]:
+            semantic_scores[item["atom_id"]] = max(semantic_scores.get(item["atom_id"], 0.0), item["score"])
         signal_tokens = {
             "stem": exam_tokens(stem),
             "answer": exam_tokens(answer),
@@ -693,7 +843,15 @@ class ExamEngine:
                     1.0,
                     0.4 * title_overlap + 0.4 * identifier_overlap + 0.15 * detail_overlap + 0.05 * exact,
                 )
-            score = 0.5 * scores["stem"] + 0.3 * scores["answer"] + 0.2 * scores["rubric"]
+            lexical_score = 0.5 * scores["stem"] + 0.3 * scores["answer"] + 0.2 * scores["rubric"]
+            semantic_score = semantic_scores.get(atom_id, 0.0)
+            score = (
+                0.7 * lexical_score + 0.3 * semantic_score
+                if semantic["gate"] == "used"
+                else lexical_score
+            )
+            if semantic["gate"] == "used":
+                scores["semantic"] = round(semantic_score, 3)
             scores["joint"] = round(score, 3)
             if score > 0:
                 ranked.append((score, atom_id, scores))
@@ -716,7 +874,12 @@ class ExamEngine:
                         {"atom_id": item[1], **{key: round(value, 3) for key, value in item[2].items()}}
                         for item in candidates
                     ],
-                    "mapping_method": "joint-stem-answer-rubric-v1",
+                    "mapping_method": (
+                        "hybrid-rag-stem-answer-rubric-v1"
+                        if semantic["gate"] == "used"
+                        else "joint-stem-answer-rubric-v1"
+                    ),
+                    "semantic_evidence": semantic,
                     "evidence_locators": evidence_locators,
                     "rationale": "No candidate crossed the minimum joint evidence threshold; human review is required.",
                 }
@@ -740,7 +903,14 @@ class ExamEngine:
                         {"atom_id": item[1], **{key: round(value, 3) for key, value in item[2].items()}}
                         for item in candidates
                     ],
-                    "mapping_method": "joint-stem-answer-rubric-v1",
+                    "mapping_method": (
+                        "hybrid-rag-stem-answer-rubric-v1"
+                        if semantic["gate"] == "used"
+                        else "joint-stem-answer-rubric-v1"
+                    ),
+                    # Keep the bounded competing candidates and their exact locators
+                    # beside every proposal so review can inspect both support and opposition.
+                    "semantic_evidence": semantic,
                     "evidence_locators": evidence_locators,
                     "rationale": (
                         f"Joint score {score:.3f}; separation {gap:.3f}; automatic mappings remain proposed "
@@ -750,6 +920,121 @@ class ExamEngine:
             )
         mappings[-1]["weight"] = round(1.0 - sum(item["weight"] for item in mappings[:-1]), 3)
         return mappings
+
+    def _semantic_mapping_evidence(self, query: str, mode: str) -> dict[str, Any]:
+        if mode not in {"auto", "required", "off"}:
+            raise ExamError("semantic_mapping must be auto, required, or off")
+
+        def response(gate: str, reason: str, **values: Any) -> dict[str, Any]:
+            return {
+                "gate": gate,
+                "reason_code": reason,
+                "rag_revision": values.get("rag_revision"),
+                "embedding_profile": values.get("embedding_profile"),
+                "reranker_profile": values.get("reranker_profile"),
+                "benchmark_profile": values.get("benchmark_profile"),
+                "results": values.get("results", []),
+            }
+
+        if mode == "off":
+            return response("not_requested", "semantic_mapping_disabled")
+        rag_state_path = self.workspace.meta / "rag" / "state.yaml"
+        if not rag_state_path.is_file():
+            if mode == "required":
+                raise ExamError("semantic mapping is required but RAG is not initialized")
+            return response("unavailable", "rag_not_initialized")
+        if self._semantic_mapping_context is None:
+            rag = RagEngine.load(str(self.workspace.root))
+            status = rag.status()
+            self._semantic_mapping_context = (rag, status)
+        else:
+            rag, status = self._semantic_mapping_context
+        embedding = status.get("embedding_profile")
+        reranker = status.get("reranker_profile")
+        embedding_name = embedding.get("model") if isinstance(embedding, dict) else None
+        reranker_name = reranker.get("model") if isinstance(reranker, dict) else None
+        benchmark = reranker.get("benchmark_profile") if isinstance(reranker, dict) else None
+        approved = (
+            status.get("valid") is True
+            and isinstance(embedding, dict)
+            and embedding.get("kind") in {"learned_local", "provider"}
+            and isinstance(reranker, dict)
+            and bool(benchmark)
+        )
+        if not approved:
+            if mode == "required":
+                raise ExamError(
+                    "semantic mapping requires a valid learned/provider embedding and benchmark-approved reranker profile"
+                )
+            return response(
+                "blocked",
+                "semantic_profile_or_benchmark_gate_missing",
+                rag_revision=status.get("rag_revision"),
+                embedding_profile=embedding_name,
+                reranker_profile=reranker_name,
+                benchmark_profile=benchmark,
+            )
+        try:
+            search = rag.search(
+                {"query": query, "top_k": 12, "candidate_k": 60, "use_cross_encoder": True},
+                record=False,
+            )
+        except RagError as exc:
+            if mode == "required":
+                raise ExamError(f"required semantic mapping search failed: {exc}") from exc
+            return response(
+                "blocked",
+                "semantic_search_failed",
+                rag_revision=status.get("rag_revision"),
+                embedding_profile=embedding_name,
+                reranker_profile=reranker_name,
+                benchmark_profile=benchmark,
+            )
+        results: list[dict[str, Any]] = []
+        for hit in search.get("results", []):
+            source_id = hit.get("source_id")
+            hit_tokens = exam_tokens(" ".join([str(hit.get("section", "")), str(hit.get("locator", "")), str(hit.get("text", ""))]))
+            base_score = max(0.0, min(1.0, float(hit.get("rerank_score", 0.0))))
+            for atom_id, atom in self.workspace.atoms.items():
+                if atom.get("status") == "archived":
+                    continue
+                linked = [item for item in atom.get("sources", []) if item.get("source_id") == source_id]
+                if not linked:
+                    continue
+                atom_tokens = exam_tokens(
+                    " ".join(
+                        [
+                            atom_id.replace(".", " "),
+                            str(atom.get("title", "")),
+                            str(atom.get("objective", "")),
+                            *(str(item.get("locator", "")) for item in linked),
+                        ]
+                    )
+                )
+                overlap = len(hit_tokens & atom_tokens) / max(1, min(len(atom_tokens), 12))
+                affinity = min(1.0, 0.55 + 0.45 * overlap)
+                results.append(
+                    {
+                        "atom_id": atom_id,
+                        "chunk_id": hit["chunk_id"],
+                        "source_id": source_id,
+                        "source_revision": hit["source_revision"],
+                        "locator": hit["locator"],
+                        "document_ir_block_ids": hit.get("document_ir_block_ids", []),
+                        "score": round(base_score * affinity, 3),
+                    }
+                )
+        results.sort(key=lambda item: (-item["score"], item["atom_id"], item["chunk_id"]))
+        results = results[:20]
+        return response(
+            "used" if results else "no_linked_candidates",
+            "benchmark_approved_hybrid_retrieval" if results else "retrieval_has_no_atom_source_links",
+            rag_revision=status["rag_revision"],
+            embedding_profile=embedding_name,
+            reranker_profile=reranker_name,
+            benchmark_profile=benchmark,
+            results=results,
+        )
 
     @staticmethod
     def _auto_question_type(text: str) -> str:
@@ -812,11 +1097,14 @@ class ExamEngine:
         if not isinstance(documents, list) or not documents:
             raise ExamError("exam process requires a non-empty documents list")
         options = payload.get("options", {})
-        if not isinstance(options, dict) or set(options) - {"mapping_review_threshold"}:
+        if not isinstance(options, dict) or set(options) - {"mapping_review_threshold", "semantic_mapping"}:
             raise ExamError("exam process options are invalid")
         threshold = float(options.get("mapping_review_threshold", 0.85))
         if not 0.5 <= threshold <= 1.0:
             raise ExamError("mapping_review_threshold must be between 0.5 and 1.0")
+        semantic_mode = options.get("semantic_mapping", "auto")
+        if semantic_mode not in {"auto", "required", "off"}:
+            raise ExamError("semantic_mapping must be auto, required, or off")
         papers: list[dict[str, Any]] = []
         questions: list[dict[str, Any]] = []
         diagnostics: list[dict[str, Any]] = []
@@ -869,6 +1157,7 @@ class ExamEngine:
                         answer_locator,
                         marking_locator,
                     ] if item],
+                    semantic_mode,
                 )
                 if mappings[0]["id"] == "unmapped.auto":
                     mappings[0]["id"] = f"unmapped.{question_id}"
@@ -978,6 +1267,9 @@ class ExamEngine:
                 "proposed_atom_id": mapping["atom_id"],
                 "candidate_atom_ids": mapping.get("candidate_atom_ids", []),
                 "confidence": mapping["confidence"],
+                "mapping_method": mapping.get("mapping_method", "human"),
+                "semantic_gate": mapping.get("semantic_evidence", {}).get("gate", "not_requested"),
+                "evidence_locators": mapping.get("evidence_locators", []),
             }
             for question in self.bank.get("questions", [])
             for mapping in question.get("knowledge_points", [])
@@ -1045,10 +1337,10 @@ class ExamEngine:
     def calibrate_difficulty(self) -> dict[str, Any]:
         anchors = [
             question["difficulty"] for question in self.bank.get("questions", [])
-            if question.get("difficulty", {}).get("official_level") is not None
+            if question.get("difficulty", {}).get("official_difficulty", {}).get("qualified") is True
         ]
         if not anchors:
-            raise ExamError("difficulty calibration requires at least one question with an official_level")
+            raise ExamError("difficulty calibration requires at least one reviewed source-located official anchor")
         residuals = [item["official_level"] - item["estimated_level"] for item in anchors]
         offset = round(sum(residuals) / len(residuals), 3)
         before = round(sum(abs(item) for item in residuals) / len(residuals), 3)
@@ -1079,12 +1371,14 @@ class ExamEngine:
         for index, aggregate in enumerate(aggregates):
             if not isinstance(aggregate, dict) or set(aggregate) != {
                 "question_id", "attempt_count", "correct_rate", "median_seconds", "discrimination",
-                "irt_b", "source", "source_locator",
+                "irt_b", "source", "source_locator", "population", "window_start", "window_end",
             }:
                 raise ExamError(f"aggregates[{index}] has invalid fields")
             question_id = require_id(aggregate.get("question_id"), f"aggregates[{index}].question_id")
             if question_id not in questions:
                 raise ExamError(f"empirical aggregate question does not exist: {question_id}")
+            if question_id in updated:
+                raise ExamError(f"empirical aggregate question is duplicated: {question_id}")
             raw = {key: value for key, value in questions[question_id]["difficulty"].items() if key in DIFFICULTY_INPUT_KEYS}
             raw["empirical"] = {key: value for key, value in aggregate.items() if key != "question_id"}
             questions[question_id]["difficulty"] = self._normalize_difficulty(raw, f"{question_id}.difficulty")
@@ -1097,6 +1391,44 @@ class ExamEngine:
             "minimum_attempts": 30,
             "effective_priority": ["qualified_empirical", "official", "structural_complexity"],
         }
+
+    def record_official_difficulty(self, payload: Any) -> dict[str, Any]:
+        if not isinstance(payload, dict) or set(payload) != {"records"}:
+            raise ExamError("official difficulty payload must contain exactly records")
+        records = payload.get("records")
+        if not isinstance(records, list) or not records:
+            raise ExamError("official difficulty records must be a non-empty list")
+        questions = {item["id"]: item for item in self.bank.get("questions", [])}
+        updated: list[str] = []
+        for index, record in enumerate(records):
+            if not isinstance(record, dict) or set(record) != {
+                "question_id", "level", "source", "source_locator", "reviewer_id"
+            }:
+                raise ExamError(f"records[{index}] has invalid fields")
+            question_id = require_id(record.get("question_id"), f"records[{index}].question_id")
+            if question_id not in questions:
+                raise ExamError(f"official difficulty question does not exist: {question_id}")
+            if question_id in updated:
+                raise ExamError(f"official difficulty question is duplicated: {question_id}")
+            raw = {
+                key: value
+                for key, value in questions[question_id]["difficulty"].items()
+                if key in DIFFICULTY_INPUT_KEYS
+            }
+            raw["basis"] = "official"
+            raw["official_level"] = record["level"]
+            raw["official"] = {key: value for key, value in record.items() if key != "question_id"}
+            questions[question_id]["difficulty"] = self._normalize_difficulty(raw, f"{question_id}.difficulty")
+            updated.append(question_id)
+        return {"question_ids": updated, "reviewed_source_locators": len(updated)}
+
+    def set_target_date(self, value: str) -> dict[str, Any]:
+        target = self._target_date(value)
+        previous = self.state.get("target_date")
+        if target == previous:
+            raise ExamError("exam target date is already set to that value")
+        self.state["target_date"] = target
+        return {"previous_target_date": previous, "target_date": target}
 
     @staticmethod
     def _family_fingerprint(question: dict[str, Any]) -> tuple[str, set[str], str]:
@@ -1634,7 +1966,7 @@ class ExamEngine:
             "warnings": unique(warnings),
         }
 
-    def daily_plan(self, payload: Any) -> dict[str, Any]:
+    def daily_plan(self, payload: Any, completed_task_ids: set[str] | None = None) -> dict[str, Any]:
         required = {
             "start_date", "target_date", "available_weekdays", "minutes_per_day", "durations",
             "desired_retention", "final_review_days", "mode",
@@ -1706,7 +2038,7 @@ class ExamEngine:
             for question_id in item["representative_question_ids"][:2]:
                 tasks.append(
                     {
-                        "id": f"practice:{question_id}",
+                        "id": f"practice:{item['atom_id']}:{question_id}",
                         "category": "practice",
                         "atom_id": item["atom_id"],
                         "question_id": question_id,
@@ -1727,6 +2059,8 @@ class ExamEngine:
                         "final_review": True,
                     }
                 )
+        completed_task_ids = completed_task_ids or set()
+        tasks = [item for item in tasks if item["id"] not in completed_task_ids]
         final_start = target - timedelta(days=final_review_days)
         ordinary = [item for item in tasks if not item["final_review"]]
         final_tasks = [item for item in tasks if item["final_review"]]
@@ -1769,6 +2103,7 @@ class ExamEngine:
             "schema_version": SCHEMA_VERSION,
             "exam_revision": self.revision,
             "course_revision": self.workspace.revision,
+            "generated_at": iso(),
             "status": "feasible" if feasible else "infeasible",
             "start_date": start.isoformat(),
             "target_date": target.isoformat(),
@@ -1924,7 +2259,8 @@ class ExamEngine:
             event_type = event.get("type")
             if event_type not in {
                 "exam.questions_imported", "exam.mappings_reviewed", "exam.difficulty_calibrated",
-                "exam.empirical_difficulty_recorded", "exam.families_proposed", "exam.families_reviewed",
+                "exam.empirical_difficulty_recorded", "exam.official_difficulty_recorded",
+                "exam.target_changed", "exam.families_proposed", "exam.families_reviewed",
             }:
                 errors.append(f"{event_id}: invalid exam event type")
             try:
@@ -1967,6 +2303,12 @@ class ExamEngine:
                     "question_ids", "qualified_question_ids", "minimum_attempts", "effective_priority"
                 }:
                     errors.append(f"{event_id}: invalid empirical difficulty event details")
+            elif event_type == "exam.official_difficulty_recorded":
+                if not isinstance(details, dict) or set(details) != {"question_ids", "reviewed_source_locators"}:
+                    errors.append(f"{event_id}: invalid official difficulty event details")
+            elif event_type == "exam.target_changed":
+                if not isinstance(details, dict) or set(details) != {"previous_target_date", "target_date"}:
+                    errors.append(f"{event_id}: invalid target-date event details")
             elif event_type == "exam.families_proposed":
                 if not isinstance(details, dict) or set(details) != {"proposed_family_ids", "threshold", "pair_count"}:
                     errors.append(f"{event_id}: invalid family proposal event details")
@@ -1977,6 +2319,12 @@ class ExamEngine:
             errors.append("exam event count does not match state revision")
         if imported_papers != set(paper_ids) or imported_questions != set(question_ids):
             errors.append("exam events do not account for every imported paper and question")
+        schedule_path = self.root / "schedule.yaml"
+        if schedule_path.is_file():
+            try:
+                errors.extend(f"schedule: {item}" for item in ExamScheduleEngine(self).validate())
+            except ExamScheduleError as exc:
+                errors.append(f"schedule: {exc}")
         return unique(errors)
 
     def status(self) -> dict[str, Any]:
@@ -1996,6 +2344,7 @@ class ExamEngine:
             "proposed_family_reviews": sum(item.get("review_status") == "proposed" for item in self.bank.get("families", [])),
             "confirmed_families": sum(item.get("review_status") in {"confirmed", "corrected"} for item in self.bank.get("families", [])),
             "difficulty_calibration": self.state.get("difficulty_calibration"),
+            "schedule": ExamScheduleEngine(self).status(),
             "top_knowledge_points": analysis["knowledge_points"][:5] if analysis else [],
         }
 
@@ -2049,6 +2398,49 @@ class ExamEngine:
                 study.append("| - | None | - | - | - | - | - | - |")
             study.extend(["", "## Warnings", ""])
             study.extend([f"- {markdown(item)}" for item in plan["warnings"]])
+        schedule = ExamScheduleEngine(self).status()
+        study.extend(
+            [
+                "", "## Canonical Schedule", "",
+                f"- Schedule revision: `{schedule['schedule_revision']}`",
+                f"- Plan revision: `{schedule['plan_revision'] if schedule['plan_revision'] is not None else 'none'}`",
+                f"- Freshness: `{schedule['freshness']}`",
+                f"- Observed as of: `{schedule['as_of']}`",
+                "- Invalidation reasons: "
+                + (", ".join(f"`{item}`" for item in schedule["invalidation_reasons"]) or "none"),
+            ]
+        )
+        if schedule["events"]:
+            study.extend(["", "### Due and Overdue", ""])
+            study.extend(
+                f"- `{item['type']}` on `{item['date']}`: "
+                + ", ".join(f"`{task_id}`" for task_id in item["task_ids"])
+                for item in schedule["events"]
+            )
+        canonical_plan = schedule["plan"]
+        if canonical_plan is not None:
+            study.extend(
+                [
+                    "", "### Revisioned Calendar", "",
+                    f"- Status: `{canonical_plan['status']}`",
+                    f"- Window: `{canonical_plan['start_date']}` through `{canonical_plan['target_date']}`",
+                    f"- Required/capacity minutes: `{canonical_plan['required_minutes']}` / `{canonical_plan['capacity_minutes']}`",
+                    f"- Gap minutes: `{canonical_plan['gap_minutes']}`",
+                    "", "| Date | Planned minutes | Task IDs |", "| --- | ---: | --- |",
+                ]
+            )
+            study.extend(
+                f"| {day['date']} | {day['planned_minutes']} | "
+                + (", ".join(f"`{task['id']}`" for task in day["tasks"]) or "-")
+                + " |"
+                for day in canonical_plan["days"]
+            )
+            if canonical_plan["unscheduled_tasks"]:
+                study.extend(["", "### Unscheduled Tasks", ""])
+                study.extend(
+                    f"- `{task['id']}` ({task['minutes']} minutes)"
+                    for task in canonical_plan["unscheduled_tasks"]
+                )
         atomic_text(self.workspace.root / "EXAM_BLUEPRINT.md", "\n".join(blueprint).rstrip() + "\n")
         atomic_text(self.workspace.root / "EXAM_STUDY_PLAN.md", "\n".join(study).rstrip() + "\n")
 
@@ -2091,6 +2483,14 @@ def build_parser() -> argparse.ArgumentParser:
     empirical.add_argument("workspace")
     empirical.add_argument("--input", required=True)
     add_revision(empirical)
+    official = sub.add_parser("record-official", help="Attach reviewed source-located official difficulty anchors")
+    official.add_argument("workspace")
+    official.add_argument("--input", required=True)
+    add_revision(official)
+    set_target = sub.add_parser("set-target", help="Change the target exam date and invalidate bound schedules")
+    set_target.add_argument("workspace")
+    set_target.add_argument("--target-date", required=True)
+    add_revision(set_target)
     families = sub.add_parser("propose-families", help="Propose cross-paper item families for explicit review")
     families.add_argument("workspace")
     families.add_argument("--threshold", type=float, default=0.62)
@@ -2115,6 +2515,27 @@ def build_parser() -> argparse.ArgumentParser:
     daily = sub.add_parser("daily-plan", help="Build a capacity-checked daily learn/remediate/review/practice schedule")
     daily.add_argument("workspace")
     daily.add_argument("--input", required=True)
+    plan_status = sub.add_parser("plan-status", help="Show canonical schedule freshness plus due and overdue tasks")
+    plan_status.add_argument("workspace")
+    plan_status.add_argument("--as-of", help="Deterministic observation date in YYYY-MM-DD")
+    replan = sub.add_parser("replan", help="Persist a new revisioned schedule after an invalidation or learner request")
+    replan.add_argument("workspace")
+    replan.add_argument("--input", required=True)
+    replan.add_argument("--reason", choices=sorted(REPLAN_REASONS), required=True)
+    replan.add_argument("--as-of", help="Do not schedule work before this YYYY-MM-DD date")
+    replan.add_argument(
+        "--expected-schedule-revision", "--expected-plan-revision",
+        dest="expected_schedule_revision", type=int, required=True,
+        help="Current canonical schedule revision; the older --expected-plan-revision spelling remains an alias",
+    )
+    record_day = sub.add_parser("record-day", help="Record completed partial or missed work for one planned date")
+    record_day.add_argument("workspace")
+    record_day.add_argument("--input", required=True)
+    record_day.add_argument(
+        "--expected-schedule-revision", "--expected-plan-revision",
+        dest="expected_schedule_revision", type=int, required=True,
+        help="Current canonical schedule revision",
+    )
     return parser
 
 
@@ -2134,9 +2555,37 @@ def run(argv: list[str] | None = None) -> None:
     errors = engine.validate()
     if errors:
         raise ExamError("Refusing to use invalid exam state:\n- " + "\n- ".join(errors))
+    if args.action == "plan-status":
+        try:
+            observed = date.fromisoformat(args.as_of) if args.as_of else date.today()
+        except ValueError as exc:
+            raise ExamError("--as-of must use YYYY-MM-DD") from exc
+        print(json.dumps(ExamScheduleEngine(engine).status(observed), ensure_ascii=False, indent=2))
+        return
+    if args.action == "replan":
+        try:
+            observed = date.fromisoformat(args.as_of) if args.as_of else date.today()
+        except ValueError as exc:
+            raise ExamError("--as-of must use YYYY-MM-DD") from exc
+        result = ExamScheduleEngine(engine).replan(
+            read_data(Path(args.input)),
+            expected_revision=args.expected_schedule_revision,
+            reason=args.reason,
+            as_of=observed,
+        )
+        engine.render()
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
+    if args.action == "record-day":
+        result = ExamScheduleEngine(engine).record_day(
+            read_data(Path(args.input)), expected_revision=args.expected_schedule_revision
+        )
+        engine.render()
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return
     if args.action in {
         "import", "process", "process-source", "review-mappings", "calibrate",
-        "record-empirical", "propose-families", "review-families",
+        "record-empirical", "record-official", "set-target", "propose-families", "review-families",
     }:
         engine.expect_revision(args.expected_exam_revision)
         if args.action == "import":
@@ -2161,6 +2610,12 @@ def run(argv: list[str] | None = None) -> None:
         elif args.action == "record-empirical":
             result = engine.record_empirical_difficulty(read_data(Path(args.input)))
             engine._commit("exam.empirical_difficulty_recorded", result)
+        elif args.action == "record-official":
+            result = engine.record_official_difficulty(read_data(Path(args.input)))
+            engine._commit("exam.official_difficulty_recorded", result)
+        elif args.action == "set-target":
+            result = engine.set_target_date(args.target_date)
+            engine._commit("exam.target_changed", result)
         elif args.action == "propose-families":
             result = engine.propose_families(args.threshold)
             engine._commit("exam.families_proposed", result)
@@ -2195,7 +2650,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         run(argv)
         return 0
-    except (ExamError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+    except (ExamError, ExamScheduleError, RagError, AtomLearnError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 

@@ -7,3 +7,6 @@ aggregates:
     irt_b: null
     source: anonymized-course-aggregate
     source_locator: assessment-export-2025-08
+    population: enrolled learners in the 2025 course run
+    window_start: 2025-01-01
+    window_end: 2025-12-31

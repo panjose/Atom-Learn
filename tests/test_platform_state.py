@@ -44,7 +44,7 @@ def test_core_manifest_matches_package_and_declares_all_v2_namespaces() -> None:
         "capsule_export": False,
         "release_manager": False,
     }
-    assert {"workspace_core", "workspace_episodes", "user_profile", "user_strategy"} <= set(
+    assert {"workspace_core", "workspace_episodes", "workspace_exam_schedule", "user_profile", "user_strategy"} <= set(
         manifest["schemas"]
     )
     assert manifest["artifact_sha256"].startswith("sha256:")

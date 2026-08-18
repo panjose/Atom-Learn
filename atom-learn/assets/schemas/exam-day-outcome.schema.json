@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/exam-day-outcome.schema.json",
+  "title": "AtomLearn exam schedule day outcome",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["date", "status", "completed_task_ids", "actual_minutes", "available_minutes"],
+  "properties": {
+    "date": {"type": "string", "format": "date"},
+    "status": {"enum": ["completed", "partial", "missed"]},
+    "completed_task_ids": {"type": "array", "uniqueItems": true, "items": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"}},
+    "actual_minutes": {"type": "integer", "minimum": 0, "maximum": 1440},
+    "available_minutes": {"type": ["integer", "null"], "minimum": 0, "maximum": 1440}
+  }
+}

@@ -247,24 +247,29 @@ Research mode keeps at most one Active Paper, requires confirmed inclusion, bloc
 
 ## Exam Analysis and Targeted Preparation
 
-AtomLearn can turn supplied past papers, sample exams, mock exams, or question banks into a source-traceable assessment corpus. It jointly uses question, answer, and rubric evidence for reviewable Atom mappings; pending mappings never count as coverage. It separates five-factor structural complexity, official difficulty, and source-located empirical difficulty, proposes reviewable cross-paper item families, measures held-out transfer risk, and can build a capacity-checked daily plan.
+AtomLearn can turn supplied past papers, sample exams, mock exams, or question banks into a source-traceable assessment corpus. It jointly uses question, answer, rubric, and exact source-locator evidence for reviewable Atom mappings; every automatic mapping remains pending until review. Deterministic lexical mapping is always available. Optional semantic candidates are used only when a learned embedding profile and its reranker benchmark are both current; otherwise `auto` reports a typed lexical fallback and `required` fails closed.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py exam init courses/calculus --title "Calculus Final" --target-date 2027-01-10
 python atom-learn/scripts/atomlearn.py exam process-source courses/calculus --source-id past-paper --paper-id paper-2026 --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam process courses/calculus --input exam-process.yaml --expected-exam-revision 0
 python atom-learn/scripts/atomlearn.py exam review-mappings courses/calculus --input exam-mapping-review.yaml --expected-exam-revision 1
-python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 2
-python atom-learn/scripts/atomlearn.py exam record-empirical courses/calculus --input exam-empirical-difficulty.yaml --expected-exam-revision 3
-python atom-learn/scripts/atomlearn.py exam propose-families courses/calculus --expected-exam-revision 4
-python atom-learn/scripts/atomlearn.py exam review-families courses/calculus --input exam-family-review.yaml --expected-exam-revision 5
+python atom-learn/scripts/atomlearn.py exam record-official courses/calculus --input exam-official-difficulty.yaml --expected-exam-revision 2
+python atom-learn/scripts/atomlearn.py exam set-target courses/calculus --target-date 2027-01-17 --expected-exam-revision 3
+python atom-learn/scripts/atomlearn.py exam calibrate courses/calculus --expected-exam-revision 4
+python atom-learn/scripts/atomlearn.py exam record-empirical courses/calculus --input exam-empirical-difficulty.yaml --expected-exam-revision 5
+python atom-learn/scripts/atomlearn.py exam propose-families courses/calculus --expected-exam-revision 6
+python atom-learn/scripts/atomlearn.py exam review-families courses/calculus --input exam-family-review.yaml --expected-exam-revision 7
 python atom-learn/scripts/atomlearn.py exam analyze courses/calculus
 python atom-learn/scripts/atomlearn.py exam plan courses/calculus --mode mixed --limit 10
 python atom-learn/scripts/atomlearn.py exam daily-plan courses/calculus --input exam-daily-plan.yaml
+python atom-learn/scripts/atomlearn.py exam replan courses/calculus --input exam-daily-plan.yaml --reason initial --expected-schedule-revision 0
+python atom-learn/scripts/atomlearn.py exam plan-status courses/calculus
+python atom-learn/scripts/atomlearn.py exam record-day courses/calculus --input exam-day-outcome.yaml --expected-schedule-revision 1
 # For structured data, use `exam import ... --expected-exam-revision 0` instead of `exam process`.
 ```
 
-`exam process-source` consumes the same Document IR used by RAG and retains exact block provenance while canonical state keeps only concise summaries, associations, and locators. Empirical difficulty becomes effective only at 30 source-located attempts; otherwise the product says official difficulty or structural complexity. Item families require review, and `memorization_risk` describes seen-versus-held-out transfer rather than user intent. A daily plan that cannot fit returns `infeasible` and its workload gap without weakening mastery. Frequency describes only the supplied corpus and is never a prediction. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md) and the [Phase 6 implementation record](docs/V0_14_PHASE6_IMPLEMENTATION.md).
+`exam process-source` consumes the same Document IR used by RAG and retains exact block provenance while canonical state keeps only concise summaries, associations, and locators. Structural complexity never overwrites reviewed, source-located official difficulty or empirical difficulty qualified by at least 30 attempts, a named population, and a complete time window. `daily-plan` is a read-only preview; `replan` writes an independently revisioned schedule that becomes stale after new Evidence, missed or changed availability, exam/mapping/difficulty changes, revoked skips, inserted prerequisites, or course-plan changes. `plan-status` exposes `due`, `overdue`, `replanned`, and `infeasible` outcomes without weakening mastery. External reminder adapters may consume these events, but the CLI remains complete on its own. Frequency describes only the supplied corpus and is never a prediction. See [Exam Preparation Workflow](atom-learn/references/EXAM_PREPARATION.md), the [v0.14 Phase 6 implementation record](docs/V0_14_PHASE6_IMPLEMENTATION.md), and the [v0.15 Phase 7 implementation record](docs/V0_15_PHASE7_IMPLEMENTATION.md).
 
 ## Session-Based Self-Adaptation
 
@@ -344,6 +349,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 - [v0.15 Phase 4 Stable Bootstrap and Migration Implementation](docs/V0_15_PHASE4_IMPLEMENTATION.md)
 - [v0.15 Phase 5 Topic Diagnostic and RAG Evaluation Implementation](docs/V0_15_PHASE5_IMPLEMENTATION.md)
 - [v0.15 Phase 6 Episode and Harness Behavior Implementation](docs/V0_15_PHASE6_IMPLEMENTATION.md)
+- [v0.15 Phase 7 Exam Closed-Loop Implementation](docs/V0_15_PHASE7_IMPLEMENTATION.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 Exam and Research Implementation](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 Adaptive Review Implementation](docs/V0_14_PHASE7_IMPLEMENTATION.md)
@@ -372,7 +378,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 python -m pytest -m fast
 python -m pytest -m integration
 python -m pytest
-python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/bootstrap.py manager/atomlearn_manager/codex.py manager/atomlearn_manager/manifest.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
+python -m py_compile atom-learn/scripts/atomlearn.py atom-learn/scripts/wizard.py atom-learn/scripts/workflow.py atom-learn/scripts/document_ir.py atom-learn/scripts/evolution.py atom-learn/scripts/research.py atom-learn/scripts/intake.py atom-learn/scripts/rag.py atom-learn/scripts/adaptation.py atom-learn/scripts/exam.py atom-learn/scripts/exam_schedule.py atom-learn/scripts/lineage.py atom-learn/scripts/platform_state.py atom-learn/scripts/migrations.py atom-learn/scripts/user_profile.py atom-learn/scripts/effective_policy.py atom-learn/scripts/strategy.py atom-learn/scripts/strategy_analysis.py atom-learn/scripts/learning_study.py atom-learn/scripts/capsule.py atom-learn/scripts/measurement.py manager/atomlearn_manager/cli.py manager/atomlearn_manager/bootstrap.py manager/atomlearn_manager/codex.py manager/atomlearn_manager/manifest.py manager/atomlearn_manager/manager.py manager/atomlearn_manager/builder.py manager/atomlearn_manager/verify.py manager/atomlearn_manager/statecopy.py manager/atomlearn_manager/launcher.py release/gate.py
 ```
 
 The fast suite covers CLI/help contracts, packaging, documentation, schemas, and deterministic helpers. The integration suite covers complete filesystem and subprocess workflows. CI runs both layers on Ubuntu and Windows with Python 3.10, 3.11, 3.12, and 3.13. Tests use isolated workspaces under `.test-workspaces/` and do not modify the example files.

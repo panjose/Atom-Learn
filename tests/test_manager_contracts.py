@@ -22,7 +22,7 @@ sys.path.insert(0, str(MANAGER_ROOT))
 sys.path.insert(0, str(ROOT / "atom-learn" / "scripts"))
 
 
-def test_episode_state_is_declared_in_core_and_trusted_manager_migration_catalogs() -> None:
+def test_episode_and_exam_schedule_states_are_declared_in_trusted_migration_catalogs() -> None:
     from atomlearn_manager.statecopy import WORKSPACE_TARGETS as MANAGER_WORKSPACE_TARGETS
     from migrations import WORKSPACE_TARGETS as CORE_WORKSPACE_TARGETS
     from platform_state import load_core_manifest
@@ -31,6 +31,10 @@ def test_episode_state_is_declared_in_core_and_trusted_manager_migration_catalog
     assert CORE_WORKSPACE_TARGETS["workspace_episodes"] == expected
     assert MANAGER_WORKSPACE_TARGETS["workspace_episodes"] == expected
     assert load_core_manifest()["schemas"]["workspace_episodes"] == {"read": [1], "write": 1}
+    schedule = ".atomlearn/exam/schedule.yaml"
+    assert CORE_WORKSPACE_TARGETS["workspace_exam_schedule"] == schedule
+    assert MANAGER_WORKSPACE_TARGETS["workspace_exam_schedule"] == schedule
+    assert load_core_manifest()["schemas"]["workspace_exam_schedule"] == {"read": [1], "write": 1}
 
 
 def test_manager_schemas_are_strict_and_valid() -> None:

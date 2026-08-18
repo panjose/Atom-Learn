@@ -5,14 +5,17 @@
   "type": "object", "additionalProperties": false, "required": ["aggregates"],
   "properties": {"aggregates": {"type": "array", "minItems": 1, "items": {
     "type": "object", "additionalProperties": false,
-    "required": ["question_id", "attempt_count", "correct_rate", "median_seconds", "discrimination", "irt_b", "source", "source_locator"],
+    "required": ["question_id", "attempt_count", "correct_rate", "median_seconds", "discrimination", "irt_b", "source", "source_locator", "population", "window_start", "window_end"],
     "properties": {
       "question_id": {"type": "string"}, "attempt_count": {"type": "integer", "minimum": 0},
       "correct_rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
       "median_seconds": {"type": ["number", "null"], "minimum": 0},
       "discrimination": {"type": ["number", "null"], "minimum": -1, "maximum": 1},
       "irt_b": {"type": ["number", "null"], "minimum": -4, "maximum": 4},
-      "source": {"type": "string", "minLength": 1}, "source_locator": {"type": "string", "minLength": 1}
+      "source": {"type": "string", "minLength": 1}, "source_locator": {"type": "string", "minLength": 1},
+      "population": {"type": "string", "minLength": 1, "maxLength": 300},
+      "window_start": {"type": "string", "format": "date"},
+      "window_end": {"type": "string", "format": "date"}
     }, "anyOf": [{"properties": {"correct_rate": {"type": "number"}}}, {"properties": {"irt_b": {"type": "number"}}}]
   }}}
 }

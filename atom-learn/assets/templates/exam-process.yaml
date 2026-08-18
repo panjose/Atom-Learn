@@ -16,3 +16,4 @@ documents:
       path: C:/materials/final-2025-marking.txt
 options:
   mapping_review_threshold: 0.85
+  semantic_mapping: auto

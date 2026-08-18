@@ -1,0 +1,146 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/exam-schedule-state.schema.json",
+  "title": "AtomLearn revisioned exam schedule state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "schema_version", "revision", "updated_at", "configuration", "configuration_sha256", "plan", "outcomes", "events"],
+  "properties": {
+    "kind": {"const": "atomlearn.exam-schedule-state"},
+    "schema_version": {"const": 1},
+    "revision": {"type": "integer", "minimum": 0},
+    "updated_at": {"oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+    "configuration": {"oneOf": [{"$ref": "#/$defs/configuration"}, {"type": "null"}]},
+    "configuration_sha256": {"oneOf": [{"$ref": "#/$defs/hash"}, {"type": "null"}]},
+    "plan": {"oneOf": [{"$ref": "#/$defs/plan"}, {"type": "null"}]},
+    "outcomes": {"type": "array", "items": {"$ref": "#/$defs/outcome"}},
+    "events": {"type": "array", "items": {"$ref": "#/$defs/event"}}
+  },
+  "$defs": {
+    "timestamp": {"type": "string", "minLength": 20, "maxLength": 40},
+    "date": {"type": "string", "format": "date"},
+    "hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "opaque": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$"},
+    "category": {"enum": ["learn", "remediate", "review", "practice", "prerequisite"]},
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["start_date", "target_date", "available_weekdays", "minutes_per_day", "durations", "desired_retention", "final_review_days", "mode"],
+      "properties": {
+        "start_date": {"$ref": "#/$defs/date"},
+        "target_date": {"$ref": "#/$defs/date"},
+        "available_weekdays": {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1, "maximum": 7}},
+        "minutes_per_day": {"type": "integer", "minimum": 1, "maximum": 1440},
+        "durations": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["learn", "remediate", "review", "practice", "prerequisite"],
+          "properties": {
+            "learn": {"type": "integer", "minimum": 1, "maximum": 1440},
+            "remediate": {"type": "integer", "minimum": 1, "maximum": 1440},
+            "review": {"type": "integer", "minimum": 1, "maximum": 1440},
+            "practice": {"type": "integer", "minimum": 1, "maximum": 1440},
+            "prerequisite": {"type": "integer", "minimum": 1, "maximum": 1440}
+          }
+        },
+        "desired_retention": {"type": "number", "minimum": 0.5, "maximum": 0.99},
+        "final_review_days": {"type": "integer", "minimum": 0, "maximum": 365},
+        "mode": {"enum": ["learning", "review", "mixed"]}
+      }
+    },
+    "task": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "category", "atom_id", "question_id", "minutes", "priority_score", "final_review"],
+      "properties": {
+        "id": {"$ref": "#/$defs/opaque"},
+        "category": {"$ref": "#/$defs/category"},
+        "atom_id": {"$ref": "#/$defs/opaque"},
+        "question_id": {"oneOf": [{"$ref": "#/$defs/opaque"}, {"type": "null"}]},
+        "minutes": {"type": "integer", "minimum": 1, "maximum": 1440},
+        "priority_score": {"type": "number", "minimum": 0, "maximum": 1},
+        "final_review": {"type": "boolean"}
+      }
+    },
+    "day": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "capacity_minutes", "planned_minutes", "tasks"],
+      "properties": {
+        "date": {"$ref": "#/$defs/date"},
+        "capacity_minutes": {"type": "integer", "minimum": 1, "maximum": 1440},
+        "planned_minutes": {"type": "integer", "minimum": 0, "maximum": 1440},
+        "tasks": {"type": "array", "items": {"$ref": "#/$defs/task"}}
+      }
+    },
+    "plan": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["plan_revision", "exam_revision", "course_revision", "status", "generated_at", "start_date", "target_date", "desired_retention", "final_review_days", "capacity_minutes", "required_minutes", "scheduled_counts", "days", "unscheduled_tasks", "gap_minutes", "adjustments", "warnings", "carried_completed_task_ids", "replan_reasons"],
+      "properties": {
+        "plan_revision": {"type": "integer", "minimum": 1},
+        "exam_revision": {"type": "integer", "minimum": 0},
+        "course_revision": {"type": "integer", "minimum": 0},
+        "status": {"enum": ["feasible", "infeasible"]},
+        "generated_at": {"$ref": "#/$defs/timestamp"},
+        "start_date": {"$ref": "#/$defs/date"},
+        "target_date": {"$ref": "#/$defs/date"},
+        "desired_retention": {"type": "number", "minimum": 0.5, "maximum": 0.99},
+        "final_review_days": {"type": "integer", "minimum": 0, "maximum": 365},
+        "capacity_minutes": {"type": "integer", "minimum": 0},
+        "required_minutes": {"type": "integer", "minimum": 0},
+        "scheduled_counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["learn", "remediate", "review", "practice", "prerequisite"],
+          "properties": {
+            "learn": {"type": "integer", "minimum": 0},
+            "remediate": {"type": "integer", "minimum": 0},
+            "review": {"type": "integer", "minimum": 0},
+            "practice": {"type": "integer", "minimum": 0},
+            "prerequisite": {"type": "integer", "minimum": 0}
+          }
+        },
+        "days": {"type": "array", "items": {"$ref": "#/$defs/day"}},
+        "unscheduled_tasks": {"type": "array", "items": {"$ref": "#/$defs/task"}},
+        "gap_minutes": {"type": "integer", "minimum": 0},
+        "adjustments": {"type": "array", "items": {"type": "string", "maxLength": 500}},
+        "warnings": {"type": "array", "items": {"type": "string", "maxLength": 1000}},
+        "carried_completed_task_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/opaque"}},
+        "replan_reasons": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/reasonCode"}}
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["date", "plan_revision", "status", "completed_task_ids", "actual_minutes", "available_minutes", "recorded_at"],
+      "properties": {
+        "date": {"$ref": "#/$defs/date"},
+        "plan_revision": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["completed", "partial", "missed"]},
+        "completed_task_ids": {"type": "array", "uniqueItems": true, "items": {"$ref": "#/$defs/opaque"}},
+        "actual_minutes": {"type": "integer", "minimum": 0, "maximum": 1440},
+        "available_minutes": {"oneOf": [{"type": "integer", "minimum": 0, "maximum": 1440}, {"type": "null"}]},
+        "recorded_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "reasonCode": {
+      "enum": ["initial", "learner_request", "availability_changed", "day_missed", "day_partial", "unrecorded_past_day", "exam_corpus_changed", "exam_target_changed", "mapping_review_completed", "difficulty_review_completed", "learning_evidence_changed", "skip_revoked", "prerequisite_inserted", "course_plan_changed", "course_revision_changed"]
+    },
+    "event": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "revision", "type", "at", "reason", "exam_revision", "course_revision", "plan_revision"],
+      "properties": {
+        "id": {"type": "string", "pattern": "^xplan-[0-9]{6}$"},
+        "revision": {"type": "integer", "minimum": 1},
+        "type": {"enum": ["replanned", "infeasible", "day_completed", "day_partial", "day_missed"]},
+        "at": {"$ref": "#/$defs/timestamp"},
+        "reason": {"$ref": "#/$defs/reasonCode"},
+        "exam_revision": {"type": "integer", "minimum": 0},
+        "course_revision": {"type": "integer", "minimum": 0},
+        "plan_revision": {"oneOf": [{"type": "integer", "minimum": 1}, {"type": "null"}]}
+      }
+    }
+  }
+}
