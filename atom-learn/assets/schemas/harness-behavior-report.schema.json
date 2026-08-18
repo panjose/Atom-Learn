@@ -1,0 +1,156 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/harness-behavior-report.schema.json",
+  "title": "AtomLearn harness and model behavior compatibility report",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "report_version",
+    "protocol_version",
+    "protocol_fingerprint",
+    "run_id",
+    "run_fingerprint",
+    "run_kind",
+    "generated_at",
+    "environment",
+    "completeness",
+    "metrics",
+    "threshold_checks",
+    "quality_gate",
+    "compatibility_claim_allowed",
+    "evidence_layer",
+    "can_establish",
+    "cannot_establish",
+    "learning_effect_claims_allowed"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.harness-behavior-report"},
+    "schema_version": {"const": 1},
+    "report_version": {"const": "behavior-report-v1"},
+    "protocol_version": {"const": "atomlearn-behavior-v1"},
+    "protocol_fingerprint": {"$ref": "#/$defs/hash"},
+    "run_id": {"type": "string", "pattern": "^behavior-run-[A-Za-z0-9._-]{1,96}$"},
+    "run_fingerprint": {"$ref": "#/$defs/hash"},
+    "run_kind": {"enum": ["engineering_smoke", "model_compatibility"]},
+    "generated_at": {"type": "string", "minLength": 20, "maxLength": 40},
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["model", "harness", "prompt_protocol_version", "temperature", "seed", "languages"],
+      "properties": {
+        "model": {"$ref": "#/$defs/model"},
+        "harness": {"$ref": "#/$defs/harness"},
+        "prompt_protocol_version": {"const": "atomlearn-teaching-v1"},
+        "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+        "seed": {"type": ["integer", "null"]},
+        "languages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["en", "zh-CN"]}
+        }
+      }
+    },
+    "completeness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "complete",
+        "required_cases",
+        "reported_cases",
+        "resolved_cases",
+        "missing_case_ids",
+        "unexpected_case_ids",
+        "annotation_errors"
+      ],
+      "properties": {
+        "complete": {"type": "boolean"},
+        "required_cases": {"type": "integer", "minimum": 1},
+        "reported_cases": {"type": "integer", "minimum": 0},
+        "resolved_cases": {"type": "integer", "minimum": 0},
+        "missing_case_ids": {"type": "array", "items": {"type": "string"}},
+        "unexpected_case_ids": {"type": "array", "items": {"type": "string"}},
+        "annotation_errors": {"type": "array", "items": {"type": "string", "maxLength": 500}}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_adherence_rate",
+        "mean_atoms_added_per_turn",
+        "maximum_atoms_added_in_turn",
+        "future_knowledge_leakage_rate",
+        "state_mutation_correctness_rate",
+        "citation_support_rate",
+        "resume_success_rate",
+        "grading_abstention_quality_rate",
+        "human_review_exact_agreement"
+      ],
+      "properties": {
+        "protocol_adherence_rate": {"$ref": "#/$defs/rateOrNull"},
+        "mean_atoms_added_per_turn": {"type": ["number", "null"], "minimum": 0, "maximum": 12},
+        "maximum_atoms_added_in_turn": {"type": ["integer", "null"], "minimum": 0, "maximum": 12},
+        "future_knowledge_leakage_rate": {"$ref": "#/$defs/rateOrNull"},
+        "state_mutation_correctness_rate": {"$ref": "#/$defs/rateOrNull"},
+        "citation_support_rate": {"$ref": "#/$defs/rateOrNull"},
+        "resume_success_rate": {"$ref": "#/$defs/rateOrNull"},
+        "grading_abstention_quality_rate": {"$ref": "#/$defs/rateOrNull"},
+        "human_review_exact_agreement": {"$ref": "#/$defs/rateOrNull"}
+      }
+    },
+    "threshold_checks": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_adherence",
+        "future_knowledge_leakage",
+        "state_mutation",
+        "citation_support",
+        "resume_success",
+        "grading_abstention",
+        "human_review_agreement"
+      ],
+      "properties": {
+        "protocol_adherence": {"type": "boolean"},
+        "future_knowledge_leakage": {"type": "boolean"},
+        "state_mutation": {"type": "boolean"},
+        "citation_support": {"type": "boolean"},
+        "resume_success": {"type": "boolean"},
+        "grading_abstention": {"type": "boolean"},
+        "human_review_agreement": {"type": "boolean"}
+      }
+    },
+    "quality_gate": {"enum": ["incomplete", "engineering_smoke_only", "pass", "fail"]},
+    "compatibility_claim_allowed": {"type": "boolean"},
+    "evidence_layer": {"const": "harness_model_behavior"},
+    "can_establish": {"type": "array", "minItems": 1, "items": {"type": "string", "maxLength": 500}},
+    "cannot_establish": {"type": "array", "minItems": 3, "items": {"type": "string", "maxLength": 500}},
+    "learning_effect_claims_allowed": {"const": false}
+  },
+  "$defs": {
+    "hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "rateOrNull": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+    "identity": {"type": "string", "minLength": 1, "maxLength": 128},
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "name", "version"],
+      "properties": {
+        "provider": {"$ref": "#/$defs/identity"},
+        "name": {"$ref": "#/$defs/identity"},
+        "version": {"$ref": "#/$defs/identity"}
+      }
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"$ref": "#/$defs/identity"},
+        "version": {"$ref": "#/$defs/identity"}
+      }
+    }
+  }
+}

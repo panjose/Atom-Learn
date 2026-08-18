@@ -222,6 +222,50 @@ capabilities:
     limitations:
       - Operational within-user comparisons are not universal causal evidence and never substitute for a consented learning-effect study.
 
+  - id: evolution.episode_observability_and_behavior_protocol_v1
+    title: Incremental episode recovery and versioned harness/model behavior evaluation
+    status: implemented
+    default_mode: opt_in
+    public_claim: true
+    availability: *stable_core
+    interfaces:
+      - episode enable
+      - episode begin
+      - episode checkpoint
+      - episode resume
+      - episode finalize
+      - episode retire
+      - behavior validate-protocol
+      - behavior evaluate
+      - behavior validate-report
+    implementation:
+      - path: atom-learn/scripts/episode.py
+        symbol: "class EpisodeEngine"
+      - path: atom-learn/scripts/behavior_eval.py
+        symbol: "def evaluate"
+      - path: atom-learn/assets/harness-behavior-protocol.yaml
+        symbol: "protocol_version: atomlearn-behavior-v1"
+    verification:
+      - path: tests/test_episode.py
+        symbol: "test_incremental_checkpoint_survives_close_and_retries_idempotently"
+      - path: tests/test_episode.py
+        symbol: "test_resume_fails_closed_on_workspace_change_and_no_outcome_never_becomes_strategy_input"
+      - path: tests/test_behavior_eval.py
+        symbol: "test_engineering_smoke_cannot_be_misrepresented_as_model_or_learning_evidence"
+      - path: tests/test_behavior_eval.py
+        symbol: "test_complete_dual_reviewed_bilingual_run_can_pass_only_for_its_exact_configuration"
+    documentation:
+      - README.md
+      - README.zh-CN.md
+      - atom-learn/SKILL.md
+      - atom-learn/references/EPISODE_CHECKPOINTS.md
+      - atom-learn/references/HARNESS_BEHAVIOR_EVALUATION.md
+      - docs/V0_15_PHASE6_IMPLEMENTATION.md
+    limitations:
+      - Episode checkpoints are default-off harness observability and never become mastery Evidence or strategy outcomes.
+      - The repository verifies the behavior protocol and report engine but has not published a real multi-model compatibility report, so release-wide harness behavior remains not evaluated.
+      - A passing compatibility report applies only to its exact recorded configuration and cannot establish learning, retention, or transfer benefit.
+
   - id: learning.learning_effect_study_v1
     title: Explicitly consented privacy-minimized local learning-effect study contract
     status: implemented

@@ -1,0 +1,145 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/episode-checkpoint-state.schema.json",
+  "title": "AtomLearn incremental episode checkpoint state",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "revision",
+    "enabled",
+    "coverage_started_at",
+    "coverage_start_workspace_revision",
+    "updated_at",
+    "episodes"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.episode-checkpoint-state"},
+    "schema_version": {"const": 1},
+    "revision": {"type": "integer", "minimum": 0},
+    "enabled": {"type": "boolean"},
+    "coverage_started_at": {"oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+    "coverage_start_workspace_revision": {"type": ["integer", "null"], "minimum": 0},
+    "updated_at": {"$ref": "#/$defs/timestamp"},
+    "episodes": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/episode"}
+    }
+  },
+  "$defs": {
+    "timestamp": {"type": "string", "minLength": 20, "maxLength": 40},
+    "opaqueRef": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+    "shaRef": {"type": "string", "pattern": "^[a-z]+-[a-f0-9]{24}$"},
+    "checkpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "idempotency_key",
+        "event",
+        "workspace_revision",
+        "exposure_ref",
+        "strategy_outcome_ref",
+        "evidence_ref",
+        "review_ref",
+        "teaching_mode",
+        "interaction_pattern",
+        "attempt_status",
+        "at"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^cp-[a-f0-9]{24}$"},
+        "idempotency_key": {"$ref": "#/$defs/opaqueRef"},
+        "event": {
+          "enum": [
+            "activated",
+            "exposure_recorded",
+            "strategy_applied",
+            "teaching_step",
+            "evidence_attempted",
+            "outcome_recorded",
+            "review_event",
+            "resumed",
+            "finalized"
+          ]
+        },
+        "workspace_revision": {"type": "integer", "minimum": 0},
+        "exposure_ref": {"oneOf": [{"$ref": "#/$defs/opaqueRef"}, {"type": "null"}]},
+        "strategy_outcome_ref": {"oneOf": [{"$ref": "#/$defs/opaqueRef"}, {"type": "null"}]},
+        "evidence_ref": {"oneOf": [{"$ref": "#/$defs/opaqueRef"}, {"type": "null"}]},
+        "review_ref": {"oneOf": [{"$ref": "#/$defs/opaqueRef"}, {"type": "null"}]},
+        "teaching_mode": {
+          "type": ["string", "null"],
+          "enum": ["direct", "socratic", "guided_discovery", "mixed", "not_observed", null]
+        },
+        "interaction_pattern": {
+          "type": ["string", "null"],
+          "enum": [
+            "explanation",
+            "example",
+            "question",
+            "feedback",
+            "integration",
+            "retrieval_practice",
+            "not_observed",
+            null
+          ]
+        },
+        "attempt_status": {
+          "type": ["string", "null"],
+          "enum": ["started", "submitted", "assessed", "abstained", "not_observed", null]
+        },
+        "at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "workspace_ref",
+        "atom_ref",
+        "context",
+        "episode_type",
+        "status",
+        "started_workspace_revision",
+        "last_workspace_revision",
+        "started_at",
+        "updated_at",
+        "finalized_at",
+        "retired_at",
+        "retirement_reason",
+        "finalization_mode",
+        "checkpoints"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^episode-[a-f0-9]{24}$"},
+        "workspace_ref": {"type": "string", "pattern": "^ws-[a-f0-9]{24}$"},
+        "atom_ref": {"type": "string", "pattern": "^atom-[a-f0-9]{24}$"},
+        "context": {"enum": ["orientation", "teaching", "review", "exam", "research"]},
+        "episode_type": {"enum": ["new_learning", "remediation", "review", "exam", "research"]},
+        "status": {"enum": ["incomplete", "finalized", "retired"]},
+        "started_workspace_revision": {"type": "integer", "minimum": 0},
+        "last_workspace_revision": {"type": "integer", "minimum": 0},
+        "started_at": {"$ref": "#/$defs/timestamp"},
+        "updated_at": {"$ref": "#/$defs/timestamp"},
+        "finalized_at": {"oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+        "retired_at": {"oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+        "retirement_reason": {
+          "type": ["string", "null"],
+          "enum": ["user_request", "privacy_request", "abandoned", "superseded", null]
+        },
+        "finalization_mode": {
+          "type": ["string", "null"],
+          "enum": ["strategy_outcome_recorded", "assessment_only", "no_outcome", null]
+        },
+        "checkpoints": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"$ref": "#/$defs/checkpoint"}
+        }
+      }
+    }
+  }
+}

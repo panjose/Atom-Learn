@@ -23,6 +23,7 @@ WORKSPACE_TARGETS = {
     "workspace_exam": ".atomlearn/exam/state.yaml",
     "workspace_lineage": ".atomlearn/lineage/state.yaml",
     "workspace_profile_binding": ".atomlearn/profile-binding.yaml",
+    "workspace_episodes": ".atomlearn/episodes/state.yaml",
 }
 USER_TARGETS = {
     "user_profile": ("profiles", "state.yaml"),

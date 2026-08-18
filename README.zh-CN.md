@@ -279,6 +279,17 @@ python atom-learn/scripts/atomlearn.py adapt retire courses/calculus response.de
 
 系统禁止存储原始消息、引文、自由文本摘要、敏感特征猜测，也不跨工作区聚合。新的明确纠正会覆盖旧偏好；用户可以停用任意偏好；科研专用指引不会泄漏到教学场景；当前轮指令始终优先，且不会被自动固化。可从 `atom-learn/assets/templates/adapt-session.yaml` 开始，详见[会话自适应](atom-learn/references/SESSION_ADAPTATION.md)和[会话自适应设计](docs/SESSION_ADAPTATION_DESIGN.md)。
 
+session 结束不再是唯一的 episode 边界。学习者单独选择加入后，harness 可以在激活、exposure、教学、Evidence 尝试、outcome、复习和收尾时提交仅含枚举的增量 checkpoint。相同 request 的重试会幂等重放；resume 要求同一个未完成 episode、同一个 Active Atom 和完全一致的 workspace revision。聊天突然关闭时，已有 checkpoint 会以 `incomplete` 保留；缺少 outcome 的 episode 永远不能成为策略晋升样本。状态页会披露 coverage 起点和每个接入缺口，而不会笼统宣称持续自进化。用户可以查看、退役或关闭观察；schema 没有可存放原始消息、答案、引文、prompt、自由文本画像或敏感特征推断的字段。
+
+```powershell
+python atom-learn/scripts/atomlearn.py episode status courses/calculus
+python atom-learn/scripts/atomlearn.py episode enable courses/calculus --expected-observability-revision 0
+python atom-learn/scripts/atomlearn.py episode begin courses/calculus calculus.limit.approach --episode-key turn-001 --request-key activate-001 --expected-observability-revision 1 --expected-workspace-revision 2
+python atom-learn/scripts/atomlearn.py episode resume courses/calculus episode-0123456789abcdef01234567 --request-key resume-001 --expected-observability-revision 2 --expected-workspace-revision 2
+```
+
+Episode coverage 只表示 harness 可观察性，不是 mastery Evidence、策略 outcome、模型行为验证或学习效果证据。详见[增量 Episode Checkpoint](atom-learn/references/EPISODE_CHECKPOINTS.md)。
+
 ## 自进化
 
 AtomLearn 可以从已持久化的 Evidence、复习结果和先修回退中派生指标，并针对教学策略、复习间隔、掌握标准、依赖边或 Atom 结构生成可检验的提案。进化默认使用 `proposal_only` 模式：每项变更都必须经过预览、所需权限审批、验证、检查点保存和效果监测。
@@ -295,6 +306,17 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 引擎分别维护课程 revision 和进化 revision，不在进化指标中存储学习者原始消息，并拒绝在运行时应用 `patch_skill`。只有后续尚未发生新的学习变更时才允许自动回滚；否则 AtomLearn 会要求创建保留新 Evidence 的补偿提案。完整操作流程见[有边界的自进化](atom-learn/references/EVOLUTION.md)。
 
 如果学习者明确选择分享产品级发现，`evolve capsule` 可以构建仅含枚举与分桶数据的本地 Capsule，执行隐私 lint，展示完整预览，并进行一次性、经确认的文件导出。导出绝不等于上传；系统没有 submit 或 telemetry 命令；维护者转换后也必须先建立独立复现测试，才能按常规评审流程修改 Core。详见 [Evolution Capsule](atom-learn/references/EVOLUTION_CAPSULE.md)。
+
+在任何人体学习研究之前，AtomLearn 现在提供含 18 个中英文 case 的版本化 harness/model 行为协议。它分别测量协议遵守率、每轮新增 Atom 数、未来内容泄漏、状态 mutation 正确率、引用支持率、恢复成功率、评分 abstention 和人工复核精确一致率。工程 smoke 最多只能返回 `engineering_smoke_only`。模型兼容报告必须覆盖完整双语 case，每个 case 由两位不同人工复核者标注，对分歧完成裁决，并通过所有阈值；即使通过，结论也只适用于报告中准确记录的 model、harness、prompt version、语言、temperature 和 seed。
+
+```powershell
+python atom-learn/scripts/atomlearn.py behavior validate-protocol
+python atom-learn/scripts/atomlearn.py behavior validate-run --input behavior-run.yaml
+python atom-learn/scripts/atomlearn.py behavior evaluate --input behavior-run.yaml --output behavior-report.yaml
+python atom-learn/scripts/atomlearn.py behavior validate-report --input behavior-report.yaml
+```
+
+在维护者审查并发布真实兼容报告之前，release 账本仍保持 `harness_behavior: not_evaluated`。行为报告始终禁止学习效果宣称。详见[Harness 与模型行为评测](atom-learn/references/HARNESS_BEHAVIOR_EVALUATION.md)和 [v0.15 Phase 6 实施记录](docs/V0_15_PHASE6_IMPLEMENTATION.md)。
 
 ### 签名 Release Manager
 
@@ -320,6 +342,8 @@ bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root�
 - [产品与技术设计](docs/PRODUCT_DESIGN.md)
 - [v0.15 产品就绪修复设计](docs/V0_15_PRODUCT_READINESS_REMEDIATION_DESIGN.md)
 - [v0.15 Phase 4 稳定 Bootstrap 与迁移实施记录](docs/V0_15_PHASE4_IMPLEMENTATION.md)
+- [v0.15 Phase 5 Topic 诊断与 RAG 评测实施记录](docs/V0_15_PHASE5_IMPLEMENTATION.md)
+- [v0.15 Phase 6 Episode 与 Harness 行为实施记录](docs/V0_15_PHASE6_IMPLEMENTATION.md)
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 考试与科研实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 自适应复习实施记录](docs/V0_14_PHASE7_IMPLEMENTATION.md)

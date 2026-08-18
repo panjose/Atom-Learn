@@ -279,6 +279,17 @@ python atom-learn/scripts/atomlearn.py adapt retire courses/calculus response.de
 
 Raw messages, quotes, free-text summaries, sensitive-trait guesses, and cross-workspace aggregation are forbidden. A new explicit correction overrides an older preference, users can retire any preference, research-only guidance does not leak into teaching, and a current-turn instruction always wins without becoming durable automatically. Start with `atom-learn/assets/templates/adapt-session.yaml`; see [Session Adaptation](atom-learn/references/SESSION_ADAPTATION.md) and [Session Adaptation Design](docs/SESSION_ADAPTATION_DESIGN.md).
 
+Session end is no longer the only episode boundary. After a separate opt-in, a harness can checkpoint activation, exposure, teaching, Evidence attempts, outcomes, review, and finalization as enum-only transitions. Exact request retries replay idempotently; resume requires the same incomplete episode, Active Atom, and workspace revision. A sudden close preserves earlier checkpoints as `incomplete`, while missing outcomes never become strategy promotion samples. Status discloses the coverage start and every integration gap instead of claiming continuous self-evolution. Users can inspect, retire, or disable observation, and the schema has no field for raw messages, answers, quotes, prompts, free-text profiles, or sensitive-trait inference.
+
+```powershell
+python atom-learn/scripts/atomlearn.py episode status courses/calculus
+python atom-learn/scripts/atomlearn.py episode enable courses/calculus --expected-observability-revision 0
+python atom-learn/scripts/atomlearn.py episode begin courses/calculus calculus.limit.approach --episode-key turn-001 --request-key activate-001 --expected-observability-revision 1 --expected-workspace-revision 2
+python atom-learn/scripts/atomlearn.py episode resume courses/calculus episode-0123456789abcdef01234567 --request-key resume-001 --expected-observability-revision 2 --expected-workspace-revision 2
+```
+
+Episode coverage is harness observability only—not mastery Evidence, a strategy outcome, model-behavior verification, or learning-effect evidence. See [Incremental Episode Checkpoints](atom-learn/references/EPISODE_CHECKPOINTS.md).
+
 ## Self-Evolution
 
 AtomLearn can derive metrics from persisted Evidence, reviews, and prerequisite backtracking, then create testable proposals for teaching strategy, review intervals, mastery rubrics, dependency edges, or Atom structure. Evolution is `proposal_only` by default: every change must be previewed, approved by the required authority, validated, checkpointed, and monitored.
@@ -295,6 +306,17 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 The engine keeps course and evolution revisions separate, stores no raw learner messages in evolution metrics, and refuses runtime `patch_skill` application. Automatic rollback is allowed only before later learning mutations; otherwise AtomLearn requires a compensating proposal that preserves newer Evidence. See [Bounded Self-Evolution](atom-learn/references/EVOLUTION.md) for the operating workflow.
 
 If the learner explicitly chooses to share a product-level finding, `evolve capsule` can build a local enum-only, bucketed Capsule, enforce privacy lint, show the complete preview, and perform a one-time confirmed file export. Export never uploads, there is no submit or telemetry command, and maintainer conversion always requires an independent reproduction test before any normal reviewed Core change. See [Evolution Capsule](atom-learn/references/EVOLUTION_CAPSULE.md).
+
+Before any human learning study, AtomLearn now provides a versioned harness/model behavior protocol with 18 English/Chinese cases. It measures protocol adherence, Atoms added per turn, future-content leakage, state mutation correctness, citation support, resume success, grading abstention, and exact human-review agreement. Engineering smoke can only return `engineering_smoke_only`. A model compatibility report requires complete bilingual coverage, two distinct human reviewers per case, adjudication of disagreement, and every threshold; even a pass applies only to the exact model, harness, prompt version, language, temperature, and seed recorded in that report.
+
+```powershell
+python atom-learn/scripts/atomlearn.py behavior validate-protocol
+python atom-learn/scripts/atomlearn.py behavior validate-run --input behavior-run.yaml
+python atom-learn/scripts/atomlearn.py behavior evaluate --input behavior-run.yaml --output behavior-report.yaml
+python atom-learn/scripts/atomlearn.py behavior validate-report --input behavior-report.yaml
+```
+
+The release ledger remains `harness_behavior: not_evaluated` until maintainers review and publish real compatibility reports. Behavior reports always forbid learning-effect claims. See [Harness and Model Behavior Evaluation](atom-learn/references/HARNESS_BEHAVIOR_EVALUATION.md) and the [v0.15 Phase 6 implementation record](docs/V0_15_PHASE6_IMPLEMENTATION.md).
 
 ### Signed Release Manager
 
@@ -320,6 +342,8 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 - [Product and Technical Design](docs/PRODUCT_DESIGN.md)
 - [v0.15 Product-Readiness Remediation Design](docs/V0_15_PRODUCT_READINESS_REMEDIATION_DESIGN.md)
 - [v0.15 Phase 4 Stable Bootstrap and Migration Implementation](docs/V0_15_PHASE4_IMPLEMENTATION.md)
+- [v0.15 Phase 5 Topic Diagnostic and RAG Evaluation Implementation](docs/V0_15_PHASE5_IMPLEMENTATION.md)
+- [v0.15 Phase 6 Episode and Harness Behavior Implementation](docs/V0_15_PHASE6_IMPLEMENTATION.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 Exam and Research Implementation](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 Adaptive Review Implementation](docs/V0_14_PHASE7_IMPLEMENTATION.md)

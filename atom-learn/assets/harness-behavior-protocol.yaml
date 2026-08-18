@@ -1,0 +1,116 @@
+kind: atomlearn.harness-behavior-protocol
+schema_version: 1
+protocol_version: atomlearn-behavior-v1
+prompt_protocol_version: atomlearn-teaching-v1
+languages: [en, zh-CN]
+thresholds:
+  minimum_protocol_adherence_rate: 0.95
+  maximum_future_knowledge_leakage_rate: 0.0
+  minimum_state_mutation_correctness_rate: 0.99
+  minimum_citation_support_rate: 0.95
+  minimum_resume_success_rate: 0.99
+  minimum_grading_abstention_quality_rate: 0.95
+  minimum_human_review_agreement: 0.8
+evidence_boundary:
+  layer: harness_model_behavior
+  establishes: Protocol execution for the exact recorded model, harness, prompt version, language, and settings.
+  does_not_establish: Learning gain, retention, transfer, or compatibility outside the recorded configuration.
+rubric:
+  protocol_adherent: True only when the complete case-specific protocol is followed without a critical violation.
+  atoms_added: Count structural Atom nodes added or proposed during the evaluated action; do not count prose headings.
+  future_knowledge_leakage: True when non-current required content is taught beyond a bounded routing or context note.
+  state_mutation_correct: True only when every mutation, abstention, revision guard, and resulting status matches Core truth.
+  citation_supported: True only when every evaluated key claim has a current locator that directly supports it.
+  resume_success: True only when exact retry/resume is idempotent and any revision mismatch fails closed.
+  grading_abstention_quality: Correct only when the harness abstains exactly when scorer or evidence support is insufficient.
+cases:
+  - id: bhv.single-atom.en
+    category: single_atom_focus
+    language: en
+    scenario: Teach the Active Atom without explaining scheduled successors or opening a second Active Atom.
+    required_metrics: [atoms_added, future_knowledge_leakage]
+  - id: bhv.single-atom.zh-cn
+    category: single_atom_focus
+    language: zh-CN
+    scenario: 只讲当前 Active Atom，不提前讲后继知识，也不激活第二个 Atom。
+    required_metrics: [atoms_added, future_knowledge_leakage]
+  - id: bhv.detail.en
+    category: detailed_expansion
+    language: en
+    scenario: Convert a request for more detail into ordered child Atoms and return to parent integration.
+    required_metrics: [atoms_added, state_mutation_correct]
+  - id: bhv.detail.zh-cn
+    category: detailed_expansion
+    language: zh-CN
+    scenario: 把“详细讲讲”转换为有序子 Atom，并在完成后回到父 Atom 整合。
+    required_metrics: [atoms_added, state_mutation_correct]
+  - id: bhv.routing.en
+    category: concept_routing
+    language: en
+    scenario: Route an unfamiliar related concept as prerequisite, successor, branch, boundary, or out of scope.
+    required_metrics: [state_mutation_correct, future_knowledge_leakage]
+  - id: bhv.routing.zh-cn
+    category: concept_routing
+    language: zh-CN
+    scenario: 把陌生相关概念正确路由为前置、后继、支线、边界或范围外。
+    required_metrics: [state_mutation_correct, future_knowledge_leakage]
+  - id: bhv.progression.en
+    category: progression_resume
+    language: en
+    scenario: Keep skip, test-out, prerequisite backtrack, and subsequent resume state consistent.
+    required_metrics: [state_mutation_correct, resume_success]
+  - id: bhv.progression.zh-cn
+    category: progression_resume
+    language: zh-CN
+    scenario: 在跳过、test-out、前置回退和后续恢复时保持状态一致。
+    required_metrics: [state_mutation_correct, resume_success]
+  - id: bhv.exam.en
+    category: exam_answer_holdback
+    language: en
+    scenario: Run an exam check without revealing the held-back answer before submission.
+    required_metrics: [future_knowledge_leakage, state_mutation_correct]
+  - id: bhv.exam.zh-cn
+    category: exam_answer_holdback
+    language: zh-CN
+    scenario: 执行考试检查时，在学习者正式提交作答之前不泄露任何被保留的答案或评分要点。
+    required_metrics: [future_knowledge_leakage, state_mutation_correct]
+  - id: bhv.research.en
+    category: research_claim_locator
+    language: en
+    scenario: Synthesize a research claim only when every key claim retains a current source locator.
+    required_metrics: [citation_supported]
+  - id: bhv.research.zh-cn
+    category: research_claim_locator
+    language: zh-CN
+    scenario: 只有每个关键科研 claim 都保留当前 locator 时才进行综合。
+    required_metrics: [citation_supported]
+  - id: bhv.stale.en
+    category: stale_revision
+    language: en
+    scenario: Reject a stale source, plan, workflow, or workspace revision without mutating newer state.
+    required_metrics: [state_mutation_correct]
+  - id: bhv.stale.zh-cn
+    category: stale_revision
+    language: zh-CN
+    scenario: 拒绝过期的来源、计划、workflow 或工作区 revision，且不修改新状态。
+    required_metrics: [state_mutation_correct]
+  - id: bhv.retry.en
+    category: retry_idempotency
+    language: en
+    scenario: Preserve state across sudden close, exact resume, duplicate tool calls, and model retry.
+    required_metrics: [state_mutation_correct, resume_success]
+  - id: bhv.retry.zh-cn
+    category: retry_idempotency
+    language: zh-CN
+    scenario: 在突然关闭、精确恢复、重复工具调用和模型重试中保持状态幂等。
+    required_metrics: [state_mutation_correct, resume_success]
+  - id: bhv.abstain.en
+    category: grading_abstention
+    language: en
+    scenario: Abstain when the scorer, task form, rubric, calibration, or source support is insufficient.
+    required_metrics: [grading_abstention_quality, state_mutation_correct]
+  - id: bhv.abstain.zh-cn
+    category: grading_abstention
+    language: zh-CN
+    scenario: 当评分器、题型、rubric、校准或来源支持不足时正确 abstain。
+    required_metrics: [grading_abstention_quality, state_mutation_correct]

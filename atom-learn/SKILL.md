@@ -209,7 +209,8 @@ Keep the prerequisite DAG authoritative for activation and mastery. Semantic edg
 2. Read the returned adaptation guidance. If adaptation is not initialized, run `adapt guidance` for the current context.
 3. Read only the Active Atom, referenced questions, and necessary source locations.
 4. Restate the current Atom, learner confusion, and next action using active preferences unless the current request overrides them.
-5. Continue the recorded phase. Do not reactivate or advance an Atom merely because a new session started.
+5. If opted-in episode status reports an incomplete record, use `episode resume` only at its exact last workspace revision; otherwise explain the revision gap and reconcile, finalize, or retire it.
+6. Continue the recorded phase. Do not reactivate or advance an Atom merely because a new session started.
 
 ### Adapt across chat sessions
 
@@ -235,11 +236,29 @@ python <SKILL_DIR>/scripts/atomlearn.py policy explain <workspace> <dimension> -
 
 Use session adaptation only for presentation choices. Never let inferred preferences automatically lower mastery or trigger a skip; only the explicit flexible-progression workflow may bypass a prerequisite provisionally. Never let adaptation change research scope, weaken source grounding, or modify safety rules. Keep course, evolution, and adaptation revisions independent.
 
+### Checkpoint an Active Atom episode
+
+1. Read [references/EPISODE_CHECKPOINTS.md](references/EPISODE_CHECKPOINTS.md). Run `episode status` without initializing state; enable observation only after a separate learner opt-in.
+2. Immediately after activation, call `episode begin` with a stable opaque episode key, a unique request key, and both current revisions.
+3. Checkpoint only meaningful enum events: exposure, applied teaching mode, teaching step, Evidence attempt, outcome, or review. Never submit messages, prompts, answers, quotes, summaries, personal identifiers, or inferred traits.
+4. Reuse the identical request key and payload on a tool retry. Never reuse one key for different data.
+5. After a sudden close, resume only if the episode is incomplete, its Atom remains Active, and the workspace revision exactly matches its last checkpoint. Never infer across a revision gap.
+6. Finalize explicitly as `strategy_outcome_recorded`, `assessment_only`, or `no_outcome`. Treat every checkpoint as observability only; strategy promotion still requires the separate qualified outcome ledger.
+7. Let the learner inspect, retire, or disable observations. Report coverage gaps and the first observed workspace revision; never backfill historical episodes.
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py episode status <workspace>
+python <SKILL_DIR>/scripts/atomlearn.py episode begin <workspace> <atom-id> --episode-key <opaque-key> --request-key <request-key> --expected-observability-revision <revision> --expected-workspace-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py episode checkpoint <workspace> <episode-id> --event teaching_step --interaction-pattern example --request-key <request-key> --expected-observability-revision <revision> --expected-workspace-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py episode resume <workspace> <episode-id> --request-key <request-key> --expected-observability-revision <revision> --expected-workspace-revision <revision>
+python <SKILL_DIR>/scripts/atomlearn.py episode finalize <workspace> <episode-id> --mode no_outcome --request-key <request-key> --expected-observability-revision <revision> --expected-workspace-revision <revision>
+```
+
 ### Run strategy experiments
 
 1. Read [references/STRATEGY_EXPERIMENTS.md](references/STRATEGY_EXPERIMENTS.md) before creating, exposing, monitoring, promoting, migrating, or pausing a strategy experiment.
 2. Require the separate `strategy enable-experiments` opt-in. Start every candidate in shadow mode, run `strategy replay-shadow`, and inspect the result before live assignment.
-3. At the start of each matching Active Atom episode, call `strategy exposure` with a stable opaque episode key. Follow its chosen instruction for that episode; never switch arms mid-episode.
+3. At the start of each matching Active Atom episode, call `strategy exposure` with the same stable opaque episode key used by the harness. Follow its chosen instruction for that episode; never switch arms mid-episode. If episode observability is enabled, checkpoint the returned exposure ID separately.
 4. Respect current-turn and stored explicit overrides. `shadow` and `overridden` exposures do not enter comparisons.
 5. Record and assess qualified Evidence v3 first, then link it once with `strategy record-outcome`. Never link legacy, task-incompatible, uncalibrated, non-independent, or unexposed historical Evidence.
 6. Use `strategy monitor` and accept long-lived `monitoring` when intervals are wide or delayed reviews are insufficient. Promote only when every primary delayed/transfer learning interval clears the minimum effect and all guardrail intervals are safe; UX and process signals never promote alone.
@@ -354,6 +373,8 @@ python <SKILL_DIR>/scripts/atomlearn.py review pilot <workspace>
 7. Roll back only when no learning mutation occurred after application; otherwise create a compensating proposal.
 8. If the user explicitly wants to share a product-level finding, read [references/EVOLUTION_CAPSULE.md](references/EVOLUTION_CAPSULE.md). Build, lint, and show the complete local preview before a one-time, explicitly confirmed file export. Never claim export uploads or submits anything.
 
+For product-level model compatibility work, read [references/HARNESS_BEHAVIOR_EVALUATION.md](references/HARNESS_BEHAVIOR_EVALUATION.md). Keep deterministic smoke, dual-reviewed model behavior, and consented human learning studies as separate evidence layers. Never turn a smoke or compatibility report into a learning-effect claim.
+
 Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` from a course workspace.
 
 ## State command rules
@@ -392,6 +413,8 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 - Read [references/USER_PROFILE.md](references/USER_PROFILE.md) before enabling, promoting, disabling, exporting, or resetting cross-course preferences.
 - Read [references/EFFECTIVE_POLICY.md](references/EFFECTIVE_POLICY.md) when merging current-turn, workspace, user, experiment, and Core presentation policy.
 - Read [references/STRATEGY_EXPERIMENTS.md](references/STRATEGY_EXPERIMENTS.md) before running shadow/live presentation experiments, linking outcomes, monitoring, promotion, or pause.
+- Read [references/EPISODE_CHECKPOINTS.md](references/EPISODE_CHECKPOINTS.md) before enabling, checkpointing, resuming, finalizing, retiring, or interpreting episode observability.
+- Read [references/HARNESS_BEHAVIOR_EVALUATION.md](references/HARNESS_BEHAVIOR_EVALUATION.md) before creating, reviewing, or publishing an engineering smoke or model compatibility report.
 - Read [references/LEARNING_EFFECT_STUDY.md](references/LEARNING_EFFECT_STUDY.md) before enrolling, recording, withdrawing, validating, or interpreting a real learning-effect study.
 - Read [references/EXAM_PREPARATION.md](references/EXAM_PREPARATION.md) when the learner supplies past papers, mock exams, sample questions, or a question bank, or asks for common-point, difficulty, or targeted preparation analysis.
 - Read [references/EXAM_SCHEMA.md](references/EXAM_SCHEMA.md) when creating exam import payloads, mapping questions to Atoms, or troubleshooting exam state.
@@ -404,4 +427,4 @@ Keep evolution in `proposal_only` mode by default. Never apply `patch_skill` fro
 
 ## Completion standard
 
-Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. Record a privacy-safe session observation when a durable preference signal occurred. For every intake mode, require a passed RAG coverage report for the planned intake, Goal Contract, and RAG revisions; respect `closed_corpus` and complete only after source traceability passes. For a related-concept question, show the relationship and impact before structural mutation, name a scheduled destination when one exists, and require confirmation for a new prerequisite or optional branch. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, optional branches, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For adaptive review, count only qualified active-retrieval Evidence, preserve fixed fallback and pending dates, require benchmark plus opt-in for active mode, and disclose queue backlog and pilot limits. For exam preparation, require source locators, count only reviewed mappings, distinguish structural/official/empirical difficulty, disclose corpus limits, keep prerequisite order, and report infeasible calendar gaps. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have claim-level locators, structured conditional differences are retained, theme proposals are reviewed, open questions and contradictions are explicit, and bounded search limits are stated.
+Consider an interaction complete only after canonical state is saved, applicable adaptation guidance was respected or explicitly overridden by the current request, `validate` passes, generated views are refreshed, and the learner is told the current Atom or Paper and next action. When episode observability is enabled, checkpoint meaningful transitions incrementally and finalize or deliberately leave an inspectable incomplete episode; never depend on a session-end hook. Record a privacy-safe session observation when a durable preference signal occurred. For every intake mode, require a passed RAG coverage report for the planned intake, Goal Contract, and RAG revisions; respect `closed_corpus` and complete only after source traceability passes. For a related-concept question, show the relationship and impact before structural mutation, name a scheduled destination when one exists, and require confirmation for a new prerequisite or optional branch. For a detailed request, require one Active child at a time, mastered child Evidence, and a final parent integration check; never treat a long explanation as completion. For a knowledge-lineage request, distinguish prerequisites, containment, optional branches, and semantic relations, ground high-confidence relations, and show the goal-relevant spine and branches. For flexible progression, disclose assumptions and keep skipped, deferred, and mastered counts distinct. For adaptive review, count only qualified active-retrieval Evidence, preserve fixed fallback and pending dates, require benchmark plus opt-in for active mode, and disclose queue backlog and pilot limits. For exam preparation, require source locators, count only reviewed mappings, distinguish structural/official/empirical difficulty, disclose corpus limits, keep prerequisite order, and report infeasible calendar gaps. Consider a course fully mastered only when every required, non-archived Atom has mastered Evidence; treat `completed_with_skips` only as traversal completion with assumptions. Consider a research synthesis complete only when included papers have claim-level locators, structured conditional differences are retained, theme proposals are reviewed, open questions and contradictions are explicit, and bounded search limits are stated.

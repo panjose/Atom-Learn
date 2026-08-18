@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/harness-behavior-run.schema.json",
+  "title": "AtomLearn harness and model behavior run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "run_id",
+    "run_kind",
+    "protocol_version",
+    "prompt_protocol_version",
+    "model",
+    "harness",
+    "temperature",
+    "seed",
+    "started_at",
+    "completed_at",
+    "results"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.harness-behavior-run"},
+    "schema_version": {"const": 1},
+    "run_id": {"type": "string", "pattern": "^behavior-run-[A-Za-z0-9._-]{1,96}$"},
+    "run_kind": {"enum": ["engineering_smoke", "model_compatibility"]},
+    "protocol_version": {"const": "atomlearn-behavior-v1"},
+    "prompt_protocol_version": {"const": "atomlearn-teaching-v1"},
+    "model": {"$ref": "#/$defs/model"},
+    "harness": {"$ref": "#/$defs/harness"},
+    "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+    "seed": {"type": ["integer", "null"]},
+    "started_at": {"$ref": "#/$defs/timestamp"},
+    "completed_at": {"$ref": "#/$defs/timestamp"},
+    "results": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"$ref": "#/$defs/result"}
+    }
+  },
+  "$defs": {
+    "timestamp": {"type": "string", "minLength": 20, "maxLength": 40},
+    "identity": {"type": "string", "minLength": 1, "maxLength": 128},
+    "model": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider", "name", "version"],
+      "properties": {
+        "provider": {"$ref": "#/$defs/identity"},
+        "name": {"$ref": "#/$defs/identity"},
+        "version": {"$ref": "#/$defs/identity"}
+      }
+    },
+    "harness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version"],
+      "properties": {
+        "name": {"$ref": "#/$defs/identity"},
+        "version": {"$ref": "#/$defs/identity"}
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_adherent",
+        "atoms_added",
+        "future_knowledge_leakage",
+        "state_mutation_correct",
+        "citation_supported",
+        "resume_success",
+        "grading_abstention_quality"
+      ],
+      "properties": {
+        "protocol_adherent": {"type": ["boolean", "null"]},
+        "atoms_added": {"type": ["integer", "null"], "minimum": 0, "maximum": 12},
+        "future_knowledge_leakage": {"type": ["boolean", "null"]},
+        "state_mutation_correct": {"type": ["boolean", "null"]},
+        "citation_supported": {"type": ["boolean", "null"]},
+        "resume_success": {"type": ["boolean", "null"]},
+        "grading_abstention_quality": {
+          "type": ["string", "null"],
+          "enum": ["correct", "incorrect", "not_applicable", null]
+        }
+      }
+    },
+    "annotation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evaluator_id", "evaluator_type", "independent", "metrics"],
+      "properties": {
+        "evaluator_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "evaluator_type": {"enum": ["deterministic", "human"]},
+        "independent": {"const": true},
+        "metrics": {"$ref": "#/$defs/metrics"}
+      }
+    },
+    "adjudication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adjudicator_id", "reason_code", "metrics"],
+      "properties": {
+        "adjudicator_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"},
+        "reason_code": {"enum": ["rubric_disagreement", "trace_disagreement", "measurement_correction"]},
+        "metrics": {"$ref": "#/$defs/metrics"}
+      }
+    },
+    "result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["case_id", "trace_hash", "annotations", "adjudication"],
+      "properties": {
+        "case_id": {"type": "string", "pattern": "^bhv\\.[a-z0-9-]+\\.(?:en|zh-cn)$"},
+        "trace_hash": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+        "annotations": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "items": {"$ref": "#/$defs/annotation"}
+        },
+        "adjudication": {"oneOf": [{"$ref": "#/$defs/adjudication"}, {"type": "null"}]}
+      }
+    }
+  }
+}

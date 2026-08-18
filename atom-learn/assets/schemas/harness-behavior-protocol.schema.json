@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/harness-behavior-protocol.schema.json",
+  "title": "AtomLearn harness and model behavior protocol",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "kind",
+    "schema_version",
+    "protocol_version",
+    "prompt_protocol_version",
+    "languages",
+    "thresholds",
+    "evidence_boundary",
+    "rubric",
+    "cases"
+  ],
+  "properties": {
+    "kind": {"const": "atomlearn.harness-behavior-protocol"},
+    "schema_version": {"const": 1},
+    "protocol_version": {"const": "atomlearn-behavior-v1"},
+    "prompt_protocol_version": {"const": "atomlearn-teaching-v1"},
+    "languages": {
+      "type": "array",
+      "minItems": 2,
+      "uniqueItems": true,
+      "items": {"enum": ["en", "zh-CN"]}
+    },
+    "thresholds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "minimum_protocol_adherence_rate",
+        "maximum_future_knowledge_leakage_rate",
+        "minimum_state_mutation_correctness_rate",
+        "minimum_citation_support_rate",
+        "minimum_resume_success_rate",
+        "minimum_grading_abstention_quality_rate",
+        "minimum_human_review_agreement"
+      ],
+      "properties": {
+        "minimum_protocol_adherence_rate": {"type": "number", "minimum": 0.9, "maximum": 1},
+        "maximum_future_knowledge_leakage_rate": {"type": "number", "minimum": 0, "maximum": 0.05},
+        "minimum_state_mutation_correctness_rate": {"type": "number", "minimum": 0.95, "maximum": 1},
+        "minimum_citation_support_rate": {"type": "number", "minimum": 0.9, "maximum": 1},
+        "minimum_resume_success_rate": {"type": "number", "minimum": 0.95, "maximum": 1},
+        "minimum_grading_abstention_quality_rate": {"type": "number", "minimum": 0.9, "maximum": 1},
+        "minimum_human_review_agreement": {"type": "number", "minimum": 0.7, "maximum": 1}
+      }
+    },
+    "evidence_boundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["layer", "establishes", "does_not_establish"],
+      "properties": {
+        "layer": {"const": "harness_model_behavior"},
+        "establishes": {"type": "string", "minLength": 20, "maxLength": 300},
+        "does_not_establish": {"type": "string", "minLength": 20, "maxLength": 300}
+      }
+    },
+    "rubric": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "protocol_adherent",
+        "atoms_added",
+        "future_knowledge_leakage",
+        "state_mutation_correct",
+        "citation_supported",
+        "resume_success",
+        "grading_abstention_quality"
+      ],
+      "properties": {
+        "protocol_adherent": {"type": "string", "minLength": 20, "maxLength": 300},
+        "atoms_added": {"type": "string", "minLength": 20, "maxLength": 300},
+        "future_knowledge_leakage": {"type": "string", "minLength": 20, "maxLength": 300},
+        "state_mutation_correct": {"type": "string", "minLength": 20, "maxLength": 300},
+        "citation_supported": {"type": "string", "minLength": 20, "maxLength": 300},
+        "resume_success": {"type": "string", "minLength": 20, "maxLength": 300},
+        "grading_abstention_quality": {"type": "string", "minLength": 20, "maxLength": 300}
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 18,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "category", "language", "scenario", "required_metrics"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^bhv\\.[a-z0-9-]+\\.(?:en|zh-cn)$"},
+          "category": {
+            "enum": [
+              "single_atom_focus",
+              "detailed_expansion",
+              "concept_routing",
+              "progression_resume",
+              "exam_answer_holdback",
+              "research_claim_locator",
+              "stale_revision",
+              "retry_idempotency",
+              "grading_abstention"
+            ]
+          },
+          "language": {"enum": ["en", "zh-CN"]},
+          "scenario": {"type": "string", "minLength": 20, "maxLength": 500},
+          "required_metrics": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "enum": [
+                "atoms_added",
+                "future_knowledge_leakage",
+                "state_mutation_correct",
+                "citation_supported",
+                "resume_success",
+                "grading_abstention_quality"
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

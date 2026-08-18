@@ -45,6 +45,8 @@ py-modules = [
   "effective_policy",
   "strategy",
   "strategy_analysis",
+  "episode",
+  "behavior_eval",
   "learning_study",
   "capsule",
   "measurement",

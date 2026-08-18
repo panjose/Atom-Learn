@@ -24,6 +24,8 @@ MODULES = [
     "user_profile",
     "effective_policy",
     "strategy",
+    "episode",
+    "behavior_eval",
     "learning_study",
     "capsule",
     "measurement",

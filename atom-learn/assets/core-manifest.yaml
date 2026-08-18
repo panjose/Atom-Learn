@@ -40,6 +40,9 @@ schemas:
   workspace_profile_binding:
     read: [1]
     write: 1
+  workspace_episodes:
+    read: [1]
+    write: 1
   user_profile:
     read: [1]
     write: 1

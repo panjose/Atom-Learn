@@ -2873,6 +2873,16 @@ def build_parser() -> argparse.ArgumentParser:
     strategy_parser = sub.add_parser("strategy", help="Run opt-in, replayable teaching-strategy experiments", add_help=False)
     strategy_parser.add_argument("-h", "--help", action="store_true", dest="strategy_help")
     strategy_parser.add_argument("strategy_args", nargs=argparse.REMAINDER)
+    episode_parser = sub.add_parser(
+        "episode", help="Checkpoint resumable privacy-bounded learning episodes", add_help=False
+    )
+    episode_parser.add_argument("-h", "--help", action="store_true", dest="episode_help")
+    episode_parser.add_argument("episode_args", nargs=argparse.REMAINDER)
+    behavior_parser = sub.add_parser(
+        "behavior", help="Evaluate harness and model teaching-protocol compatibility", add_help=False
+    )
+    behavior_parser.add_argument("-h", "--help", action="store_true", dest="behavior_help")
+    behavior_parser.add_argument("behavior_args", nargs=argparse.REMAINDER)
     study_parser = sub.add_parser("study", help="Manage explicit privacy-safe real learning-effect studies", add_help=False)
     study_parser.add_argument("-h", "--help", action="store_true", dest="study_help")
     study_parser.add_argument("study_args", nargs=argparse.REMAINDER)
@@ -3083,6 +3093,23 @@ def run(args: argparse.Namespace) -> None:
         except (StrategyError, UserProfileError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
             raise AtomLearnError(str(exc)) from exc
         return
+    if args.command == "episode":
+        from episode import EpisodeError, run as run_episode
+        from platform_state import PlatformStateError
+
+        try:
+            emit(run_episode(["--help"] if args.episode_help else args.episode_args))
+        except (EpisodeError, PlatformStateError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
+    if args.command == "behavior":
+        from behavior_eval import BehaviorEvaluationError, run as run_behavior
+
+        try:
+            emit(run_behavior(["--help"] if args.behavior_help else args.behavior_args))
+        except (BehaviorEvaluationError, OSError, json.JSONDecodeError, yaml.YAMLError) as exc:
+            raise AtomLearnError(str(exc)) from exc
+        return
     if args.command == "study":
         from learning_study import LearningStudyError, run as run_learning_study
         from platform_state import PlatformStateError
@@ -3237,6 +3264,15 @@ def run(args: argparse.Namespace) -> None:
                 errors.extend(f"adaptation: {error}" for error in adaptation_engine.validate())
             except (AdaptationError, AdaptationAtomLearnError) as exc:
                 errors.append(f"adaptation: {exc}")
+        episode_root = workspace.meta / "episodes"
+        if episode_root.is_dir():
+            from episode import EpisodeEngine, EpisodeError
+
+            try:
+                episode_engine = EpisodeEngine.load(str(workspace.root))
+                errors.extend(f"episode: {error}" for error in episode_engine.validate())
+            except EpisodeError as exc:
+                errors.append(f"episode: {exc}")
         binding_path = workspace.meta / "profile-binding.yaml"
         if binding_path.is_file():
             from strategy import StrategyError
@@ -3290,6 +3326,14 @@ def run(args: argparse.Namespace) -> None:
         return
     if args.command == "status":
         summary = workspace.status_summary()
+        if (workspace.meta / "episodes").is_dir():
+            from episode import EpisodeEngine
+
+            episode_engine = EpisodeEngine.load(str(workspace.root))
+            episode_errors = episode_engine.validate()
+            if episode_errors:
+                raise AtomLearnError("Episode validation failed:\n- " + "\n- ".join(episode_errors))
+            summary["episode_observability"] = episode_engine.status()
         if (workspace.meta / "adaptation").is_dir() or (workspace.meta / "profile-binding.yaml").is_file():
             from effective_policy import backward_compatible_guidance, effective_for_workspace
 

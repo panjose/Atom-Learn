@@ -11,6 +11,7 @@ FAST_FILES = {
     "test_self_evolution_contracts.py",
     "test_manager_contracts.py",
     "test_release_properties.py",
+    "test_behavior_eval.py",
 }
 
 
