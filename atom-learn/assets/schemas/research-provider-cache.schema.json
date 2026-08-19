@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://atomlearn.dev/schemas/research-provider-cache.schema.json",
+  "title": "AtomLearn research provider cache receipt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["cache_key", "provider", "operation", "request", "retrieved_at", "contract_version", "response"],
+  "properties": {
+    "cache_key": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "provider": {"enum": ["crossref", "openalex", "pubmed", "semantic_scholar", "arxiv"]},
+    "operation": {"enum": ["discovery", "metadata", "backward", "forward", "refresh"]},
+    "request": {"type": "object"},
+    "retrieved_at": {"type": "string", "minLength": 20, "maxLength": 40},
+    "contract_version": {"const": 1},
+    "response": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["records", "pagination", "rate_limit"],
+      "properties": {
+        "records": {"type": "array"},
+        "pagination": {"type": "object"},
+        "rate_limit": {"type": "object"}
+      }
+    }
+  }
+}

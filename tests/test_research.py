@@ -7,10 +7,14 @@ import sys
 import uuid
 from pathlib import Path
 
+import pytest
 import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "atom-learn" / "scripts"))
+from research import ProviderError, ResearchEngine
+
 CLI = ROOT / "atom-learn" / "scripts" / "atomlearn.py"
 PLAN = ROOT / "examples" / "research-mini" / "plan.yaml"
 CALCULUS_PLAN = ROOT / "examples" / "calculus-mini" / "plan.yaml"
@@ -666,3 +670,204 @@ def test_research_completion_fails_without_claim_level_locator() -> None:
     )
     assert blocked.returncode == 2
     assert "completion requires a sentence, table, figure, equation, or block locator" in blocked.stderr
+
+
+def test_research_direct_provider_contracts_normalize_cache_and_citation_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    path = workspace("provider-contract")
+    engine = ResearchEngine.load(str(path))
+    calls: list[str] = []
+
+    crossref = {
+        "message": {
+            "items": [{
+                "DOI": "10.1000/crossref",
+                "title": ["Crossref Evidence"],
+                "author": [{"given": "A", "family": "Author"}],
+                "published-print": {"date-parts": [[2022]]},
+                "container-title": ["Evidence Journal"],
+                "URL": "https://doi.org/10.1000/crossref",
+                "abstract": "<jats:p>Provider abstract.</jats:p>",
+                "license": [{"URL": "https://example.org/license"}],
+                "reference": [{"DOI": "10.1000/reference", "article-title": "Earlier Evidence"}],
+            }],
+        }
+    }
+    openalex = {
+        "results": [{
+            "id": "https://openalex.org/W1",
+            "display_name": "OpenAlex Evidence",
+            "authorships": [{"author": {"display_name": "B Researcher"}}],
+            "publication_year": 2021,
+            "primary_location": {"source": {"display_name": "Open Journal"}, "landing_page_url": "https://example.org/open"},
+            "doi": "https://doi.org/10.1000/openalex",
+            "abstract_inverted_index": {"Reliable": [1], "evidence": [0]},
+            "open_access": {"license": "cc-by"},
+            "referenced_works": ["https://openalex.org/W0"],
+            "is_retracted": False,
+        }],
+        "meta": {"next_cursor": None},
+    }
+    pubmed_search = {"esearchresult": {"idlist": ["12345"]}}
+    pubmed_summary = {"result": {"12345": {
+        "title": "PubMed Evidence", "authors": [{"name": "C Clinician"}], "pubdate": "2020 Jan",
+        "fulljournalname": "Medicine Journal", "articleids": [{"idtype": "doi", "value": "10.1000/pubmed"}],
+    }}}
+    semantic = {"data": [{
+        "paperId": "S1", "title": "Semantic Evidence", "authors": [{"name": "D Scientist"}], "year": 2023,
+        "venue": "Semantic Journal", "url": "https://semanticscholar.org/paper/S1",
+        "externalIds": {"DOI": "10.1000/semantic", "ArXiv": "2301.00001"}, "abstract": "Semantic abstract",
+        "references": [{"paperId": "S0", "title": "Prior Evidence", "externalIds": {"DOI": "10.1000/prior"}}],
+        "citations": [{"paperId": "S2", "title": "Later Evidence", "externalIds": {"DOI": "10.1000/later"}}],
+    }], "next": None}
+    arxiv = """<feed xmlns=\"http://www.w3.org/2005/Atom\" xmlns:arxiv=\"http://arxiv.org/schemas/atom\">
+      <entry><id>http://arxiv.org/abs/2401.00001</id><title>arXiv Evidence</title>
+      <summary>ArXiv abstract.</summary><published>2024-01-01T00:00:00Z</published>
+      <author><name>E Researcher</name></author><category term=\"cs.AI\"/>
+      <arxiv:doi>10.1000/arxiv</arxiv:doi><arxiv:license>http://creativecommons.org/licenses/by/4.0/</arxiv:license>
+      </entry></feed>"""
+
+    def fake_json(url: str, user_agent: str, timeout: float) -> dict:
+        calls.append(url)
+        if "crossref.org" in url:
+            return crossref
+        if "openalex.org" in url:
+            return openalex
+        if "esearch.fcgi" in url:
+            return pubmed_search
+        if "esummary.fcgi" in url:
+            return pubmed_summary
+        if "semanticscholar.org" in url:
+            return semantic
+        raise AssertionError(f"unexpected provider URL: {url}")
+
+    monkeypatch.setattr("research.fetch_json", fake_json)
+    monkeypatch.setattr("research.fetch_text", lambda url, user_agent, timeout: arxiv)
+    queries = {
+        "crossref": "crossref evidence",
+        "openalex": "openalex evidence",
+        "pubmed": "pubmed evidence",
+        "semantic_scholar": "semantic evidence",
+        "arxiv": "arxiv evidence",
+    }
+    results = {}
+    for provider, query in queries.items():
+        results[provider] = engine.discover(query, provider, 5, None, None, 5.0, "")
+        contract = results[provider]["provider_contract"]
+        assert contract["cache_hit"] is False
+        assert contract["field_completeness"]["title"] == 1
+        assert results[provider]["imported_paper_ids"]
+
+    cached = engine.discover("semantic evidence", "semantic_scholar", 5, None, None, 5.0, "")
+    assert cached["provider_contract"]["cache_hit"] is True
+    assert any("semanticscholar.org" in url for url in calls)
+    semantic_paper = next(
+        item for item in engine.papers.values() if item.get("title") == "Semantic Evidence"
+    )
+    assert any(item["direction"] == "forward" for item in semantic_paper["citation_provenance"])
+    assert any(item["direction"] == "backward" for item in semantic_paper["citation_provenance"])
+    assert len(engine.state["provider_cache"]) == 5
+    semantic_calls_before_refresh = sum("semanticscholar.org" in url for url in calls)
+    refreshed = engine.refresh("semantic_scholar", 5)
+    assert refreshed["provider_contract"]["cache_hit"] is False
+    assert sum("semanticscholar.org" in url for url in calls) > semantic_calls_before_refresh
+    engine.commit("test.provider_contract")
+
+
+def test_research_provider_failure_is_typed_and_not_treated_as_absence(monkeypatch: pytest.MonkeyPatch) -> None:
+    path = workspace("provider-failure")
+    engine = ResearchEngine.load(str(path))
+
+    def unavailable(url: str, user_agent: str, timeout: float) -> dict:
+        raise ProviderError("rate_limited", "fixture rate limit", retryable=True)
+
+    monkeypatch.setattr("research.fetch_json", unavailable)
+    failed = engine.discover("rate limited field", "semantic_scholar", 5, None, None, 5.0, "")
+    assert failed["action_status"] == "failed"
+    assert failed["failure"]["code"] == "rate_limited"
+    assert failed["retryable"] is True
+    assert engine.state["provider_failures"][-1]["provider"] == "semantic_scholar"
+    assert engine.state["provider_failures"][-1]["operation"] == "discovery"
+    engine.commit("test.provider_failure")
+
+
+def test_research_metadata_keeps_provider_disagreements_and_citation_provenance() -> None:
+    path = workspace("provider-disagreement")
+    import_plan(path)
+    engine = ResearchEngine.load(str(path))
+    result = engine.reconcile_metadata({"records": [
+        {
+            "paper_id": "paper.field.survey", "provider": "crossref", "provider_id": "10.1000/survey",
+            "title": "A synthetic survey of reliable research agents", "authors": ["Example Author"], "year": 2024,
+            "doi": "10.1000/survey", "venue": "Journal A", "references": [{"title": "A synthetic tool-verification method"}],
+            "retrieved_at": "2026-08-19T10:00:00+08:00",
+        },
+        {
+            "paper_id": "paper.field.survey", "provider": "openalex", "provider_id": "W-SURVEY",
+            "title": "A synthetic survey of reliable research agents", "authors": ["Example Author"], "year": 2025,
+            "doi": "10.1000/survey", "venue": "Journal B", "references": [],
+            "retrieved_at": "2026-08-19T10:01:00+08:00",
+        },
+    ]})
+    assert result["verified_paper_ids"] == ["paper.field.survey"]
+    assert result["conflicts"]
+    paper = engine.papers["paper.field.survey"]
+    assert {item["provider"] for item in paper["provider_observations"]} == {"crossref", "openalex"}
+    assert {item["field"] for item in paper["provider_disagreements"]} >= {"year", "venue"}
+    assert any(item["target_paper_id"] == "paper.method.alpha" for item in paper["citation_provenance"])
+    assert paper["cites"] == ["paper.method.alpha"]
+    engine.commit("test.provider_disagreement")
+
+
+def test_research_synthesis_exposes_claim_matrix_effect_direction_and_boundaries() -> None:
+    path = workspace("claim-matrix")
+    revision = import_plan(path)["research_revision"]
+    for paper_id, relation in [
+        ("paper.field.survey", None),
+        ("paper.method.alpha", {"paper_id": "paper.field.survey", "type": "supports", "note": "Replicates the same direction."}),
+        ("paper.replication.alpha", {"paper_id": "paper.method.alpha", "type": "contradicts", "note": "Fails under a broader setting."}),
+    ]:
+        activated = mutate(path, "activate", revision, paper_id)
+        note_path = critical_note(path, paper_id, relation=relation)
+        note = yaml.safe_load(note_path.read_text(encoding="utf-8"))
+        note["claims"][0]["effect_direction"] = "positive" if paper_id != "paper.replication.alpha" else "null"
+        note["claims"][0]["facets"]["intervention_exposure"] = [
+            "verification mechanism" if paper_id != "paper.replication.alpha" else "alternative mechanism"
+        ]
+        recorded = mutate(path, "note", activated["research_revision"], paper_id, "--input", payload(path, f"matrix-note-{paper_id}.yaml", note))
+        revision = mutate(path, "complete", recorded["research_revision"], paper_id)["research_revision"]
+    synthesized = mutate(path, "synthesize", revision)
+    theme = synthesized["result"]["evidence_synthesis"]["themes"][0]
+    assert {row["effect_direction"] for row in theme["evidence_matrix"]} == {"positive", "null"}
+    assert theme["supporting_claim_ids"]
+    assert theme["opposing_claim_ids"]
+    assert any(item["facet"] == "intervention_exposure" for item in theme["conditional_boundaries"])
+    matrix = (path / "LITERATURE_MATRIX.md").read_text(encoding="utf-8")
+    assert "Provider Disagreements" in matrix
+    assert "Matrix `" in matrix
+
+
+def test_research_direct_snowball_executes_supported_graph_and_types_unsupported_direction(monkeypatch: pytest.MonkeyPatch) -> None:
+    path = workspace("direct-snowball")
+    import_plan(path)
+    engine = ResearchEngine.load(str(path))
+    semantic = {
+        "paperId": "S-SEED",
+        "title": "A synthetic survey of reliable research agents",
+        "authors": [{"name": "Example Author"}],
+        "year": 2024,
+        "venue": "Survey Journal",
+        "externalIds": {"DOI": "10.1000/survey"},
+        "references": [{"paperId": "S-REF", "title": "A cited paper", "externalIds": {"DOI": "10.1000/cited"}}],
+        "citations": [{"paperId": "S-CITE", "title": "A citing paper", "externalIds": {"DOI": "10.1000/citing"}}],
+    }
+    monkeypatch.setattr("research.fetch_json", lambda url, user_agent, timeout: semantic)
+    backward = engine.snowball("paper.field.survey", "backward", "semantic_scholar", 1, 5, "one depth", 5.0, "")
+    assert backward["submission_required"] is False
+    assert backward["provider_contract"]["cache_hit"] is False
+    assert backward["imported_paper_ids"]
+    forward = engine.snowball("paper.field.survey", "forward", "semantic_scholar", 1, 5, "one depth", 5.0, "")
+    assert forward["submission_required"] is False
+    unsupported = engine.snowball("paper.field.survey", "forward", "pubmed", 1, 5, "one depth", 5.0, "")
+    assert unsupported["action_status"] == "failed"
+    assert unsupported["failure"]["code"] == "citation_graph_unavailable"
+    engine.commit("test.direct_snowball")

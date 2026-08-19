@@ -10,6 +10,13 @@ records:
     venue: Example Venue
     doi: 10.1234/example
     url: https://doi.org/10.1234/example
+    abstract: A concise provider abstract is metadata, not stored full paper text.
+    license: CC-BY-4.0
+    license_locator: https://example.org/license
+    identifiers:
+      doi: 10.1234/example
+      semantic_scholar: example-paper-id
     references: []
+    citations: []
     integrity_status: not_retracted
     integrity_locator: https://doi.org/10.1234/example

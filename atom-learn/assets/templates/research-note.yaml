@@ -13,11 +13,13 @@ claims:
     evidence_summary: ""
     strength: unclear
     effect: ""
+    effect_direction: unclear
     uncertainty: ""
     facets:
       population: []
       setting: []
       dataset: []
+      intervention_exposure: []
       method: []
       baseline: []
       outcome: []

@@ -27,7 +27,7 @@
 
 The YAML and NDJSON files are canonical. The four root Markdown files are generated projections. Research revision is independent from course and evolution revisions.
 
-`state.yaml` also stores a separate `protocol_revision`, the structured discovery protocol, append-only discovery/screening logs, and the latest refresh receipt. A discovery action records provider, query, filters, seed/direction/depth, stopping rule, result IDs, completion, and failure status.
+`state.yaml` also stores a separate `protocol_revision`, the structured discovery protocol, append-only discovery/screening logs, bounded provider cache receipts, typed provider failures, and the latest refresh receipt. A discovery action records provider, query, filters, seed/direction/depth, stopping rule, result IDs, completion, and failure status. A cache receipt preserves the normalized request, operation, retrieval time, contract version, records, pagination, and rate-limit policy; provider failure is never interpreted as paper absence.
 
 ## Research import plan
 
@@ -87,11 +87,13 @@ claims:
     evidence_summary: Evidence that directly bears on the claim.
     strength: moderate
     effect: The bounded observed effect.
+    effect_direction: positive # positive, negative, null, mixed, unclear, or not_applicable
     uncertainty: Confidence interval, variance, or stated uncertainty boundary.
     facets:
       population: [Target population]
       setting: [Evaluation setting]
       dataset: [Evidence source]
+      intervention_exposure: [Treatment, exposure, or independent variable]
       method: [Method family]
       baseline: [Comparator]
       outcome: [Outcome]
@@ -120,9 +122,9 @@ Claim strength is `weak`, `mixed`, `moderate`, `strong`, or `unclear`. A paper c
 
 ## Discovery and screening
 
-Set a protocol with `research set-protocol`, then use `research discover`. Harness discovery returns a typed action whose result must match `research-discovery-submission.schema.json`; Crossref/OpenAlex discovery passes through the same submission/import path. Candidates begin with screening status `candidate`. Only confirmed inclusion makes them readable. A model-only include/exclude decision becomes `needs_review`, and confirmed exclusion must cite a predeclared criterion.
+Set a protocol with `research set-protocol`, then use `research discover`. Harness discovery returns a typed action whose result must match `research-discovery-submission.schema.json`; Crossref, OpenAlex, PubMed, Semantic Scholar, and arXiv discovery passes through the same normalized submission/import path. Direct responses include provider identifiers, bibliographic metadata, abstract/license where exposed, field-completeness flags, pagination, rate-limit policy, retry semantics, and an exact bounded cache receipt. Candidates begin with screening status `candidate`. Only confirmed inclusion makes them readable. A model-only include/exclude decision becomes `needs_review`, and confirmed exclusion must cite a predeclared criterion.
 
-`research snowball` creates backward/forward actions with seed, depth, and stopping rule. `research refresh` checks saved queries and included-paper integrity metadata. The provider result set remains bounded; PRISMA-style counts do not assert exhaustive retrieval.
+`research snowball` creates backward/forward actions with seed, depth, and stopping rule. Semantic Scholar supplies direct backward and forward relations; Crossref supplies backward DOI references. A provider without the requested graph returns a typed `citation_graph_unavailable` result rather than pretending no citations exist. `research refresh` checks saved queries and included-paper integrity metadata. The provider result set remains bounded; PRISMA-style counts do not assert exhaustive retrieval.
 
 ## Relations and identifiers
 
@@ -134,7 +136,7 @@ Relations are `supports`, `extends`, `contradicts`, `replicates`, and `compares`
 
 Use `research reconcile-metadata` with `assets/templates/research-metadata.yaml` for provider snapshots returned by a connector or harness. A record matches by paper ID, DOI, or normalized title. The runtime compares title, DOI, year, and author overlap; fills only missing metadata when all checks pass; preserves conflicts for review; resolves references to internal `cites`; and retains unresolved DOI/provider identifiers under `external_citations`.
 
-For direct provider acquisition, `research fetch-metadata --provider crossref|openalex` fetches every paper that has a DOI and passes the normalized result through the same reconciliation path. Crossref DOI references and OpenAlex referenced-work IDs become citation relations or auditable external references. Per-paper provider failures are returned without hiding successful records.
+For direct provider acquisition, `research fetch-metadata --provider crossref|openalex|pubmed|semantic_scholar|arxiv` resolves each paper by DOI when present, otherwise by title, then passes normalized results through the same reconciliation path and cache contract. Provider failure is a typed incomplete result, not an absence claim. Per-paper observations retain identifiers, metadata, abstract/license metadata, and field completeness. Conflicting title, DOI, year, or venue values are stored as `provider_disagreements` with `needs_review`; canonical paper metadata is filled only when verification permits it. Citation relations retain direction, provider, provider record ID, retrieval time, and resolved internal target when available.
 
 Each paper stores:
 
@@ -153,20 +155,20 @@ metadata_verification:
 
 ## Evidence synthesis
 
-`research synthesize` groups claims only from structured facet compatibility or explicit paper relations, preserves every claim locator and conditional context, and records a bounded `latest_synthesis`. Every theme exposes merge evidence, source paper and claim IDs, evidence strengths, relation types, limitations, an `assessment`, and an evidence grade. A one-paper cluster is `single_source`; a contradiction is `contested`, never averaged away. Themes start as `proposed`; `research review-synthesis` is required to confirm, relabel, or reject them.
+`research synthesize` groups claims only from structured facet compatibility or explicit paper relations, preserves every claim locator and conditional context, and records a bounded `latest_synthesis`. Every theme exposes merge evidence, source paper and claim IDs, evidence strengths, relation types, limitations, an `assessment`, an evidence grade, and a claim-level `evidence_matrix`. Matrix rows retain population, intervention/exposure, outcome, method, effect direction, stance, and source locator. Themes explicitly list supporting claim IDs, opposing claim IDs, and conditional boundaries. A one-paper cluster is `single_source`; a contradiction is `contested`, never averaged away. Themes start as `proposed`; `research review-synthesis` is required to confirm, relabel, or reject them.
 
 ## Commands
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research set-protocol <workspace> --input <research-protocol.yaml>
-python <SKILL_DIR>/scripts/atomlearn.py research discover <workspace> --provider harness|crossref|openalex --query <query>
+python <SKILL_DIR>/scripts/atomlearn.py research discover <workspace> --provider harness|crossref|openalex|pubmed|semantic_scholar|arxiv --query <query>
 python <SKILL_DIR>/scripts/atomlearn.py research submit-discovery <workspace> --input <research-discovery-submission.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research screen <workspace> --input <research-screening.yaml>
-python <SKILL_DIR>/scripts/atomlearn.py research snowball <workspace> <paper-id> --direction backward|forward --stopping-rule <rule>
-python <SKILL_DIR>/scripts/atomlearn.py research refresh <workspace> --provider harness|crossref|openalex
+python <SKILL_DIR>/scripts/atomlearn.py research snowball <workspace> <paper-id> --direction backward|forward --provider openalex|semantic_scholar|crossref --stopping-rule <rule>
+python <SKILL_DIR>/scripts/atomlearn.py research refresh <workspace> --provider harness|crossref|openalex|pubmed|semantic_scholar|arxiv
 python <SKILL_DIR>/scripts/atomlearn.py research reconcile-metadata <workspace> --input <research-metadata.yaml>
-python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref
+python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref|openalex|pubmed|semantic_scholar|arxiv
 python <SKILL_DIR>/scripts/atomlearn.py research synthesize <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py research review-synthesis <workspace> --input <research-synthesis-review.yaml>
 ```

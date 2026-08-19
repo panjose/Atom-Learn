@@ -228,22 +228,22 @@ python atom-learn/scripts/atomlearn.py route-concept courses/calculus --input co
 
 ## 科研论文阅读
 
-AtomLearn 可以围绕带 revision 的科研 protocol 组织阅读，而不是把论文处理成彼此孤立的摘要。Crossref、OpenAlex 或 harness Web Search 发现的候选会先经过 DOI/标题去重与显式 screening；有界的前后向引文扩展和按需 integrity refresh 会保留 provider provenance。完成阅读的论文以 claim-level locator 以及 population、dataset、method、outcome、metric、assumption 等结构化 facet 进入可复核的跨论文主题。
+AtomLearn 可以围绕带 revision 的科研 protocol 组织阅读，而不是把论文处理成彼此孤立的摘要。Crossref、OpenAlex、PubMed、Semantic Scholar、arXiv 或 harness Web Search 发现的候选会先经过 DOI/标题去重与显式 screening。直接 provider 共享统一契约，包含 identifiers、书目信息、abstract/license 元数据、field completeness、分页、rate limit、可重试失败与精确有界的 cache receipt。有界的前后向引文扩展会保留 provider provenance；Semantic Scholar 支持双向关系，Crossref 支持向后 DOI references。完成阅读的论文以 claim-level locator 以及 population、intervention/exposure、dataset、method、outcome、metric、effect direction、assumption 等结构化 facet 进入可复核的跨论文 evidence matrix。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
 python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
 python atom-learn/scripts/atomlearn.py research set-protocol courses/agent-research --input research-protocol.yaml --expected-research-revision 0
-python atom-learn/scripts/atomlearn.py research discover courses/agent-research --provider harness --query "reliable autonomous research agents" --expected-research-revision 1
+python atom-learn/scripts/atomlearn.py research discover courses/agent-research --provider semantic_scholar --query "reliable autonomous research agents" --expected-research-revision 1
 python atom-learn/scripts/atomlearn.py research submit-discovery courses/agent-research --input research-discovery-submission.yaml --expected-research-revision 2
 python atom-learn/scripts/atomlearn.py research screen courses/agent-research --input research-screening.yaml --expected-research-revision 3
-python atom-learn/scripts/atomlearn.py research snowball courses/agent-research paper.field.survey --direction backward --stopping-rule "one depth or 50 candidates"
-python atom-learn/scripts/atomlearn.py research refresh courses/agent-research --provider harness
+python atom-learn/scripts/atomlearn.py research snowball courses/agent-research paper.field.survey --direction backward --provider semantic_scholar --stopping-rule "one depth or 50 candidates"
+python atom-learn/scripts/atomlearn.py research refresh courses/agent-research --provider semantic_scholar
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-研究模式最多保留一个 Active Paper，要求确认纳入，并阻止 integrity 警报或未完成论文先修的激活；它会生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。已建立索引的论文可以关联到共享 Document IR 而不复制全文，claim block locator 会对 source revision 验证。模型 screening 和 synthesis 输出在复核前都只是 proposal。PRISMA 风格计数只描述有界结果，open question 也不会在缺少当前文献验证时变成创新性声明。详见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)和[Phase 6 实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)。
+研究模式最多保留一个 Active Paper，要求确认纳入，并阻止 integrity 警报或未完成论文先修的激活；它会生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。已建立索引的论文可以关联到共享 Document IR 而不复制全文，claim block locator 会对 source revision 验证。provider disagreement 会保留并可见，provider failure 绝不会被视为论文不存在。synthesis 会产生带 support/opposition stance、effect direction、conditional boundary 和 source locator 的 claim-level matrix；模型 screening 和 synthesis 输出在复核前都只是 proposal。PRISMA 风格计数只描述有界结果，open question 也不会在缺少当前文献验证时变成创新性声明。详见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)、[Phase 8 实施记录](docs/V0_15_PHASE8_IMPLEMENTATION.md)和[Phase 6 实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)。
 
 ## 试题分析与针对性备考
 
@@ -350,6 +350,7 @@ bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root�
 - [v0.15 Phase 5 Topic 诊断与 RAG 评测实施记录](docs/V0_15_PHASE5_IMPLEMENTATION.md)
 - [v0.15 Phase 6 Episode 与 Harness 行为实施记录](docs/V0_15_PHASE6_IMPLEMENTATION.md)
 - [v0.15 Phase 7 考试闭环实施记录](docs/V0_15_PHASE7_IMPLEMENTATION.md)
+- [v0.15 Phase 8 科研 Provider 契约实施记录](docs/V0_15_PHASE8_IMPLEMENTATION.md)
 - [详细实施方案](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 考试与科研实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 自适应复习实施记录](docs/V0_14_PHASE7_IMPLEMENTATION.md)

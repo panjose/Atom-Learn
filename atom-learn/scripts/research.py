@@ -6,14 +6,18 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import html
 import json
 import os
 import re
 import sys
+import time
+import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import date
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
@@ -59,13 +63,21 @@ RELATION_TYPES = {"supports", "extends", "contradicts", "replicates", "compares"
 CLAIM_STRENGTHS = {"weak", "mixed", "moderate", "strong", "unclear"}
 METADATA_STATUSES = {"unverified", "verified", "conflict"}
 SCREENING_STATUSES = {"candidate", "screening", "included", "excluded", "needs_review"}
-DISCOVERY_PROVIDERS = {"harness", "crossref", "openalex"}
+DISCOVERY_PROVIDERS = {"harness", "crossref", "openalex", "pubmed", "semantic_scholar", "arxiv"}
 DISCOVERY_KINDS = {"query", "backward", "forward", "refresh"}
 DISCOVERY_STATUSES = {"awaiting_submission", "completed", "partial", "failed"}
 EVIDENCE_KINDS = {"sentence", "table", "figure", "equation", "block", "other"}
 EXTRACTION_METHODS = {"human", "harness", "document_ir", "vision", "provider"}
-FACET_FIELDS = ["population", "setting", "dataset", "method", "baseline", "outcome", "metric", "assumption"]
+FACET_FIELDS = [
+    "population", "setting", "dataset", "intervention_exposure", "method", "baseline",
+    "outcome", "metric", "assumption",
+]
+CLAIM_EFFECT_DIRECTIONS = {"positive", "negative", "null", "mixed", "unclear", "not_applicable"}
+CLAIM_STANCES = {"supports", "opposes", "neutral"}
 RESEARCH_STATUSES = {"scoping", "mapping", "reading", "synthesizing", "maintaining", "complete"}
+PROVIDER_CACHE_LIMIT = 100
+PROVIDER_CACHE_VERSION = 1
+PROVIDER_FIELDS = ["identifiers", "title", "authors", "year", "venue", "abstract", "license", "references", "citations", "integrity"]
 ROLE_ORDER = {
     "survey": 0,
     "seminal": 1,
@@ -87,6 +99,15 @@ RESEARCH_VIEW_FILES = [
 
 class ResearchError(RuntimeError):
     """A user-correctable research workflow error."""
+
+
+class ProviderError(ResearchError):
+    """A typed provider failure that preserves retry and coverage boundaries."""
+
+    def __init__(self, code: str, message: str, *, retryable: bool) -> None:
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
 
 
 def template_dir() -> Path:
@@ -147,13 +168,52 @@ def synthesis_tokens(value: Any) -> set[str]:
     return {item for item in words if item not in stop}
 
 
+def _provider_request(url: str, user_agent: str, timeout: float, accept: str) -> bytes:
+    request = Request(url, headers={"User-Agent": user_agent, "Accept": accept})
+    attempts = 3
+    for attempt in range(attempts):
+        try:
+            with urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed provider HTTPS endpoints
+                return response.read()
+        except HTTPError as exc:
+            retryable = exc.code in {408, 425, 429, 500, 502, 503, 504}
+            if retryable and attempt + 1 < attempts:
+                time.sleep(min(1.0, 0.25 * (2 ** attempt)))
+                continue
+            raise ProviderError(f"http_{exc.code}", f"provider HTTP {exc.code}: {exc.reason}", retryable=retryable) from exc
+        except URLError as exc:
+            if attempt + 1 < attempts:
+                time.sleep(min(1.0, 0.25 * (2 ** attempt)))
+                continue
+            raise ProviderError("network_error", f"provider network error: {exc.reason}", retryable=True) from exc
+        except TimeoutError as exc:
+            if attempt + 1 < attempts:
+                time.sleep(min(1.0, 0.25 * (2 ** attempt)))
+                continue
+            raise ProviderError("timeout", "provider request timed out", retryable=True) from exc
+    raise ProviderError("retry_exhausted", "provider retry budget was exhausted", retryable=True)  # pragma: no cover
+
+
 def fetch_json(url: str, user_agent: str, timeout: float) -> dict[str, Any]:
-    request = Request(url, headers={"User-Agent": user_agent, "Accept": "application/json"})
-    with urlopen(request, timeout=timeout) as response:  # noqa: S310 - fixed HTTPS provider URLs
-        data = json.load(response)
+    try:
+        data = json.loads(_provider_request(url, user_agent, timeout, "application/json").decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ProviderError("invalid_json", "metadata provider returned invalid JSON", retryable=False) from exc
     if not isinstance(data, dict):
-        raise ResearchError("metadata provider returned a non-object response")
+        raise ProviderError("invalid_response", "metadata provider returned a non-object response", retryable=False)
     return data
+
+
+def fetch_text(url: str, user_agent: str, timeout: float, *, accept: str = "application/xml,text/xml,text/plain") -> str:
+    try:
+        return _provider_request(url, user_agent, timeout, accept).decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise ProviderError("invalid_encoding", "provider response is not UTF-8", retryable=False) from exc
+
+
+def _clean_provider_text(value: Any) -> str:
+    text = html.unescape(re.sub(r"<[^>]+>", " ", str(value or "")))
+    return " ".join(text.split())
 
 
 class ResearchEngine:
@@ -239,6 +299,9 @@ class ResearchEngine:
                 },
             )
             paper.setdefault("integrity", {"status": "unknown", "provider": None, "checked_at": None, "source_locator": None})
+            paper.setdefault("provider_observations", [])
+            paper.setdefault("provider_disagreements", [])
+            paper.setdefault("citation_provenance", [])
             papers[paper_id] = paper
         state = read_data(state_path)
         state.setdefault("paper_aliases", {})
@@ -251,6 +314,8 @@ class ResearchEngine:
         state.setdefault("discovery_log", [])
         state.setdefault("screening_log", [])
         state.setdefault("latest_refresh", None)
+        state.setdefault("provider_cache", [])
+        state.setdefault("provider_failures", [])
         engine = cls(workspace, state, papers)
         for paper_id, paper in papers.items():
             paper["analysis"] = engine._normalize_analysis(paper_id, paper.get("analysis", {}))
@@ -316,6 +381,44 @@ class ResearchEngine:
                     errors.append(f"{action_id}: invalid discovery kind or provider")
                 if action.get("status") not in DISCOVERY_STATUSES:
                     errors.append(f"{action_id}: invalid discovery status")
+        provider_cache = self.state.get("provider_cache", [])
+        if not isinstance(provider_cache, list) or len(provider_cache) > PROVIDER_CACHE_LIMIT:
+            errors.append("research provider_cache is invalid")
+        else:
+            cache_keys: set[str] = set()
+            for index, entry in enumerate(provider_cache):
+                required = {"cache_key", "provider", "operation", "request", "retrieved_at", "contract_version", "response"}
+                if not isinstance(entry, dict) or set(entry) != required:
+                    errors.append(f"provider_cache[{index}] has invalid fields")
+                    continue
+                if entry.get("cache_key") in cache_keys:
+                    errors.append(f"provider_cache[{index}] repeats a cache key")
+                cache_keys.add(entry.get("cache_key"))
+                if entry.get("provider") not in DISCOVERY_PROVIDERS - {"harness"}:
+                    errors.append(f"provider_cache[{index}] has an unsupported provider")
+                if entry.get("operation") not in {"discovery", "metadata", "backward", "forward", "refresh"}:
+                    errors.append(f"provider_cache[{index}] has an unsupported operation")
+                if entry.get("contract_version") != PROVIDER_CACHE_VERSION:
+                    errors.append(f"provider_cache[{index}] has an unsupported contract version")
+                request = entry.get("request")
+                if not isinstance(request, dict):
+                    errors.append(f"provider_cache[{index}] has an invalid request")
+                response = entry.get("response")
+                if not isinstance(response, dict) or set(response) != {"records", "pagination", "rate_limit"}:
+                    errors.append(f"provider_cache[{index}] has an invalid response contract")
+                else:
+                    if not isinstance(response.get("records"), list):
+                        errors.append(f"provider_cache[{index}] records must be a list")
+                    if not isinstance(response.get("pagination"), dict) or not isinstance(response.get("rate_limit"), dict):
+                        errors.append(f"provider_cache[{index}] pagination or rate_limit is invalid")
+        provider_failures = self.state.get("provider_failures", [])
+        if not isinstance(provider_failures, list) or len(provider_failures) > PROVIDER_CACHE_LIMIT:
+            errors.append("research provider_failures is invalid")
+        else:
+            for index, failure in enumerate(provider_failures):
+                required = {"provider", "operation", "request", "at", "code", "message", "retryable"}
+                if not isinstance(failure, dict) or set(failure) != required or not isinstance(failure.get("retryable"), bool):
+                    errors.append(f"provider_failures[{index}] has invalid fields")
         active_ids: list[str] = []
         doi_owners: dict[str, str] = {}
         title_owners: dict[str, str] = {}
@@ -351,6 +454,37 @@ class ResearchEngine:
             verification = paper.get("metadata_verification")
             if not isinstance(verification, dict) or verification.get("status") not in METADATA_STATUSES:
                 errors.append(f"{paper_id}: invalid metadata_verification")
+            for field in ["provider_observations", "provider_disagreements", "citation_provenance"]:
+                if not isinstance(paper.get(field), list):
+                    errors.append(f"{paper_id}: {field} must be a list")
+            for index, observation in enumerate(paper.get("provider_observations", [])):
+                required = {
+                    "provider", "provider_id", "retrieved_at", "identifiers", "title", "authors", "year", "venue",
+                    "abstract", "license", "license_locator", "field_completeness",
+                }
+                if not isinstance(observation, dict) or set(observation) != required:
+                    errors.append(f"{paper_id}: provider_observations[{index}] has invalid fields")
+            for index, disagreement in enumerate(paper.get("provider_disagreements", [])):
+                if (
+                    not isinstance(disagreement, dict)
+                    or set(disagreement) != {"field", "values", "status"}
+                    or disagreement.get("field") not in {"title", "doi", "year", "venue"}
+                    or disagreement.get("status") != "needs_review"
+                    or not isinstance(disagreement.get("values"), list)
+                ):
+                    errors.append(f"{paper_id}: provider_disagreements[{index}] has invalid fields")
+            for index, citation in enumerate(paper.get("citation_provenance", [])):
+                required = {
+                    "direction", "target_paper_id", "reference_identifier", "provider", "provider_id", "retrieved_at",
+                }
+                target_paper_id = citation.get("target_paper_id") if isinstance(citation, dict) else None
+                if (
+                    not isinstance(citation, dict)
+                    or set(citation) != required
+                    or citation.get("direction") not in {"backward", "forward"}
+                    or (target_paper_id is not None and target_paper_id not in self.papers)
+                ):
+                    errors.append(f"{paper_id}: citation_provenance[{index}] has invalid fields")
             if paper.get("status") not in PAPER_STATUSES:
                 errors.append(f"{paper_id}: invalid status {paper.get('status')!r}")
             screening = paper.get("screening")
@@ -491,6 +625,8 @@ class ResearchEngine:
                 errors.append(f"{claim_id}: invalid evidence strength")
             try:
                 require_text(claim.get("effect", ""), f"{claim_id}.effect", allow_empty=True, limit=1000)
+                if claim.get("effect_direction", "unclear") not in CLAIM_EFFECT_DIRECTIONS:
+                    errors.append(f"{claim_id}: invalid effect direction")
                 require_text(claim.get("uncertainty", ""), f"{claim_id}.uncertainty", allow_empty=True, limit=1000)
                 facets = claim.get("facets", {})
                 if not isinstance(facets, dict) or set(facets) != set(FACET_FIELDS):
@@ -777,6 +913,9 @@ class ResearchEngine:
             "integrity",
             {"status": "unknown", "provider": None, "checked_at": None, "source_locator": None},
         )
+        paper.setdefault("provider_observations", [])
+        paper.setdefault("provider_disagreements", [])
+        paper.setdefault("citation_provenance", [])
         if paper.get("status") == "excluded":
             paper["exclusion_reason"] = require_text(
                 raw.get("exclusion_reason", paper.get("exclusion_reason")),
@@ -836,6 +975,7 @@ class ResearchEngine:
                     ),
                     "strength": item.get("strength", "unclear"),
                     "effect": require_text(item.get("effect", ""), f"{claim_id}.effect", allow_empty=True, limit=1000),
+                    "effect_direction": item.get("effect_direction", "unclear"),
                     "uncertainty": require_text(
                         item.get("uncertainty", ""), f"{claim_id}.uncertainty", allow_empty=True, limit=1000
                     ),
@@ -908,6 +1048,90 @@ class ResearchEngine:
         title_index = {title_fingerprint(paper.get("title")): paper_id for paper_id, paper in self.papers.items()}
         return doi_index, title_index
 
+    def _record_provider_observation(
+        self,
+        paper: dict[str, Any],
+        record: dict[str, Any],
+        provider: str,
+        retrieved_at: str,
+    ) -> None:
+        """Retain per-provider fields without silently replacing canonical metadata."""
+        identifiers = self._provider_identifiers(record)
+        observation = {
+            "provider": provider,
+            "provider_id": str(record.get("provider_id") or ""),
+            "retrieved_at": retrieved_at,
+            "identifiers": identifiers,
+            "title": _clean_provider_text(record.get("title")),
+            "authors": string_list(record.get("authors", []), "provider observation authors", limit=500),
+            "year": record.get("year"),
+            "venue": _clean_provider_text(record.get("venue")),
+            "abstract": _clean_provider_text(record.get("abstract"))[:8000],
+            "license": _clean_provider_text(record.get("license"))[:1000],
+            "license_locator": str(record.get("license_locator") or record.get("url") or ""),
+            "field_completeness": copy.deepcopy(record.get("field_completeness") or self._field_completeness(record)),
+        }
+        observations = paper.setdefault("provider_observations", [])
+        key = (observation["provider"], observation["provider_id"], observation["retrieved_at"])
+        if not any((item.get("provider"), item.get("provider_id"), item.get("retrieved_at")) == key for item in observations):
+            observations.append(observation)
+        if len(observations) > 50:
+            del observations[: len(observations) - 50]
+        disagreement_fields = {
+            "title": lambda item: title_fingerprint(item.get("title")),
+            "doi": lambda item: normalize_doi((item.get("identifiers") or {}).get("doi", "")),
+            "year": lambda item: item.get("year"),
+            "venue": lambda item: str(item.get("venue") or "").casefold(),
+        }
+        disagreements = []
+        for field, value_of in disagreement_fields.items():
+            values: dict[str, list[str]] = {}
+            for item in observations:
+                value = value_of(item)
+                if value in {None, ""}:
+                    continue
+                values.setdefault(str(value), []).append(str(item.get("provider") or ""))
+            if len(values) > 1:
+                disagreements.append(
+                    {
+                        "field": field,
+                        "values": [
+                            {"value": value, "providers": sorted(unique(providers))}
+                            for value, providers in sorted(values.items())
+                        ],
+                        "status": "needs_review",
+                    }
+                )
+        paper["provider_disagreements"] = disagreements
+
+    def _record_citation_provenance(
+        self,
+        paper: dict[str, Any],
+        *,
+        direction: str,
+        target: str | None,
+        reference: dict[str, Any],
+        provider: str,
+        provider_id: str,
+        retrieved_at: str,
+    ) -> None:
+        reference_id = normalize_doi(reference.get("doi", "")) or str(reference.get("provider_id") or reference.get("title") or "")
+        if not reference_id:
+            return
+        entry = {
+            "direction": direction,
+            "target_paper_id": target,
+            "reference_identifier": reference_id,
+            "provider": provider,
+            "provider_id": provider_id,
+            "retrieved_at": retrieved_at,
+        }
+        entries = paper.setdefault("citation_provenance", [])
+        if entry not in entries:
+            entries.append(entry)
+        if len(entries) > 200:
+            del entries[: len(entries) - 200]
+
     def reconcile_metadata(self, payload: Any) -> dict[str, Any]:
         if not isinstance(payload, dict) or not isinstance(payload.get("records"), list) or not payload["records"]:
             raise ResearchError("metadata payload must contain a non-empty records list")
@@ -963,6 +1187,9 @@ class ResearchEngine:
                     "checked_at": str(record.get("retrieved_at") or iso()),
                     "source_locator": str(record.get("integrity_locator") or record.get("provider_id") or ""),
                 }
+            self._record_provider_observation(
+                paper, record, provider, str(record.get("retrieved_at") or iso())
+            )
             if status == "verified":
                 verified.append(paper_id)
                 if record_doi and not paper.get("doi"):
@@ -991,11 +1218,29 @@ class ResearchEngine:
                     if target not in paper["cites"]:
                         paper["cites"].append(target)
                         citation_edges.append({"from": paper_id, "to": target})
+                    self._record_citation_provenance(
+                        paper,
+                        direction="backward",
+                        target=target,
+                        reference=reference,
+                        provider=str(record.get("provider") or "harness"),
+                        provider_id=str(record.get("provider_id") or ""),
+                        retrieved_at=str(record.get("retrieved_at") or iso()),
+                    )
                 elif not target:
                     external = reference_doi or str(reference.get("provider_id") or reference.get("title") or "").strip()
                     if external:
                         paper["external_citations"] = unique([*paper.get("external_citations", []), external])
                         unresolved.append({"paper_id": paper_id, "reference": external})
+                        self._record_citation_provenance(
+                            paper,
+                            direction="backward",
+                            target=None,
+                            reference=reference,
+                            provider=str(record.get("provider") or "harness"),
+                            provider_id=str(record.get("provider_id") or ""),
+                            retrieved_at=str(record.get("retrieved_at") or iso()),
+                        )
         return {
             "verified_paper_ids": unique(verified),
             "conflicts": conflicts,
@@ -1004,87 +1249,221 @@ class ResearchEngine:
         }
 
     def fetch_metadata(self, provider: str, timeout: float, mailto: str) -> dict[str, Any]:
-        if provider not in {"crossref", "openalex"}:
-            raise ResearchError("metadata provider must be crossref or openalex")
+        if provider not in DISCOVERY_PROVIDERS - {"harness"}:
+            raise ResearchError("metadata provider must be a direct configured research provider")
         if not 1 <= timeout <= 60:
             raise ResearchError("metadata timeout must be between 1 and 60 seconds")
-        user_agent = "AtomLearn/0.11 (+https://github.com/panjose/Atom-Learn)"
-        if mailto:
-            user_agent += f" mailto:{mailto}"
         records: list[dict[str, Any]] = []
-        failures: list[dict[str, str]] = []
+        failures: list[dict[str, Any]] = []
+        cache_hits = 0
         for paper_id, paper in self.papers.items():
-            doi = normalize_doi(paper.get("doi", ""))
-            if not doi:
-                failures.append({"paper_id": paper_id, "error": "missing DOI"})
+            identifier = normalize_doi(paper.get("doi", "")) or str(paper.get("title") or "").strip()
+            if not identifier:
+                failures.append({
+                    "paper_id": paper_id,
+                    "code": "missing_identifier",
+                    "error": "missing DOI and title",
+                    "retryable": False,
+                })
                 continue
             try:
-                if provider == "crossref":
-                    data = fetch_json(f"https://api.crossref.org/works/{quote(doi, safe='')}", user_agent, timeout)
-                    message = data.get("message", {})
-                    authors = [
-                        " ".join(part for part in [item.get("given", ""), item.get("family", "")] if part).strip()
-                        for item in message.get("author", [])
-                    ]
-                    date_parts = (message.get("published-print") or message.get("published-online") or {}).get("date-parts", [[]])
-                    references = [
-                        {key: value for key, value in {"doi": item.get("DOI"), "title": item.get("article-title")}.items() if value}
-                        for item in message.get("reference", [])
-                    ]
-                    records.append(
-                        {
-                            "paper_id": paper_id,
-                            "provider": provider,
-                            "provider_id": message.get("DOI", doi),
-                            "retrieved_at": iso(),
-                            "title": (message.get("title") or [paper["title"]])[0],
-                            "authors": authors,
-                            "year": date_parts[0][0] if date_parts and date_parts[0] else None,
-                            "venue": (message.get("container-title") or [""])[0],
-                            "doi": message.get("DOI", doi),
-                            "url": message.get("URL", ""),
-                            "references": [item for item in references if item],
-                            "integrity_status": "retracted" if any(
-                                str(item.get("type", "")).casefold() == "retraction"
-                                for item in message.get("update-to", [])
-                            ) else "not_retracted",
-                            "integrity_locator": message.get("URL", doi),
-                        }
-                    )
+                response, cached = self._provider_discovery(
+                    provider,
+                    identifier,
+                    5,
+                    None,
+                    None,
+                    timeout,
+                    mailto,
+                    refresh_cache=False,
+                    operation="metadata",
+                )
+                cache_hits += int(cached)
+                matched = next(
+                    (
+                        record for record in response["records"]
+                        if (
+                            paper.get("doi")
+                            and normalize_doi(record.get("doi", "")) == normalize_doi(paper["doi"])
+                        )
+                        or title_fingerprint(record.get("title")) == title_fingerprint(paper.get("title"))
+                    ),
+                    None,
+                )
+                if matched is None:
+                    failures.append({
+                        "paper_id": paper_id,
+                        "code": "not_returned",
+                        "error": "provider returned no matching record",
+                        "retryable": False,
+                    })
                 else:
-                    identifier = quote(doi, safe="")
-                    data = fetch_json(f"https://api.openalex.org/works/https://doi.org/{identifier}", user_agent, timeout)
-                    records.append(
-                        {
-                            "paper_id": paper_id,
-                            "provider": provider,
-                            "provider_id": data.get("id", ""),
-                            "retrieved_at": iso(),
-                            "title": data.get("display_name") or paper["title"],
-                            "authors": [
-                                item.get("author", {}).get("display_name", "") for item in data.get("authorships", [])
-                            ],
-                            "year": data.get("publication_year"),
-                            "venue": ((data.get("primary_location") or {}).get("source") or {}).get("display_name", ""),
-                            "doi": str(data.get("doi") or doi),
-                            "url": (data.get("primary_location") or {}).get("landing_page_url", ""),
-                            "references": [{"provider_id": item} for item in data.get("referenced_works", [])],
-                            "integrity_status": "retracted" if data.get("is_retracted") is True else "not_retracted",
-                            "integrity_locator": data.get("id", ""),
-                        }
-                    )
-            except Exception as exc:  # provider/network failures are reported per paper
-                failures.append({"paper_id": paper_id, "error": str(exc)})
-        if not records:
-            raise ResearchError("metadata acquisition produced no records: " + "; ".join(item["error"] for item in failures))
-        result = self.reconcile_metadata({"records": records})
-        result["provider"] = provider
-        result["acquired_records"] = len(records)
-        result["failures"] = failures
+                    records.append({"paper_id": paper_id, **matched, "retrieved_at": iso()})
+            except ProviderError as exc:
+                failure = self._record_provider_failure(
+                    provider, "metadata", {"paper_id": paper_id, "identifier": identifier}, exc
+                )
+                failures.append({
+                    "paper_id": paper_id,
+                    "code": failure["code"],
+                    "error": failure["message"],
+                    "retryable": failure["retryable"],
+                })
+        result = self.reconcile_metadata({"records": records}) if records else {
+            "verified_paper_ids": [], "conflicts": [], "citation_edges_added": [], "unresolved_references": [],
+        }
+        result.update({
+            "provider": provider,
+            "acquired_records": len(records),
+            "failures": failures,
+            "cache_hits": cache_hits,
+            "coverage_claim": "metadata acquisition is bounded and provider failures are not absence claims",
+        })
         return result
 
     def _next_discovery_action_id(self) -> str:
         return f"research-action-{len(self.state.get('discovery_log', [])) + 1:06d}"
+
+    @staticmethod
+    def _provider_user_agent(mailto: str = "") -> str:
+        agent = "AtomLearn/0.15 (+https://github.com/panjose/Atom-Learn)"
+        return f"{agent} mailto:{mailto}" if mailto else agent
+
+    @staticmethod
+    def _provider_cache_key(provider: str, operation: str, request: dict[str, Any]) -> str:
+        encoded = json.dumps(
+            {"provider": provider, "operation": operation, "request": request},
+            ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+        return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+    def _provider_cache_response(
+        self,
+        provider: str,
+        operation: str,
+        request: dict[str, Any],
+        *,
+        refresh_cache: bool,
+        fetcher: Any,
+    ) -> tuple[dict[str, Any], bool]:
+        """Reuse an exact normalized provider response or append a bounded receipt."""
+        cache_key = self._provider_cache_key(provider, operation, request)
+        if not refresh_cache:
+            for entry in reversed(self.state.get("provider_cache", [])):
+                if entry.get("cache_key") == cache_key:
+                    return copy.deepcopy(entry["response"]), True
+        response = fetcher()
+        if not isinstance(response, dict) or not isinstance(response.get("records"), list):
+            raise ProviderError("invalid_contract", f"{provider} adapter did not return normalized records", retryable=False)
+        receipt = {
+            "cache_key": cache_key,
+            "provider": provider,
+            "operation": operation,
+            "request": copy.deepcopy(request),
+            "retrieved_at": iso(),
+            "contract_version": PROVIDER_CACHE_VERSION,
+            "response": copy.deepcopy(response),
+        }
+        cache = self.state.setdefault("provider_cache", [])
+        cache[:] = [entry for entry in cache if entry.get("cache_key") != cache_key]
+        cache.append(receipt)
+        if len(cache) > PROVIDER_CACHE_LIMIT:
+            del cache[: len(cache) - PROVIDER_CACHE_LIMIT]
+        return response, False
+
+    def _record_provider_failure(
+        self,
+        provider: str,
+        operation: str,
+        request: dict[str, Any],
+        error: ProviderError,
+    ) -> dict[str, Any]:
+        failure = {
+            "provider": provider,
+            "operation": operation,
+            "request": copy.deepcopy(request),
+            "at": iso(),
+            "code": error.code,
+            "message": str(error),
+            "retryable": error.retryable,
+        }
+        failures = self.state.setdefault("provider_failures", [])
+        failures.append(failure)
+        if len(failures) > PROVIDER_CACHE_LIMIT:
+            del failures[: len(failures) - PROVIDER_CACHE_LIMIT]
+        return failure
+
+    @staticmethod
+    def _provider_identifiers(record: dict[str, Any]) -> dict[str, str]:
+        raw = record.get("identifiers", {})
+        if not isinstance(raw, dict):
+            raw = {}
+        result = {
+            str(key): str(value).strip()
+            for key, value in raw.items()
+            if isinstance(key, str) and value is not None and str(value).strip()
+        }
+        try:
+            doi = normalize_doi(record.get("doi", ""))
+        except ResearchError as exc:
+            raise ProviderError("invalid_record", f"provider returned an invalid DOI: {exc}", retryable=False) from exc
+        if doi:
+            result["doi"] = doi
+        return result
+
+    @staticmethod
+    def _field_completeness(record: dict[str, Any]) -> dict[str, bool]:
+        identifiers = ResearchEngine._provider_identifiers(record)
+        return {
+            "identifiers": bool(identifiers),
+            "title": bool(str(record.get("title") or "").strip()),
+            "authors": bool(record.get("authors")),
+            "year": record.get("year") is not None,
+            "venue": bool(str(record.get("venue") or "").strip()),
+            "abstract": bool(str(record.get("abstract") or "").strip()),
+            "license": bool(str(record.get("license") or "").strip()),
+            "references": isinstance(record.get("references"), list),
+            "citations": isinstance(record.get("citations"), list),
+            "integrity": record.get("integrity_status") in {"unknown", "not_retracted", "retracted", "concern"},
+        }
+
+    @classmethod
+    def _normalized_provider_record(cls, provider: str, raw: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(raw, dict):
+            raise ProviderError("invalid_record", f"{provider} returned a non-object record", retryable=False)
+        title = _clean_provider_text(raw.get("title"))
+        if not title:
+            raise ProviderError("invalid_record", f"{provider} returned a record without a title", retryable=False)
+        authors = [item for item in (_clean_provider_text(value) for value in raw.get("authors", [])) if item]
+        year = raw.get("year")
+        if year is not None and (not isinstance(year, int) or isinstance(year, bool) or not 1000 <= year <= 3000):
+            year = None
+        try:
+            doi = normalize_doi(raw.get("doi", ""))
+        except ResearchError as exc:
+            raise ProviderError("invalid_record", f"{provider} returned an invalid DOI", retryable=False) from exc
+        record = {
+            "provider_id": require_text(raw.get("provider_id"), f"{provider}.provider_id", limit=500),
+            "title": title,
+            "authors": unique(authors),
+            "year": year,
+            "venue": _clean_provider_text(raw.get("venue")),
+            "doi": doi,
+            "url": str(raw.get("url") or "").strip(),
+            "abstract": _clean_provider_text(raw.get("abstract"))[:8000],
+            "license": _clean_provider_text(raw.get("license"))[:1000],
+            "identifiers": cls._provider_identifiers({**raw, "doi": doi}),
+            "references": raw.get("references", []) if isinstance(raw.get("references", []), list) else [],
+            "citations": raw.get("citations", []) if isinstance(raw.get("citations", []), list) else [],
+            "integrity_status": raw.get("integrity_status", "unknown"),
+            "integrity_locator": str(raw.get("integrity_locator") or raw.get("url") or raw.get("provider_id") or ""),
+            "provider": provider,
+            "license_locator": str(raw.get("license_locator") or raw.get("url") or ""),
+        }
+        if record["integrity_status"] not in {"unknown", "not_retracted", "retracted", "concern"}:
+            raise ProviderError("invalid_record", f"{provider} returned an invalid integrity status", retryable=False)
+        record["field_completeness"] = cls._field_completeness(record)
+        return record
 
     def _create_discovery_action(
         self,
@@ -1166,6 +1545,9 @@ class ResearchEngine:
             "venue": (item.get("container-title") or [""])[0],
             "doi": item.get("DOI", ""),
             "url": item.get("URL", ""),
+            "abstract": item.get("abstract", ""),
+            "license": ((item.get("license") or [{}])[0].get("URL") or "") if isinstance(item.get("license"), list) else "",
+            "identifiers": {"crossref": str(item.get("DOI") or "")},
             "references": [
                 {key: value for key, value in {"doi": ref.get("DOI"), "title": ref.get("article-title")}.items() if value}
                 for ref in item.get("reference", [])
@@ -1176,6 +1558,17 @@ class ResearchEngine:
 
     @staticmethod
     def _openalex_candidate(item: dict[str, Any]) -> dict[str, Any]:
+        inverted = item.get("abstract_inverted_index")
+        abstract = ""
+        if isinstance(inverted, dict):
+            positioned = [
+                (position, word)
+                for word, positions in inverted.items()
+                if isinstance(positions, list)
+                for position in positions
+                if isinstance(position, int)
+            ]
+            abstract = " ".join(word for _, word in sorted(positioned))
         return {
             "provider_id": str(item.get("id") or ""),
             "title": item.get("display_name") or item.get("title") or "",
@@ -1184,44 +1577,151 @@ class ResearchEngine:
             "venue": ((item.get("primary_location") or {}).get("source") or {}).get("display_name", ""),
             "doi": str(item.get("doi") or ""),
             "url": (item.get("primary_location") or {}).get("landing_page_url", ""),
+            "abstract": abstract,
+            "license": ((item.get("open_access") or {}).get("license") or ""),
+            "identifiers": {"openalex": str(item.get("id") or "")},
             "references": [{"provider_id": reference} for reference in item.get("referenced_works", [])],
             "integrity_status": "retracted" if item.get("is_retracted") is True else "not_retracted",
             "integrity_locator": str(item.get("id") or ""),
         }
 
-    def discover(
+    @staticmethod
+    def _pubmed_candidate(uid: str, item: dict[str, Any]) -> dict[str, Any]:
+        article_ids = item.get("articleids", []) if isinstance(item.get("articleids"), list) else []
+        identifiers = {"pmid": str(uid)}
+        doi = ""
+        for identifier in article_ids:
+            if not isinstance(identifier, dict):
+                continue
+            id_type = str(identifier.get("idtype") or "").casefold()
+            value = str(identifier.get("value") or "")
+            if id_type == "doi":
+                doi = value
+            elif value:
+                identifiers[id_type] = value
+        authors = [str(item.get("name") or "") for item in item.get("authors", []) if isinstance(item, dict)]
+        year_match = re.search(r"(?:19|20)\d{2}", str(item.get("pubdate") or item.get("epubdate") or ""))
+        return {
+            "provider_id": str(uid),
+            "title": item.get("title") or "",
+            "authors": authors,
+            "year": int(year_match.group(0)) if year_match else None,
+            "venue": item.get("fulljournalname") or item.get("source") or "",
+            "doi": doi,
+            "url": f"https://pubmed.ncbi.nlm.nih.gov/{uid}/",
+            "identifiers": identifiers,
+            "references": [],
+            "citations": [],
+            "integrity_status": "unknown",
+            "integrity_locator": f"https://pubmed.ncbi.nlm.nih.gov/{uid}/",
+            "license": "PubMed metadata",
+            "license_locator": "https://pubmed.ncbi.nlm.nih.gov/about/",
+        }
+
+    @staticmethod
+    def _semantic_scholar_candidate(item: dict[str, Any]) -> dict[str, Any]:
+        external = item.get("externalIds") if isinstance(item.get("externalIds"), dict) else {}
+        doi = str(external.get("DOI") or "")
+        identifiers = {
+            key.casefold().replace(" ", "_"): str(value)
+            for key, value in external.items()
+            if value is not None and str(value).strip()
+        }
+        if item.get("paperId"):
+            identifiers["semantic_scholar"] = str(item["paperId"])
+        return {
+            "provider_id": str(item.get("paperId") or ""),
+            "title": item.get("title") or "",
+            "authors": [str(author.get("name") or "") for author in item.get("authors", []) if isinstance(author, dict)],
+            "year": item.get("year"),
+            "venue": item.get("venue") or "",
+            "doi": doi,
+            "url": str(item.get("url") or f"https://www.semanticscholar.org/paper/{item.get('paperId') or ''}"),
+            "abstract": item.get("abstract") or "",
+            "identifiers": identifiers,
+            "references": [
+                {
+                    "provider_id": str(reference.get("paperId") or ""),
+                    "doi": str((reference.get("externalIds") or {}).get("DOI") or ""),
+                    "title": str(reference.get("title") or ""),
+                }
+                for reference in item.get("references", []) if isinstance(reference, dict)
+            ],
+            "citations": [
+                {
+                    "provider_id": str(citation.get("paperId") or ""),
+                    "doi": str((citation.get("externalIds") or {}).get("DOI") or ""),
+                    "title": str(citation.get("title") or ""),
+                }
+                for citation in item.get("citations", []) if isinstance(citation, dict)
+            ],
+            "integrity_status": "unknown",
+            "integrity_locator": str(item.get("url") or item.get("paperId") or ""),
+        }
+
+    @staticmethod
+    def _arxiv_candidate(entry: ET.Element) -> dict[str, Any]:
+        atom = "{http://www.w3.org/2005/Atom}"
+        arxiv = "{http://arxiv.org/schemas/atom}"
+        identifier = (entry.findtext(atom + "id") or "").rstrip("/").rsplit("/", 1)[-1]
+        published = entry.findtext(atom + "published") or ""
+        year_match = re.match(r"(\d{4})", published)
+        categories = [node.attrib.get("term", "") for node in entry.findall(atom + "category")]
+        doi = entry.findtext(arxiv + "doi") or ""
+        license_value = entry.findtext(arxiv + "license") or ""
+        return {
+            "provider_id": identifier,
+            "title": entry.findtext(atom + "title") or "",
+            "authors": [node.findtext(atom + "name") or "" for node in entry.findall(atom + "author")],
+            "year": int(year_match.group(1)) if year_match else None,
+            "venue": "arXiv",
+            "doi": doi,
+            "url": entry.findtext(atom + "id") or f"https://arxiv.org/abs/{identifier}",
+            "abstract": entry.findtext(atom + "summary") or "",
+            "license": license_value,
+            "license_locator": license_value,
+            "identifiers": {"arxiv": identifier},
+            "references": [],
+            "citations": [],
+            "integrity_status": "unknown",
+            "integrity_locator": entry.findtext(atom + "id") or "",
+            "categories": categories,
+        }
+
+    def _provider_discovery(
         self,
-        query: str,
         provider: str,
+        query: str,
         limit: int,
         from_year: int | None,
         to_year: int | None,
         timeout: float,
         mailto: str,
-    ) -> dict[str, Any]:
-        action = self._create_discovery_action(
-            kind="query", provider=provider, query=query, limit=limit, from_year=from_year, to_year=to_year
-        )
-        if provider == "harness":
-            return {"action": action, "submission_required": True}
-        if not 1 <= timeout <= 60:
-            raise ResearchError("discovery timeout must be between 1 and 60 seconds")
-        user_agent = "AtomLearn/0.14 (+https://github.com/panjose/Atom-Learn)"
-        if mailto:
-            user_agent += f" mailto:{mailto}"
-        try:
+        *,
+        refresh_cache: bool,
+        operation: str = "discovery",
+    ) -> tuple[dict[str, Any], bool]:
+        request = {"query": query, "limit": limit, "from_year": from_year, "to_year": to_year}
+        user_agent = self._provider_user_agent(mailto)
+
+        def fetcher() -> dict[str, Any]:
             if provider == "crossref":
                 filters = []
                 if from_year:
                     filters.append(f"from-pub-date:{from_year}-01-01")
                 if to_year:
                     filters.append(f"until-pub-date:{to_year}-12-31")
-                params = {"query.bibliographic": query, "rows": limit, "select": "DOI,title,author,published-print,published-online,issued,container-title,URL,reference,update-to"}
+                params = {
+                    "query.bibliographic": query, "rows": limit,
+                    "select": "DOI,title,author,published-print,published-online,issued,container-title,URL,reference,update-to,abstract,license",
+                }
                 if filters:
                     params["filter"] = ",".join(filters)
                 data = fetch_json(f"https://api.crossref.org/works?{urlencode(params)}", user_agent, timeout)
-                records = [self._crossref_candidate(item) for item in data.get("message", {}).get("items", [])]
-            else:
+                raw_records = [self._crossref_candidate(item) for item in data.get("message", {}).get("items", [])]
+                next_cursor = None
+                policy = "Crossref polite pool where mailto is supplied; AtomLearn retries retryable HTTP failures three times."
+            elif provider == "openalex":
                 filters = []
                 if from_year:
                     filters.append(f"from_publication_date:{from_year}-01-01")
@@ -1233,28 +1733,214 @@ class ResearchEngine:
                 if mailto:
                     params["mailto"] = mailto
                 data = fetch_json(f"https://api.openalex.org/works?{urlencode(params)}", user_agent, timeout)
-                records = [self._openalex_candidate(item) for item in data.get("results", [])]
-        except Exception as exc:
+                raw_records = [self._openalex_candidate(item) for item in data.get("results", [])]
+                next_cursor = ((data.get("meta") or {}).get("next_cursor"))
+                policy = "OpenAlex public API; AtomLearn retries retryable HTTP failures three times."
+            elif provider == "pubmed":
+                term = query
+                if from_year or to_year:
+                    lower = from_year or 1000
+                    upper = to_year or 3000
+                    term = f"({query}) AND ({lower}:{upper}[dp])"
+                search = fetch_json(
+                    f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?{urlencode({'db': 'pubmed', 'term': term, 'retmax': limit, 'retmode': 'json'})}",
+                    user_agent,
+                    timeout,
+                )
+                ids = [str(item) for item in (search.get("esearchresult") or {}).get("idlist", [])]
+                if ids:
+                    summary = fetch_json(
+                        f"https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?{urlencode({'db': 'pubmed', 'id': ','.join(ids), 'retmode': 'json'})}",
+                        user_agent,
+                        timeout,
+                    )
+                    result = summary.get("result") or {}
+                    raw_records = [self._pubmed_candidate(uid, result.get(uid, {})) for uid in ids if isinstance(result.get(uid), dict)]
+                else:
+                    raw_records = []
+                next_cursor = None
+                policy = "NCBI E-utilities public request policy; AtomLearn retries retryable HTTP failures three times."
+            elif provider == "semantic_scholar":
+                fields = ",".join([
+                    "paperId", "title", "authors", "year", "venue", "url", "externalIds", "abstract",
+                    "references.paperId", "references.externalIds", "references.title",
+                    "citations.paperId", "citations.externalIds", "citations.title",
+                ])
+                params = {"query": query, "limit": limit, "fields": fields}
+                if from_year or to_year:
+                    params["year"] = f"{from_year or ''}-{to_year or ''}"
+                data = fetch_json(
+                    f"https://api.semanticscholar.org/graph/v1/paper/search?{urlencode(params)}", user_agent, timeout
+                )
+                raw_records = [self._semantic_scholar_candidate(item) for item in data.get("data", [])]
+                next_cursor = data.get("next")
+                policy = "Semantic Scholar Graph API public rate limits apply; AtomLearn retries retryable HTTP failures three times."
+            elif provider == "arxiv":
+                params = {"search_query": f"all:{query}", "start": 0, "max_results": limit}
+                xml_text = fetch_text(f"https://export.arxiv.org/api/query?{urlencode(params)}", user_agent, timeout)
+                try:
+                    root = ET.fromstring(xml_text)
+                except ET.ParseError as exc:
+                    raise ProviderError("invalid_xml", "arXiv returned invalid Atom XML", retryable=False) from exc
+                raw_records = [self._arxiv_candidate(item) for item in root.findall("{http://www.w3.org/2005/Atom}entry")]
+                if from_year or to_year:
+                    raw_records = [
+                        item for item in raw_records
+                        if item.get("year") is not None and (from_year is None or item["year"] >= from_year)
+                        and (to_year is None or item["year"] <= to_year)
+                    ]
+                next_cursor = None
+                policy = "arXiv API guidance requests conservative pacing; AtomLearn retries retryable HTTP failures three times."
+            else:  # pragma: no cover - caller validates provider membership
+                raise ProviderError("unsupported_provider", f"unsupported provider: {provider}", retryable=False)
+            records = [self._normalized_provider_record(provider, item) for item in raw_records]
+            return {
+                "records": records,
+                "pagination": {"page": 1, "limit": limit, "next_cursor": next_cursor, "exhausted": next_cursor is None},
+                "rate_limit": {"policy": policy, "retry_attempts": 3},
+            }
+
+        return self._provider_cache_response(
+            provider, operation, request, refresh_cache=refresh_cache, fetcher=fetcher
+        )
+
+    def _provider_citation_discovery(
+        self,
+        paper: dict[str, Any],
+        provider: str,
+        direction: str,
+        limit: int,
+        timeout: float,
+        mailto: str,
+        *,
+        refresh_cache: bool,
+    ) -> tuple[dict[str, Any], bool]:
+        """Fetch a bounded provider citation neighborhood with typed capability gaps."""
+        doi_identifier = normalize_doi(paper.get("doi", ""))
+        identifier = doi_identifier or str(paper.get("title") or "").strip()
+        request = {"seed_paper_id": paper["id"], "identifier": identifier, "direction": direction, "limit": limit}
+        user_agent = self._provider_user_agent(mailto)
+
+        def fetcher() -> dict[str, Any]:
+            if provider == "semantic_scholar":
+                lookup = f"DOI:{doi_identifier}" if doi_identifier else identifier
+                fields = ",".join([
+                    "paperId", "title", "authors", "year", "venue", "url", "externalIds", "abstract",
+                    "references.paperId", "references.externalIds", "references.title",
+                    "citations.paperId", "citations.externalIds", "citations.title",
+                ])
+                data = fetch_json(
+                    f"https://api.semanticscholar.org/graph/v1/paper/{quote(lookup, safe='')}?{urlencode({'fields': fields})}",
+                    user_agent,
+                    timeout,
+                )
+                relation_key = "references" if direction == "backward" else "citations"
+                related = data.get(relation_key, [])
+                raw_records = [
+                    self._semantic_scholar_candidate(item)
+                    for item in related[:limit]
+                    if isinstance(item, dict) and item.get("paperId") and item.get("title")
+                ]
+                policy = "Semantic Scholar Graph API citation relations; bounded by the requested limit and public rate limits."
+            elif provider == "crossref" and direction == "backward" and doi_identifier:
+                data = fetch_json(
+                    f"https://api.crossref.org/works/{quote(doi_identifier, safe='')}",
+                    user_agent,
+                    timeout,
+                )
+                raw_records = []
+                for index, reference in enumerate((data.get("message") or {}).get("reference", [])):
+                    if not isinstance(reference, dict) or not reference.get("title"):
+                        continue
+                    raw_records.append({
+                        "provider_id": str(reference.get("DOI") or f"crossref-reference-{index + 1}"),
+                        "title": reference.get("article-title"),
+                        "authors": [],
+                        "year": None,
+                        "venue": "",
+                        "doi": reference.get("DOI", ""),
+                        "url": "",
+                        "references": [],
+                        "integrity_status": "unknown",
+                        "integrity_locator": str(reference.get("DOI") or ""),
+                    })
+                raw_records = raw_records[:limit]
+                policy = "Crossref reference list; forward citation relations are not exposed by this adapter."
+            else:
+                raise ProviderError(
+                    "citation_graph_unavailable",
+                    f"{provider} does not expose a supported {direction} citation graph for this request",
+                    retryable=False,
+                )
+            records = [self._normalized_provider_record(provider, item) for item in raw_records]
+            return {
+                "records": records,
+                "pagination": {"page": 1, "limit": limit, "next_cursor": None, "exhausted": True},
+                "rate_limit": {"policy": policy, "retry_attempts": 3},
+            }
+
+        return self._provider_cache_response(
+            provider,
+            direction,
+            request,
+            refresh_cache=refresh_cache,
+            fetcher=fetcher,
+        )
+
+    def discover(
+        self,
+        query: str,
+        provider: str,
+        limit: int,
+        from_year: int | None,
+        to_year: int | None,
+        timeout: float,
+        mailto: str,
+        refresh_cache: bool = False,
+    ) -> dict[str, Any]:
+        action = self._create_discovery_action(
+            kind="query", provider=provider, query=query, limit=limit, from_year=from_year, to_year=to_year
+        )
+        if provider == "harness":
+            return {"action": action, "submission_required": True}
+        if not 1 <= timeout <= 60:
+            raise ResearchError("discovery timeout must be between 1 and 60 seconds")
+        try:
+            response, cache_hit = self._provider_discovery(
+                provider, query, limit, from_year, to_year, timeout, mailto, refresh_cache=refresh_cache
+            )
+        except ProviderError as exc:
             log = next(item for item in self.state["discovery_log"] if item["action_id"] == action["action_id"])
             log["status"] = "failed"
-            log["failure"] = str(exc)
+            log["failure"] = f"{exc.code}: {exc}"
             log["completed_at"] = iso()
+            failure = self._record_provider_failure(provider, "discovery", action, exc)
             return {
                 "action_id": action["action_id"],
                 "action_status": "failed",
-                "failure": str(exc),
-                "retryable": True,
+                "failure": failure,
+                "retryable": exc.retryable,
                 "coverage_claim": "no_discovery_coverage",
             }
-        return self.submit_discovery(
+        result = self.submit_discovery(
             {
                 "action_id": action["action_id"],
                 "retrieved_at": iso(),
-                "records": records,
+                "records": response["records"],
                 "complete": True,
                 "failure": None,
             }
         )
+        result["provider_contract"] = {
+            "cache_hit": cache_hit,
+            "pagination": response["pagination"],
+            "rate_limit": response["rate_limit"],
+            "field_completeness": {
+                field: sum(bool(record.get("field_completeness", {}).get(field)) for record in response["records"])
+                for field in PROVIDER_FIELDS
+            },
+        }
+        return result
 
     @staticmethod
     def _discovered_paper_id(record: dict[str, Any]) -> str:
@@ -1275,6 +1961,13 @@ class ResearchEngine:
         records = payload.get("records")
         if not isinstance(records, list):
             raise ResearchError("discovery records must be a list")
+        normalized_records: list[dict[str, Any]] = []
+        for index, record in enumerate(records):
+            try:
+                normalized_records.append(self._normalized_provider_record(action["provider"], record))
+            except ProviderError as exc:
+                raise ResearchError(f"records[{index}] provider contract invalid ({exc.code}): {exc}") from exc
+        records = normalized_records
         papers: list[dict[str, Any]] = []
         for index, record in enumerate(records):
             if not isinstance(record, dict):
@@ -1343,6 +2036,37 @@ class ResearchEngine:
                     "checked_at": str(payload.get("retrieved_at")),
                     "source_locator": str(record.get("integrity_locator") or record.get("provider_id") or ""),
                 }
+            if canonical_id:
+                paper = self.papers[canonical_id]
+                self._record_provider_observation(
+                    paper, record, action["provider"], str(payload.get("retrieved_at"))
+                )
+                for direction, references in [("backward", record.get("references", [])), ("forward", record.get("citations", []))]:
+                    if not isinstance(references, list):
+                        continue
+                    for reference in references:
+                        if not isinstance(reference, dict):
+                            continue
+                        reference_doi = normalize_doi(reference.get("doi", ""))
+                        target = doi_index.get(reference_doi) if reference_doi else None
+                        if target is None and reference.get("title"):
+                            target = title_index.get(title_fingerprint(reference["title"]))
+                        self._record_citation_provenance(
+                            paper,
+                            direction=direction,
+                            target=target,
+                            reference=reference,
+                            provider=action["provider"],
+                            provider_id=str(record.get("provider_id") or ""),
+                            retrieved_at=str(payload.get("retrieved_at")),
+                        )
+                        if target and target != canonical_id:
+                            if direction == "backward":
+                                paper["cites"] = unique([*paper.get("cites", []), target])
+                            else:
+                                self.papers[target]["cites"] = unique([
+                                    *self.papers[target].get("cites", []), canonical_id,
+                                ])
         seed_id = action.get("seed_paper_id")
         if seed_id in self.papers and action.get("kind") == "backward":
             self.papers[seed_id]["cites"] = unique([
@@ -1375,6 +2099,9 @@ class ResearchEngine:
         depth: int,
         limit: int,
         stopping_rule: str,
+        timeout: float = 15.0,
+        mailto: str = "",
+        refresh_cache: bool = False,
     ) -> dict[str, Any]:
         paper = self.paper(paper_id)
         if direction not in {"backward", "forward"}:
@@ -1394,7 +2121,46 @@ class ResearchEngine:
             stopping_rule=require_text(stopping_rule, "stopping rule", limit=1000),
         )
         action["known_identifiers"] = paper.get("external_citations", []) if direction == "backward" else []
-        return {"action": action, "submission_required": True}
+        if provider == "harness":
+            return {"action": action, "submission_required": True}
+        if not 1 <= timeout <= 60:
+            raise ResearchError("snowball timeout must be between 1 and 60 seconds")
+        try:
+            response, cache_hit = self._provider_citation_discovery(
+                paper,
+                provider,
+                direction,
+                limit,
+                timeout,
+                mailto,
+                refresh_cache=refresh_cache,
+            )
+        except ProviderError as exc:
+            action["status"] = "failed"
+            action["failure"] = f"{exc.code}: {exc}"
+            action["completed_at"] = iso()
+            failure = self._record_provider_failure(provider, direction, action, exc)
+            return {
+                "action_id": action["action_id"],
+                "action_status": "failed",
+                "failure": failure,
+                "retryable": exc.retryable,
+                "coverage_claim": "no_citation_coverage",
+            }
+        result = self.submit_discovery({
+            "action_id": action["action_id"],
+            "retrieved_at": iso(),
+            "records": response["records"],
+            "complete": True,
+            "failure": None,
+        })
+        result["provider_contract"] = {
+            "cache_hit": cache_hit,
+            "pagination": response["pagination"],
+            "rate_limit": response["rate_limit"],
+        }
+        result["submission_required"] = False
+        return result
 
     def refresh(self, provider: str, limit: int) -> dict[str, Any]:
         included = [
@@ -1410,7 +2176,48 @@ class ResearchEngine:
         action["included_paper_ids"] = included
         action["saved_queries"] = unique(saved_queries)
         action["integrity_fields_required"] = ["integrity_status", "integrity_locator"]
-        return {"action": action, "submission_required": True}
+        if provider == "harness":
+            return {"action": action, "submission_required": True}
+        if not 1 <= limit <= 200:
+            raise ResearchError("refresh limit must be from 1 through 200")
+        try:
+            response, cache_hit = self._provider_discovery(
+                provider,
+                query,
+                limit,
+                None,
+                None,
+                15.0,
+                "",
+                refresh_cache=True,
+                operation="refresh",
+            )
+        except ProviderError as exc:
+            action["status"] = "failed"
+            action["failure"] = f"{exc.code}: {exc}"
+            action["completed_at"] = iso()
+            failure = self._record_provider_failure(provider, "refresh", action, exc)
+            return {
+                "action_id": action["action_id"],
+                "action_status": "failed",
+                "failure": failure,
+                "retryable": exc.retryable,
+                "coverage_claim": "no_refresh_coverage",
+            }
+        result = self.submit_discovery({
+            "action_id": action["action_id"],
+            "retrieved_at": iso(),
+            "records": response["records"],
+            "complete": True,
+            "failure": None,
+        })
+        result["provider_contract"] = {
+            "cache_hit": cache_hit,
+            "pagination": response["pagination"],
+            "rate_limit": response["rate_limit"],
+        }
+        result["submission_required"] = False
+        return result
 
     def screen(self, payload: Any) -> dict[str, Any]:
         if not isinstance(payload, dict) or set(payload) != {"decisions"} or not isinstance(payload.get("decisions"), list):
@@ -1604,13 +2411,17 @@ class ResearchEngine:
                     "merge_evidence": reasons,
                     "paper_ids": paper_ids,
                     "relation_types": relations,
-                    "claims": [
-                        {key: item[key] for key in [
-                            "paper_id", "id", "statement", "evidence_summary", "strength", "effect",
+                        "claims": [
+                            {key: item[key] for key in [
+                            "paper_id", "id", "statement", "evidence_summary", "strength", "effect", "effect_direction",
                             "uncertainty", "facets", "evidence_locator",
                         ]}
                         for item in group
                     ],
+                    "evidence_matrix": [],
+                    "supporting_claim_ids": [],
+                    "opposing_claim_ids": [],
+                    "conditional_boundaries": [],
                     "conditional_differences": conditional_differences,
                     "conditional_conflict": contested and bool(conditional_differences),
                     "limitations": unique(
@@ -1620,6 +2431,39 @@ class ResearchEngine:
                     ),
                 }
             )
+            theme = themes[-1]
+            support_ids: list[str] = []
+            oppose_ids: list[str] = []
+            matrix: list[dict[str, Any]] = []
+            for item in group:
+                stance = "neutral"
+                if contested and any(
+                    relation_lookup.get((item["paper_id"], other)) == "contradicts"
+                    or relation_lookup.get((other, item["paper_id"])) == "contradicts"
+                    for other in paper_ids if other != item["paper_id"]
+                ):
+                    stance = "opposes"
+                    oppose_ids.append(item["id"])
+                elif corroborated:
+                    stance = "supports"
+                    support_ids.append(item["id"])
+                matrix.append(
+                    {
+                        "paper_id": item["paper_id"],
+                        "claim_id": item["id"],
+                        "stance": stance,
+                        "effect_direction": item.get("effect_direction", "unclear"),
+                        "facets": item["facets"],
+                        "evidence_locator": item["evidence_locator"],
+                    }
+                )
+            theme["evidence_matrix"] = matrix
+            theme["supporting_claim_ids"] = unique(support_ids)
+            theme["opposing_claim_ids"] = unique(oppose_ids)
+            theme["conditional_boundaries"] = [
+                {"facet": field, "values": values}
+                for field, values in sorted(conditional_differences.items())
+            ]
         return {
             "generated_at": iso(),
             "source_paper_ids": unique(item["paper_id"] for item in claims),
@@ -1885,6 +2729,19 @@ class ResearchEngine:
                 "latest_refresh": self.state.get("latest_refresh"),
                 "coverage_claim": "bounded_provider_results_not_exhaustive",
             },
+            "providers": {
+                "cache_entries": len(self.state.get("provider_cache", [])),
+                "failure_count": len(self.state.get("provider_failures", [])),
+                "providers_observed": sorted({
+                    observation.get("provider")
+                    for paper in self.papers.values()
+                    for observation in paper.get("provider_observations", [])
+                    if observation.get("provider")
+                }),
+                "unresolved_disagreements": sum(
+                    len(paper.get("provider_disagreements", [])) for paper in self.papers.values()
+                ),
+            },
             "synthesis_theme_count": len((self.state.get("latest_synthesis") or {}).get("themes", [])),
             "confirmed_synthesis_theme_count": sum(
                 item.get("review_status") == "confirmed"
@@ -2003,8 +2860,41 @@ class ResearchEngine:
                 f"{markdown(claim['evidence_summary'])}; locator: {markdown(claim.get('evidence_locator', {}).get('locator'))}"
                 for claim in theme["claims"]
             )
+            matrix_lines.append(
+                f"  - Support: {', '.join(theme.get('supporting_claim_ids', [])) or 'None'}; "
+                f"opposition: {', '.join(theme.get('opposing_claim_ids', [])) or 'None'}"
+            )
+            boundaries = theme.get("conditional_boundaries", [])
+            matrix_lines.extend(
+                f"  - Boundary `{item['facet']}`: {compact(item.get('values', []))}"
+                for item in boundaries
+            )
+            for row in theme.get("evidence_matrix", []):
+                locator = row.get("evidence_locator", {}).get("locator")
+                matrix_lines.append(
+                    f"  - Matrix `{row['paper_id']}/{row['claim_id']}`: stance `{row['stance']}`, "
+                    f"effect `{row.get('effect_direction', 'unclear')}`, locator `{markdown(locator)}`"
+                )
         if not themes:
             matrix_lines.append("- Not generated")
+
+        disagreements = [
+            (paper_id, item)
+            for paper_id, paper in sorted(self.papers.items())
+            for item in paper.get("provider_disagreements", [])
+        ]
+        matrix_lines.extend(["", "## Provider Disagreements", ""])
+        if disagreements:
+            matrix_lines.extend(
+                f"- `{paper_id}` field `{item['field']}` needs review: "
+                + "; ".join(
+                    f"{value['value']} ({', '.join(value['providers'])})"
+                    for value in item.get("values", [])
+                )
+                for paper_id, item in disagreements
+            )
+        else:
+            matrix_lines.append("- None recorded")
 
         gap_lines = [
             "# Research Gaps",
@@ -2083,7 +2973,7 @@ def build_parser() -> argparse.ArgumentParser:
     protocol.add_argument("workspace")
     protocol.add_argument("--input", required=True)
     add_revision_argument(protocol)
-    discover = sub.add_parser("discover", help="Search Crossref/OpenAlex or emit a typed harness Web Search action")
+    discover = sub.add_parser("discover", help="Search a provenance-cached provider or emit a typed harness Web Search action")
     discover.add_argument("workspace")
     discover.add_argument("--query")
     discover.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS), default="harness")
@@ -2092,6 +2982,7 @@ def build_parser() -> argparse.ArgumentParser:
     discover.add_argument("--to-year", type=int)
     discover.add_argument("--timeout", type=float, default=15.0)
     discover.add_argument("--mailto", default="")
+    discover.add_argument("--refresh-cache", action="store_true", help="Bypass an exact local provider-response cache entry")
     add_revision_argument(discover)
     submit_discovery = sub.add_parser("submit-discovery", help="Validate and import one revision-bound discovery/snowball/refresh result")
     submit_discovery.add_argument("workspace")
@@ -2101,16 +2992,19 @@ def build_parser() -> argparse.ArgumentParser:
     screen.add_argument("workspace")
     screen.add_argument("--input", required=True)
     add_revision_argument(screen)
-    snowball = sub.add_parser("snowball", help="Emit a reproducible backward or forward citation-expansion action")
+    snowball = sub.add_parser("snowball", help="Expand a bounded citation graph directly or emit a typed harness action")
     snowball.add_argument("workspace")
     snowball.add_argument("paper_id")
     snowball.add_argument("--direction", choices=["backward", "forward"], required=True)
-    snowball.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS), default="openalex")
+    snowball.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS), default="semantic_scholar")
     snowball.add_argument("--depth", type=int, default=1)
     snowball.add_argument("--limit", type=int, default=50)
     snowball.add_argument("--stopping-rule", required=True)
+    snowball.add_argument("--timeout", type=float, default=15.0)
+    snowball.add_argument("--mailto", default="")
+    snowball.add_argument("--refresh-cache", action="store_true", help="Bypass an exact local citation-response cache entry")
     add_revision_argument(snowball)
-    refresh = sub.add_parser("refresh", help="Emit an on-demand saved-query, metadata, correction, and retraction refresh action")
+    refresh = sub.add_parser("refresh", help="Refresh saved queries directly or emit a typed harness action")
     refresh.add_argument("workspace")
     refresh.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS), default="harness")
     refresh.add_argument("--limit", type=int, default=50)
@@ -2119,9 +3013,9 @@ def build_parser() -> argparse.ArgumentParser:
     reconcile.add_argument("workspace")
     reconcile.add_argument("--input", required=True)
     add_revision_argument(reconcile)
-    fetch = sub.add_parser("fetch-metadata", help="Fetch DOI metadata and references from Crossref or OpenAlex")
+    fetch = sub.add_parser("fetch-metadata", help="Fetch source-provenanced paper metadata and citation identifiers")
     fetch.add_argument("workspace")
-    fetch.add_argument("--provider", choices=["crossref", "openalex"], default="crossref")
+    fetch.add_argument("--provider", choices=sorted(DISCOVERY_PROVIDERS - {"harness"}), default="crossref")
     fetch.add_argument("--timeout", type=float, default=15.0)
     fetch.add_argument("--mailto", default="")
     add_revision_argument(fetch)
@@ -2215,7 +3109,7 @@ def run(argv: list[str] | None = None) -> None:
     elif args.action == "discover":
         result = engine.discover(
             args.query or engine.state["research_question"], args.provider, args.limit,
-            args.from_year, args.to_year, args.timeout, args.mailto,
+            args.from_year, args.to_year, args.timeout, args.mailto, args.refresh_cache,
         )
         event_type = "research.discovery_started"
     elif args.action == "submit-discovery":
@@ -2226,7 +3120,15 @@ def run(argv: list[str] | None = None) -> None:
         event_type = "research.screening_decided"
     elif args.action == "snowball":
         result = engine.snowball(
-            args.paper_id, args.direction, args.provider, args.depth, args.limit, args.stopping_rule
+            args.paper_id,
+            args.direction,
+            args.provider,
+            args.depth,
+            args.limit,
+            args.stopping_rule,
+            args.timeout,
+            args.mailto,
+            args.refresh_cache,
         )
         event_type = "research.snowball_started"
     elif args.action == "refresh":

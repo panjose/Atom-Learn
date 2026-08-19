@@ -32,6 +32,9 @@ integrity:
   provider: null
   checked_at: null
   source_locator: null
+provider_observations: []
+provider_disagreements: []
+citation_provenance: []
 analysis:
   problem: ""
   contributions: []

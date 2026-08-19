@@ -228,22 +228,22 @@ Use `atom-learn/assets/templates/concept-route.yaml` as the starter payload.
 
 ## Research Reading
 
-AtomLearn can orient reading around a revisioned research protocol instead of treating papers as isolated summaries. Crossref, OpenAlex, or harness Web Search discovery feeds DOI/title-deduplicated candidates into explicit screening; bounded backward/forward citation expansion and on-demand integrity refresh retain provider provenance. Completed papers contribute claim-level locators and structured population, dataset, method, outcome, metric, and assumption facets to reviewable cross-paper themes.
+AtomLearn can orient reading around a revisioned research protocol instead of treating papers as isolated summaries. Crossref, OpenAlex, PubMed, Semantic Scholar, arXiv, or harness Web Search discovery feeds DOI/title-deduplicated candidates into explicit screening. Direct providers share a normalized contract for identifiers, bibliographic metadata, abstract/license metadata, field completeness, pagination, rate limits, retryable failures, and exact bounded cache receipts. Bounded backward/forward citation expansion retains provider provenance; Semantic Scholar supports both directions and Crossref supports backward DOI references. Completed papers contribute claim-level locators and structured population, intervention/exposure, dataset, method, outcome, metric, effect direction, and assumption facets to a reviewable cross-paper evidence matrix.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py init courses/agent-research --course-id agent.research --title "Agent Research" --goal "Map reliable research agents"
 python atom-learn/scripts/atomlearn.py research init courses/agent-research --field "Reliable autonomous research agents" --question "Which design choices improve reliability?"
 python atom-learn/scripts/atomlearn.py research set-protocol courses/agent-research --input research-protocol.yaml --expected-research-revision 0
-python atom-learn/scripts/atomlearn.py research discover courses/agent-research --provider harness --query "reliable autonomous research agents" --expected-research-revision 1
+python atom-learn/scripts/atomlearn.py research discover courses/agent-research --provider semantic_scholar --query "reliable autonomous research agents" --expected-research-revision 1
 python atom-learn/scripts/atomlearn.py research submit-discovery courses/agent-research --input research-discovery-submission.yaml --expected-research-revision 2
 python atom-learn/scripts/atomlearn.py research screen courses/agent-research --input research-screening.yaml --expected-research-revision 3
-python atom-learn/scripts/atomlearn.py research snowball courses/agent-research paper.field.survey --direction backward --stopping-rule "one depth or 50 candidates"
-python atom-learn/scripts/atomlearn.py research refresh courses/agent-research --provider harness
+python atom-learn/scripts/atomlearn.py research snowball courses/agent-research paper.field.survey --direction backward --provider semantic_scholar --stopping-rule "one depth or 50 candidates"
+python atom-learn/scripts/atomlearn.py research refresh courses/agent-research --provider semantic_scholar
 python atom-learn/scripts/atomlearn.py research next courses/agent-research
 python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
-Research mode keeps at most one Active Paper, requires confirmed inclusion, blocks integrity alerts and unread prerequisites, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. An indexed paper can be attached to shared Document IR without copying full text; claim block locators are verified against its source revision. Model screening and synthesis outputs remain proposals until reviewed. PRISMA-style counts describe only bounded results, and open questions never become novelty claims without current-literature verification. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md) and the [Phase 6 implementation record](docs/V0_14_PHASE6_IMPLEMENTATION.md).
+Research mode keeps at most one Active Paper, requires confirmed inclusion, blocks integrity alerts and unread prerequisites, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. An indexed paper can be attached to shared Document IR without copying full text; claim block locators are verified against its source revision. Provider disagreements remain visible for review, and provider failure is never treated as paper absence. Synthesis emits a claim-level matrix with support/opposition stances, effect direction, conditional boundaries, and source locators; model screening and synthesis outputs remain proposals until reviewed. PRISMA-style counts describe only bounded results, and open questions never become novelty claims without current-literature verification. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md), the [Phase 8 implementation record](docs/V0_15_PHASE8_IMPLEMENTATION.md), and the [Phase 6 implementation record](docs/V0_14_PHASE6_IMPLEMENTATION.md).
 
 ## Exam Analysis and Targeted Preparation
 
@@ -350,6 +350,7 @@ All self-evolution v2 capabilities remain default-off and independently reversib
 - [v0.15 Phase 5 Topic Diagnostic and RAG Evaluation Implementation](docs/V0_15_PHASE5_IMPLEMENTATION.md)
 - [v0.15 Phase 6 Episode and Harness Behavior Implementation](docs/V0_15_PHASE6_IMPLEMENTATION.md)
 - [v0.15 Phase 7 Exam Closed-Loop Implementation](docs/V0_15_PHASE7_IMPLEMENTATION.md)
+- [v0.15 Phase 8 Research Provider Contract Implementation](docs/V0_15_PHASE8_IMPLEMENTATION.md)
 - [Detailed Implementation Plan](docs/IMPLEMENTATION_PLAN.md)
 - [v0.14 Phase 6 Exam and Research Implementation](docs/V0_14_PHASE6_IMPLEMENTATION.md)
 - [v0.14 Phase 7 Adaptive Review Implementation](docs/V0_14_PHASE7_IMPLEMENTATION.md)

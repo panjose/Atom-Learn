@@ -13,16 +13,24 @@
     "records": {
       "type": "array",
       "items": {
-        "type": "object",
-        "required": ["provider_id", "title", "authors", "year", "venue", "doi", "url", "references", "integrity_status", "integrity_locator"],
-        "properties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["provider_id", "title", "authors", "year", "venue", "doi", "url", "references", "integrity_status", "integrity_locator"],
+      "properties": {
           "provider_id": {"type": "string"}, "title": {"type": "string", "minLength": 1},
           "authors": {"type": "array", "items": {"type": "string"}},
           "year": {"type": ["integer", "null"], "minimum": 1000, "maximum": 3000},
           "venue": {"type": "string"}, "doi": {"type": "string"}, "url": {"type": "string"},
           "references": {"type": "array", "items": {"type": "object"}},
           "integrity_status": {"enum": ["unknown", "not_retracted", "retracted", "concern"]},
-          "integrity_locator": {"type": "string"}
+          "integrity_locator": {"type": "string"},
+          "abstract": {"type": "string", "maxLength": 8000},
+          "license": {"type": "string", "maxLength": 1000},
+          "license_locator": {"type": "string", "maxLength": 2000},
+          "identifiers": {"type": "object", "additionalProperties": {"type": "string"}},
+          "citations": {"type": "array", "items": {"type": "object"}},
+          "field_completeness": {"type": "object", "additionalProperties": {"type": "boolean"}},
+          "provider": {"type": "string"}
         }
       }
     }

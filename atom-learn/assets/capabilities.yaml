@@ -159,7 +159,7 @@ capabilities:
       - Schedule events are exposed through Core and CLI; notifications remain the responsibility of optional external adapters.
 
   - id: research.guided_corpus_v1
-    title: Protocol-bound literature discovery screening citation expansion and structured synthesis
+    title: Protocol-bound multi-provider literature discovery screening citation expansion and claim-level synthesis
     status: implemented
     default_mode: opt_in
     public_claim: true
@@ -175,6 +175,7 @@ capabilities:
       - research note
       - research synthesize
       - research review-synthesis
+      - research fetch-metadata
     implementation:
       - path: atom-learn/scripts/research.py
         symbol: "def fetch_metadata"
@@ -186,6 +187,8 @@ capabilities:
         symbol: "def screen"
       - path: atom-learn/scripts/research.py
         symbol: "def review_synthesis"
+      - path: atom-learn/scripts/research.py
+        symbol: "def _provider_discovery"
     verification:
       - path: tests/test_research.py
         symbol: "test_research_metadata_reconciliation_verifies_records_and_acquires_internal_citations"
@@ -195,10 +198,19 @@ capabilities:
         symbol: "test_research_protocol_discovery_screening_snowball_and_refresh_close_the_audit_loop"
       - path: tests/test_research.py
         symbol: "test_research_completion_fails_without_claim_level_locator"
+      - path: tests/test_research.py
+        symbol: "test_research_direct_provider_contracts_normalize_cache_and_citation_fields"
+      - path: tests/test_research.py
+        symbol: "test_research_provider_failure_is_typed_and_not_treated_as_absence"
+      - path: tests/test_research.py
+        symbol: "test_research_metadata_keeps_provider_disagreements_and_citation_provenance"
+      - path: tests/test_research.py
+        symbol: "test_research_synthesis_exposes_claim_matrix_effect_direction_and_boundaries"
     documentation: [README.md, README.zh-CN.md, atom-learn/SKILL.md, atom-learn/references/RESEARCH_READING.md]
     limitations:
       - Provider result limits mean PRISMA-style counts are audit aids, not a claim of exhaustive systematic-review coverage.
-      - Structured facet merges and explicit relations produce theme proposals; a human or harness review must confirm them before they are treated as accepted synthesis themes.
+      - PubMed and arXiv expose limited citation graph metadata; unsupported directions return typed capability gaps rather than absence claims.
+      - Provider metadata disagreements and structured facet merges produce reviewable proposals; a human or harness review must confirm them before they are treated as accepted synthesis themes.
 
   - id: personalization.session_adaptation_v1
     title: Privacy-safe session and opt-in cross-course presentation adaptation

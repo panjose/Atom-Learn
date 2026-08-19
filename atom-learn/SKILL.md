@@ -277,27 +277,27 @@ Strategy values may change presentation only. Never let them change mastery, pre
 2. Read [references/RESEARCH_READING.md](references/RESEARCH_READING.md) and [references/RESEARCH_SCHEMA.md](references/RESEARCH_SCHEMA.md).
 3. Define and persist a revisioned research protocol—question, scope, dates, languages, literature types, inclusion/exclusion criteria, outcomes, and search limits—before collecting papers.
 4. Run `adapt guidance --context research`; apply active research-orientation and source-priority preferences within the declared scope.
-5. Use `research discover` with Crossref, OpenAlex, or harness Web Search and submit typed results through `research submit-discovery`. Screen every candidate against the protocol; an unconfirmed model decision stays `needs_review`. Use bounded backward/forward `research snowball` and on-demand `research refresh`. Never equate citation count with evidence quality or bounded results with exhaustive coverage.
+5. Use `research discover` with Crossref, OpenAlex, PubMed, Semantic Scholar, arXiv, or harness Web Search and submit typed results through `research submit-discovery`. Direct-provider cache receipts preserve the normalized request, pagination, rate-limit policy, and retry/failure state; a failed provider is incomplete coverage, never evidence of absence. Screen every candidate against the protocol; an unconfirmed model decision stays `needs_review`. Use bounded `research snowball` and on-demand `research refresh`; Semantic Scholar supports direct backward/forward relations and Crossref supplies backward DOI references, while unsupported provider graphs must remain typed capability gaps. Never equate citation count with evidence quality or bounded results with exhaustive coverage.
 6. Run `research init`, then `rag requirements --context research`. Pass research-question, survey, method, evaluation, and critique/replication coverage before finalizing the paper map.
 7. Create an import plan or confirm screened discovery candidates. When a full paper is indexed, bind it with `research attach-source` so research state retains the shared IR revision and hash without copying paper text. Run `research validate` and `research next`.
 8. Keep one Active Paper. If `research next` reports Knowledge Atom gaps, use `lineage trace` to explain and repair their prerequisite context without losing the paper position.
-9. Read in triage, structure, and evidence passes. Save structured population/setting/dataset/method/baseline/outcome/metric/assumption facets and a sentence/table/figure/equation/block locator for every central claim. Mark it complete only after the critical-reading guard passes.
-10. Run `research synthesize` after a coherent group is complete, then review every proposed theme with `research review-synthesis`. Preserve conditional differences and claim locators; keep single-source and contested themes explicit.
+9. Read in triage, structure, and evidence passes. Save structured population/setting/dataset/intervention-or-exposure/method/baseline/outcome/metric/assumption facets, effect direction, and a sentence/table/figure/equation/block locator for every central claim. Mark it complete only after the critical-reading guard passes.
+10. Run `research synthesize` after a coherent group is complete, then review every proposed theme with `research review-synthesis`. Inspect the claim-level evidence matrix: every row retains the claim, facets, effect direction, stance, and locator; preserve supporting/opposing claims and conditional boundaries, and keep single-source and contested themes explicit.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py research init <workspace> --field <field> --question <question> --scope <scope>
 python <SKILL_DIR>/scripts/atomlearn.py research set-protocol <workspace> --input <research-protocol.yaml>
-python <SKILL_DIR>/scripts/atomlearn.py research discover <workspace> --provider harness --query <query>
+python <SKILL_DIR>/scripts/atomlearn.py research discover <workspace> --provider harness|crossref|openalex|pubmed|semantic_scholar|arxiv --query <query>
 python <SKILL_DIR>/scripts/atomlearn.py research submit-discovery <workspace> --input <research-discovery-submission.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research screen <workspace> --input <research-screening.yaml>
-python <SKILL_DIR>/scripts/atomlearn.py research snowball <workspace> <paper-id> --direction backward --stopping-rule <rule>
-python <SKILL_DIR>/scripts/atomlearn.py research refresh <workspace> --provider harness
+python <SKILL_DIR>/scripts/atomlearn.py research snowball <workspace> <paper-id> --direction backward|forward --provider semantic_scholar|crossref --stopping-rule <rule>
+python <SKILL_DIR>/scripts/atomlearn.py research refresh <workspace> --provider harness|crossref|openalex|pubmed|semantic_scholar|arxiv
 python <SKILL_DIR>/scripts/atomlearn.py rag init <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py rag requirements <workspace> --context research
 python <SKILL_DIR>/scripts/atomlearn.py rag coverage <workspace> --input <research-coverage.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research import <workspace> --input <research-plan.yaml>
 python <SKILL_DIR>/scripts/atomlearn.py research reconcile-metadata <workspace> --input <research-metadata.yaml>
-python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref
+python <SKILL_DIR>/scripts/atomlearn.py research fetch-metadata <workspace> --provider crossref|openalex|pubmed|semantic_scholar|arxiv
 python <SKILL_DIR>/scripts/atomlearn.py research attach-source <workspace> <paper-id> --source-id <source-id>
 python <SKILL_DIR>/scripts/atomlearn.py research next <workspace>
 python <SKILL_DIR>/scripts/atomlearn.py research activate <workspace> <paper-id>

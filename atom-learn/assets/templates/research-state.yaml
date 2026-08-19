@@ -20,5 +20,7 @@ discovery_log: []
 screening_log: []
 latest_refresh: null
 latest_synthesis: null
+provider_cache: []
+provider_failures: []
 created_at: ""
 updated_at: ""
