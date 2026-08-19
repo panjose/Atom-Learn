@@ -211,6 +211,9 @@ class PlainTextHTMLParser(HTMLParser):
         self.cell: list[str] | None = None
         self.row: list[str] = []
         self.header_row = False
+        self.cell_metadata: dict[str, Any] | None = None
+        self.table_rows: list[dict[str, Any]] | None = None
+        self.table_structures: list[dict[str, Any]] = []
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in {"script", "style", "noscript"}:
@@ -225,21 +228,53 @@ class PlainTextHTMLParser(HTMLParser):
             elif tag == "tr":
                 self.row = []
                 self.header_row = False
+                if self.table_rows is None:
+                    self.table_rows = []
             elif tag in {"td", "th"}:
                 self.cell = []
                 self.header_row = self.header_row or tag == "th"
+                attributes = dict(attrs)
+                self.cell_metadata = {
+                    "row_span": max(1, int(attributes.get("rowspan") or 1)) if str(attributes.get("rowspan") or "1").isdigit() else 1,
+                    "column_span": max(1, int(attributes.get("colspan") or 1)) if str(attributes.get("colspan") or "1").isdigit() else 1,
+                    "is_header": tag == "th",
+                }
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"script", "style", "noscript"} and self.hidden:
             self.hidden -= 1
         elif not self.hidden:
             if tag in {"td", "th"} and self.cell is not None:
-                self.row.append(" ".join("".join(self.cell).split()))
+                value = " ".join("".join(self.cell).split())
+                self.row.append(value)
+                if self.table_rows is not None:
+                    if not self.table_rows or "closed" in self.table_rows[-1]:
+                        self.table_rows.append({"cells": []})
+                    column_index = 1 + sum(item["column_span"] for item in self.table_rows[-1]["cells"])
+                    self.table_rows[-1]["cells"].append(
+                        {"column_index": column_index, "text": value, **(self.cell_metadata or {})}
+                    )
                 self.cell = None
+                self.cell_metadata = None
             elif tag == "tr" and self.row:
                 self.parts.append("\n| " + " | ".join(self.row) + " |")
                 if self.header_row:
                     self.parts.append("\n| " + " | ".join("---" for _ in self.row) + " |")
+                if self.table_rows:
+                    self.table_rows[-1]["closed"] = True
+            elif tag == "table" and self.table_rows:
+                rows = []
+                for row_index, row in enumerate(self.table_rows, start=1):
+                    rows.append({"row_index": row_index, "cells": row["cells"]})
+                self.table_structures.append(
+                    {
+                        "row_count": len(rows),
+                        "column_count": max(sum(cell["column_span"] for cell in row["cells"]) for row in rows),
+                        "header_rows": sum(1 for row in rows if row["cells"] and all(cell["is_header"] for cell in row["cells"])),
+                        "rows": rows,
+                    }
+                )
+                self.table_rows = None
             elif tag in {"p", "li", "article", "section", "div", "h1", "h2", "h3", "h4", "h5", "h6"}:
                 self.parts.append("\n")
 
@@ -304,6 +339,42 @@ def table_markdown(rows: list[list[Any]]) -> str:
     if len(lines) > 1:
         lines.insert(1, "| " + " | ".join("---" for _ in range(width)) + " |")
     return "\n".join(lines)
+
+
+def docx_table_structure(table: Any) -> dict[str, Any]:
+    rows: list[dict[str, Any]] = []
+    seen: dict[int, dict[str, Any]] = {}
+    for row_index, row in enumerate(table.rows, start=1):
+        cells: list[dict[str, Any]] = []
+        column_index = 1
+        position = 0
+        while position < len(row.cells):
+            cell = row.cells[position]
+            identity = id(cell._tc)
+            span = 1
+            while position + span < len(row.cells) and id(row.cells[position + span]._tc) == identity:
+                span += 1
+            if identity in seen:
+                seen[identity]["row_span"] += 1
+            else:
+                record = {
+                    "column_index": column_index,
+                    "text": " ".join(cell.text.split()),
+                    "row_span": 1,
+                    "column_span": span,
+                    "is_header": row_index == 1,
+                }
+                cells.append(record)
+                seen[identity] = record
+            column_index += span
+            position += span
+        rows.append({"row_index": row_index, "cells": cells})
+    return {
+        "row_count": len(rows),
+        "column_count": max((len(row.cells) for row in table.rows), default=1),
+        "header_rows": 1 if len(rows) > 1 else 0,
+        "rows": rows,
+    }
 
 
 def formula_lines(value: str) -> list[str]:
@@ -452,7 +523,12 @@ def extract_path(path: Path, *, ocr_mode: str = "auto", ocr_language: str = "eng
                 rendered = table_markdown([[cell.text for cell in row.cells] for row in table.rows])
                 if rendered:
                     sections.append(
-                        {"locator": f"table {table_index}", "section": f"{heading} — Table {table_index}", "text": rendered}
+                        {
+                            "locator": f"table {table_index}",
+                            "section": f"{heading} — Table {table_index}",
+                            "text": rendered,
+                            "table_structure": docx_table_structure(table),
+                        }
                     )
         if buffer:
             sections.append({"locator": f"paragraphs {start}-{len(document.paragraphs)}", "section": heading, "text": "\n".join(buffer)})
@@ -463,7 +539,15 @@ def extract_path(path: Path, *, ocr_mode: str = "auto", ocr_language: str = "eng
     if suffix in {".html", ".htm"}:
         parser = PlainTextHTMLParser()
         parser.feed(value)
-        return markdown_sections(parser.text())
+        sections = markdown_sections(parser.text())
+        structures = iter(parser.table_structures)
+        for section in sections:
+            if "|" in section["text"]:
+                try:
+                    section.setdefault("table_structures", []).append(next(structures))
+                except StopIteration:
+                    break
+        return sections
     if suffix == ".json":
         return list(flatten_structured(json.loads(value)))
     if suffix in {".yaml", ".yml"}:
@@ -716,14 +800,19 @@ class RagEngine:
             for passage_index, passage in enumerate(passages):
                 if not isinstance(passage, dict):
                     raise RagError(f"{source_id}.passages[{passage_index}] must be a mapping")
-                sections.append(
-                    {
+                section = {
                         "locator": passage.get("locator", f"passage {passage_index + 1}"),
                         "section": passage.get("section", "Web evidence"),
                         "text": passage.get("text"),
                         "embedding": passage.get("embedding"),
                     }
-                )
+                for key in (
+                    "kind", "page", "bbox", "crop_hash", "caption_block_id", "adjacent_block_ids",
+                    "review_status", "numeric_status", "table_structure", "table_structures", "extraction_method",
+                ):
+                    if key in passage:
+                        section[key] = passage[key]
+                sections.append(section)
         elif "path" in item:
             raw_path = limited_text(item.get("path"), f"{source_id}.path", limit=4000)
             path = Path(raw_path).expanduser().resolve()
@@ -752,14 +841,19 @@ class RagEngine:
             for passage_index, passage in enumerate(passages):
                 if not isinstance(passage, dict):
                     raise RagError(f"{source_id}.passages[{passage_index}] must be a mapping")
-                sections.append(
-                    {
+                section = {
                         "locator": passage.get("locator", f"passage {passage_index + 1}"),
                         "section": passage.get("section", "Passage"),
                         "text": passage.get("text"),
                         "embedding": passage.get("embedding"),
                     }
-                )
+                for key in (
+                    "kind", "page", "bbox", "crop_hash", "caption_block_id", "adjacent_block_ids",
+                    "review_status", "numeric_status", "table_structure", "table_structures", "extraction_method",
+                ):
+                    if key in passage:
+                        section[key] = passage[key]
+                sections.append(section)
         else:
             raise RagError(f"{source_id} must provide path, text, or passages")
         if any(section.get("embedding") is not None for section in sections):

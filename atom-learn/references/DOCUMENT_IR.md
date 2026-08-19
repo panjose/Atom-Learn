@@ -33,7 +33,7 @@ Every block has a stable content-derived `block_id`, source reading order, kind,
 
 Heading parents never cross a section or page context. Table cells point to their table, and the table points to its section heading when one exists. Bounding boxes are `null` unless an extractor can provide trustworthy coordinates; AtomLearn does not invent geometry.
 
-Extraction methods and confidence disclose how text was obtained: native PDF text, `pdfplumber`, DOCX XML, HTML DOM normalization, structured input, plain text, OCR, or a future explicitly declared harness-vision extractor. OCR remains lower confidence and preserves page locators.
+Extraction methods and confidence disclose how text was obtained: native PDF text, `pdfplumber`, DOCX XML, HTML DOM normalization, structured input, plain text, OCR, or an explicitly declared harness-vision extractor. Figure, image, and table blocks may also carry `bbox`, a stable `crop_hash`, `caption_block_id`, adjacent prose block IDs, and a review status. Tables retain row/column/header/span structure instead of being only flattened text. OCR and vision numeric output is marked `numeric_status: proposal` until a human review or reproducible calculation verifies it.
 
 ## Consumer behavior
 
@@ -54,6 +54,8 @@ python <SKILL_DIR>/scripts/atomlearn.py research attach-source <workspace> <pape
 ```
 
 The paper records source revision, IR hash, and block count without copying the paper body into research state.
+
+Research claim locators may include the referenced block IDs, crop hash, bounding box, caption block, and review status. A quantitative claim citing a table, figure, equation, or OCR/vision block cannot complete while the source revision is stale, the crop does not match, or the numeric evidence remains a proposal. The workflow reports a review gate or abstains instead of presenting unsupported numbers as synthesis evidence.
 
 ## Compatibility and privacy
 

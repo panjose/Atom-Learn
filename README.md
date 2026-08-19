@@ -154,6 +154,8 @@ Complete-source mode inventories and reconciles materials; outline mode treats o
 
 AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. The stable base preserves HTML and DOCX structure, PDF tables and formulas, plus locatable sidecar OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns exact supporting IR block IDs plus bounded parent context and fuses SQLite FTS5 BM25 with a default local multilingual hash vector; provider-supplied vectors can also be attached. Automatic OCR, approved local learned embeddings, USearch HNSW, and cross-encoder reranking are implemented developer/source paths, not signed `v0.14.2` base-runtime capabilities. Small corpora keep the dependency-light path; without an installed and verified HNSW generation, large dense retrieval skips that component with zero scanned chunks. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
 
+Phase 9 extends this IR for research-grade figure and table evidence. Tables retain row/column/header/span structure, while figures and tables may carry page geometry, a stable crop hash, caption and adjacent-text locators, extraction confidence, and review status. OCR/vision numeric observations are proposal-only by default. A quantitative research claim must point to a current Document IR block and matching crop/metadata, and cannot complete while the evidence is stale, rejected, or awaiting review.
+
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus
 python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sources.yaml
@@ -244,6 +246,8 @@ python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
 Research mode keeps at most one Active Paper, requires confirmed inclusion, blocks integrity alerts and unread prerequisites, and generates `RESEARCH_MAP.md`, `CURRENT_PAPER.md`, `LITERATURE_MATRIX.md`, and `RESEARCH_GAPS.md`. An indexed paper can be attached to shared Document IR without copying full text; claim block locators are verified against its source revision. Provider disagreements remain visible for review, and provider failure is never treated as paper absence. Synthesis emits a claim-level matrix with support/opposition stances, effect direction, conditional boundaries, and source locators; model screening and synthesis outputs remain proposals until reviewed. PRISMA-style counts describe only bounded results, and open questions never become novelty claims without current-literature verification. See [Research Reading Workflow](atom-learn/references/RESEARCH_READING.md), the [Phase 8 implementation record](docs/V0_15_PHASE8_IMPLEMENTATION.md), and the [Phase 6 implementation record](docs/V0_14_PHASE6_IMPLEMENTATION.md).
+
+For figure/table claims, the research gate also checks the IR block kind, source revision, crop hash, caption reference, and review/numeric status. Unsupported quantitative claims are routed to review or abstention instead of being promoted into a completed synthesis.
 
 ## Exam Analysis and Targeted Preparation
 

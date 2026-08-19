@@ -154,6 +154,8 @@ python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expect
 
 AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，稳定 base 还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 sidecar OCR 输出。检索会返回精确支持证据的 IR block ID 与有界 parent context，融合 SQLite FTS5 BM25 与默认本地多语言哈希向量，并可 attachment 供应商生成的向量。自动 OCR、显式批准的本地学习型 embedding、USearch HNSW 和 cross-encoder 重排是已实现的开发者/源码路径，不属于签名 `v0.14.2` base runtime 能力。小语料继续使用轻依赖路径；没有已安装且通过验证的 HNSW generation 时，大语料 dense 检索会以零扫描分块的方式跳过该分量。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
 
+Phase 9 将这个 IR 扩展为面向科研的图表证据契约。表格会保留行、列、表头和跨行/跨列结构；figure 和 table 可以携带页面几何、稳定 crop hash、caption 与相邻正文 locator、抽取置信度和复核状态。OCR/vision 识别出的数值默认只是 proposal。科研量化 claim 必须指向当前 Document IR block，并匹配 crop/元数据；证据过期、被拒绝或仍待复核时不能完成。
+
 ```powershell
 python atom-learn/scripts/atomlearn.py rag init courses/calculus
 python atom-learn/scripts/atomlearn.py rag ingest courses/calculus --input sources.yaml
@@ -244,6 +246,8 @@ python atom-learn/scripts/atomlearn.py research status courses/agent-research
 ```
 
 研究模式最多保留一个 Active Paper，要求确认纳入，并阻止 integrity 警报或未完成论文先修的激活；它会生成 `RESEARCH_MAP.md`、`CURRENT_PAPER.md`、`LITERATURE_MATRIX.md` 和 `RESEARCH_GAPS.md`。已建立索引的论文可以关联到共享 Document IR 而不复制全文，claim block locator 会对 source revision 验证。provider disagreement 会保留并可见，provider failure 绝不会被视为论文不存在。synthesis 会产生带 support/opposition stance、effect direction、conditional boundary 和 source locator 的 claim-level matrix；模型 screening 和 synthesis 输出在复核前都只是 proposal。PRISMA 风格计数只描述有界结果，open question 也不会在缺少当前文献验证时变成创新性声明。详见[科研论文阅读工作流](atom-learn/references/RESEARCH_READING.md)、[Phase 8 实施记录](docs/V0_15_PHASE8_IMPLEMENTATION.md)和[Phase 6 实施记录](docs/V0_14_PHASE6_IMPLEMENTATION.md)。
+
+对于 figure/table claim，科研门禁还会检查 IR block 类型、source revision、crop hash、caption 引用以及复核/数值状态。没有支持的量化 claim 会进入复核或 abstention，不会被提升为已完成的综合结论。
 
 ## 试题分析与针对性备考
 

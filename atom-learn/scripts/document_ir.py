@@ -42,6 +42,15 @@ def require_valid(document: dict[str, Any]) -> None:
     for block in document["blocks"]:
         if block["parent_id"] is not None and block["parent_id"] not in known:
             raise DocumentIRError(f"Document IR block {block['block_id']} has a missing parent")
+        for field in ("caption_block_id",):
+            reference = block.get(field)
+            if reference is not None and reference not in known:
+                raise DocumentIRError(f"Document IR block {block['block_id']} has a missing {field}")
+        for reference in block.get("adjacent_block_ids", []):
+            if reference not in known:
+                raise DocumentIRError(f"Document IR block {block['block_id']} has a missing adjacent block")
+        if block["kind"] == "table" and block.get("table_structure") is None:
+            raise DocumentIRError(f"Document IR table block {block['block_id']} is missing table structure")
 
 
 def _page(locator: str) -> int | None:
@@ -73,6 +82,7 @@ def _confidence(method: str) -> float:
         "html_dom": 0.95,
         "structured": 1.0,
         "text": 1.0,
+        "harness_vision": 0.6,
     }[method]
 
 
@@ -91,6 +101,36 @@ def _table_rows(text: str) -> list[list[str]]:
         if cells and not all(re.fullmatch(r":?-{3,}:?", cell) for cell in cells):
             rows.append(cells)
     return rows
+
+
+def _table_structure(text: str) -> dict[str, Any] | None:
+    """Keep a compact row/column model beside the rendered table text."""
+    rows = _table_rows(text)
+    if not rows:
+        return None
+    width = max(len(row) for row in rows)
+    header_rows = 1 if len(rows) > 1 else 0
+    return {
+        "row_count": len(rows),
+        "column_count": width,
+        "header_rows": header_rows,
+        "rows": [
+            {
+                "row_index": row_index,
+                "cells": [
+                    {
+                        "column_index": column_index,
+                        "text": cell,
+                        "row_span": 1,
+                        "column_span": 1,
+                        "is_header": row_index <= header_rows,
+                    }
+                    for column_index, cell in enumerate(row, start=1)
+                ],
+            }
+            for row_index, row in enumerate(rows, start=1)
+        ],
+    }
 
 
 def _segments(text: str, forced_kind: str | None = None) -> list[tuple[str, str]]:
@@ -147,12 +187,12 @@ def build_document_ir(
         *,
         parent_id: str | None,
         page: int | None,
+        metadata: dict[str, Any] | None = None,
     ) -> str:
         nonlocal reading_order
         reading_order += 1
         block_id = _block_id(source_id, source_revision, reading_order, kind, locator, text)
-        blocks.append(
-            {
+        block = {
                 "block_id": block_id,
                 "kind": kind,
                 "parent_id": parent_id,
@@ -164,8 +204,25 @@ def build_document_ir(
                 "extraction_method": method,
                 "confidence": _confidence(method),
                 "text": text,
+                "caption_block_id": None,
+                "crop_hash": None,
+                "adjacent_block_ids": [],
+                "table_structure": None,
+                "review_status": "not_required",
+                "numeric_status": "not_applicable",
             }
-        )
+        if metadata:
+            for key in (
+                "caption_block_id", "crop_hash", "adjacent_block_ids", "table_structure",
+                "review_status", "numeric_status", "bbox",
+            ):
+                if key in metadata:
+                    block[key] = metadata[key]
+        if kind in {"table", "figure", "image", "ocr_text"} and block["review_status"] == "not_required":
+            block["review_status"] = "proposed" if method in {"ocr", "harness_vision"} else "reviewed"
+        if kind in {"figure", "image", "ocr_text"} and block["numeric_status"] == "not_applicable":
+            block["numeric_status"] = "proposal" if method in {"ocr", "harness_vision"} else "unreviewed"
+        blocks.append(block)
         return block_id
 
     for section_index, item in enumerate(sections, start=1):
@@ -192,10 +249,21 @@ def build_document_ir(
                 )
             parent_heading = heading_by_context.get(context)
             body = re.sub(r"^#{1,6}\s+[^\n]+\n?", "", body).strip() or text
+        table_structures = iter(item.get("table_structures") or [])
         for kind, segment in _segments(body, forced_kind):
+            metadata = {
+                key: item[key]
+                for key in (
+                    "bbox", "crop_hash", "caption_block_id", "adjacent_block_ids",
+                    "review_status", "numeric_status",
+                )
+                if key in item
+            }
+            if kind == "table":
+                metadata["table_structure"] = item.get("table_structure") or next(table_structures, None) or _table_structure(segment)
             block_id = append_block(
                 kind, segment, section, locator, method,
-                parent_id=parent_heading, page=page,
+                parent_id=parent_heading, page=page, metadata=metadata,
             )
             if kind == "table":
                 for row_index, row in enumerate(_table_rows(segment), start=1):
@@ -205,9 +273,24 @@ def build_document_ir(
                                 "cell", cell, section,
                                 f"{locator}, row {row_index}, column {column_index}", method,
                                 parent_id=block_id, page=page,
+                                metadata={"review_status": blocks[-1].get("review_status", "not_required")},
                             )
     if not blocks:
         raise DocumentIRError(f"Source {source_id} produced no Document IR blocks")
+    # Keep nearby prose discoverable when a layout extractor does not provide an explicit relation.
+    for index, block in enumerate(blocks):
+        if block["kind"] not in {"figure", "image", "table"} or block["adjacent_block_ids"]:
+            continue
+        adjacent: list[str] = []
+        for candidate in blocks[index - 1 :: -1]:
+            if candidate["section"] == block["section"] and candidate["page"] == block["page"] and candidate["kind"] not in {"heading", "cell"}:
+                adjacent.append(candidate["block_id"])
+                break
+        for candidate in blocks[index + 1 :]:
+            if candidate["section"] == block["section"] and candidate["page"] == block["page"] and candidate["kind"] not in {"heading", "cell"}:
+                adjacent.append(candidate["block_id"])
+                break
+        block["adjacent_block_ids"] = adjacent
     canonical_text = "\n".join(block["text"] for block in blocks if block["kind"] != "cell")
     document = {
         "kind": "atomlearn.document-ir",

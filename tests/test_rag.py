@@ -324,11 +324,14 @@ def test_pdf_and_docx_textbook_extractors_preserve_locators() -> None:
     assert len(docx_tables) == 1
     assert docx_by_id[docx_tables[0]["parent_id"]]["kind"] == "heading"
     assert len([block for block in docx_ir["blocks"] if block["parent_id"] == docx_tables[0]["block_id"]]) == 4
+    assert docx_tables[0]["table_structure"]["header_rows"] == 1
+    assert docx_tables[0]["table_structure"]["rows"][0]["cells"][0]["is_header"] is True
 
     html_ir = output(invoke("rag", "document-ir", path, "optimization-html"))
     html_tables = [block for block in html_ir["blocks"] if block["kind"] == "table"]
     assert len(html_tables) == 1
     assert len([block for block in html_ir["blocks"] if block["parent_id"] == html_tables[0]["block_id"]]) == 4
+    assert html_tables[0]["table_structure"]["header_rows"] == 1
     assert set(table_result["results"][0]["document_ir_block_ids"]) <= {
         block["block_id"] for block in docx_ir["blocks"]
     }

@@ -672,6 +672,49 @@ def test_research_completion_fails_without_claim_level_locator() -> None:
     assert "completion requires a sentence, table, figure, equation, or block locator" in blocked.stderr
 
 
+def test_research_rejects_quantitative_claim_from_unreviewed_ocr_block() -> None:
+    path = workspace("quantitative-ocr-guard")
+    revision = import_plan(path)["research_revision"]
+    activated = mutate(path, "activate", revision, "paper.field.survey")
+    source = {
+        "sources": [
+            {
+                "id": "scan-source",
+                "title": "Scanned results",
+                "authority": "peer_reviewed",
+                "text": "# Results\nThe treatment effect is 12 percent.",
+            }
+        ]
+    }
+    output(invoke("rag", "init", path))
+    output(invoke("rag", "ingest", path, "--input", payload(path, "scan-source.yaml", source)))
+    document = output(invoke("rag", "document-ir", path, "scan-source"))
+    block = next(item for item in document["blocks"] if item["kind"] == "paragraph")
+    ir_path = path / ".atomlearn" / "rag" / "document-ir" / "scan-source.r1.json"
+    stored = json.loads(ir_path.read_text(encoding="utf-8"))
+    stored_block = next(item for item in stored["blocks"] if item["block_id"] == block["block_id"])
+    stored_block.update({"kind": "figure", "extraction_method": "harness_vision", "review_status": "proposed", "numeric_status": "proposal"})
+    ir_path.write_text(json.dumps(stored), encoding="utf-8")
+    note_path = critical_note(path, "paper.field.survey")
+    note = yaml.safe_load(note_path.read_text(encoding="utf-8"))
+    note["claims"][0]["statement"] = "The treatment improves outcomes by 12%."
+    note["claims"][0]["evidence_locator"] = {
+        "locator": "page 1 OCR",
+        "kind": "block",
+        "extraction_method": "document_ir",
+        "confidence": 0.7,
+        "source_id": "scan-source",
+        "source_revision": 1,
+        "block_ids": [block["block_id"]],
+    }
+    blocked = invoke(
+        "research", "note", path, "paper.field.survey", "--input", payload(path, "ocr-note.yaml", note),
+        "--expected-research-revision", activated["research_revision"], check=False,
+    )
+    assert blocked.returncode == 2
+    assert "unsupported quantitative claim requires figure/table review or abstention" in blocked.stderr
+
+
 def test_research_direct_provider_contracts_normalize_cache_and_citation_fields(monkeypatch: pytest.MonkeyPatch) -> None:
     path = workspace("provider-contract")
     engine = ResearchEngine.load(str(path))

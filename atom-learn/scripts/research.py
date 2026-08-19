@@ -74,6 +74,8 @@ FACET_FIELDS = [
 ]
 CLAIM_EFFECT_DIRECTIONS = {"positive", "negative", "null", "mixed", "unclear", "not_applicable"}
 CLAIM_STANCES = {"supports", "opposes", "neutral"}
+LOCATOR_REVIEW_STATUSES = {"not_required", "proposed", "reviewed", "rejected"}
+LOCATOR_NUMERIC_STATUSES = {"not_applicable", "unreviewed", "proposal", "verified", "rejected"}
 RESEARCH_STATUSES = {"scoping", "mapping", "reading", "synthesizing", "maintaining", "complete"}
 PROVIDER_CACHE_LIMIT = 100
 PROVIDER_CACHE_VERSION = 1
@@ -121,6 +123,23 @@ def require_text(value: Any, label: str, *, allow_empty: bool = False, limit: in
     if len(text) > limit:
         raise ResearchError(f"{label} must be at most {limit} characters; store a concise note, not full text")
     return text
+
+
+def quantitative_claim(claim: dict[str, Any]) -> bool:
+    """Conservatively identify claims whose numbers need inspectable evidence."""
+    value = " ".join(str(claim.get(field, "")) for field in ("statement", "effect", "evidence_summary", "uncertainty"))
+    direct = re.search(
+        r"(?:\d+(?:\.\d+)?\s*%|p\s*[<=>]\s*\d|\b\d+(?:\.\d+)?\s*%?\s*(?:ci|confidence interval)\b|"
+        r"\b(?:odds ratio|hazard ratio|effect size)\b)",
+        value,
+        re.IGNORECASE,
+    )
+    contextual = re.search(r"\d+(?:\.\d+)?", value) and re.search(
+        r"\b(?:effect|rate|mean|median|average|coefficient|error bar|significant|increase|decrease|improve|reduce)\b",
+        value,
+        re.IGNORECASE,
+    )
+    return bool(direct or contextual)
 
 
 def string_list(value: Any, label: str, *, limit: int = 2000) -> list[str]:
@@ -636,17 +655,37 @@ class ResearchEngine:
                 locator = self._normalize_evidence_locator(claim.get("evidence_locator"), f"{claim_id}.evidence_locator")
                 if complete and not locator["locator"]:
                     errors.append(f"{claim_id}: completion requires a sentence, table, figure, equation, or block locator")
+                is_quantitative = quantitative_claim(claim)
+                if complete and is_quantitative and not locator["block_ids"]:
+                    errors.append(f"{claim_id}: quantitative claims require a source Document IR block locator")
                 if locator["block_ids"]:
                     if not locator["source_id"] or locator["source_revision"] is None:
                         errors.append(f"{claim_id}: block locators require source_id and source_revision")
                     else:
                         try:
                             document = RagEngine.load(str(self.workspace.root)).document_ir(locator["source_id"])
-                            known_blocks = {item["block_id"] for item in document["blocks"]}
+                            blocks_by_id = {item["block_id"]: item for item in document["blocks"]}
+                            known_blocks = set(blocks_by_id)
                             if document["source_revision"] != locator["source_revision"]:
                                 errors.append(f"{claim_id}: evidence source revision is stale")
                             if any(item not in known_blocks for item in locator["block_ids"]):
                                 errors.append(f"{claim_id}: evidence references unknown Document IR blocks")
+                            selected = [blocks_by_id[item] for item in locator["block_ids"] if item in blocks_by_id]
+                            if locator["kind"] in {"table", "figure"} and not any(item["kind"] == locator["kind"] for item in selected):
+                                errors.append(f"{claim_id}: {locator['kind']} locator must reference a matching Document IR block")
+                            if locator["crop_hash"] is not None and not any(item.get("crop_hash") == locator["crop_hash"] for item in selected):
+                                errors.append(f"{claim_id}: evidence crop hash does not match the Document IR crop")
+                            if locator["caption_block_id"] is not None and locator["caption_block_id"] not in known_blocks:
+                                errors.append(f"{claim_id}: evidence caption block is unknown")
+                            if is_quantitative:
+                                statuses = {item.get("review_status", "not_required") for item in selected}
+                                numeric_statuses = {item.get("numeric_status", "not_applicable") for item in selected}
+                                if "rejected" in statuses or "rejected" in numeric_statuses:
+                                    errors.append(f"{claim_id}: quantitative evidence was rejected")
+                                elif "proposed" in statuses or numeric_statuses & {"proposal", "unreviewed"} or (
+                                    locator["kind"] in {"table", "figure", "equation"} and locator["review_status"] != "reviewed"
+                                ):
+                                    errors.append(f"{claim_id}: unsupported quantitative claim requires figure/table review or abstention")
                         except (RagError, OSError) as exc:
                             errors.append(f"{claim_id}: cannot verify Document IR evidence: {exc}")
             except (AtomLearnError, ResearchError) as exc:
@@ -1007,8 +1046,13 @@ class ResearchEngine:
             raw = {
                 "locator": raw, "kind": "other", "extraction_method": "human", "confidence": 1.0,
                 "source_id": None, "source_revision": None, "block_ids": [],
+                "crop_hash": None, "bbox": None, "caption_block_id": None,
+                "review_status": "not_required", "numeric_status": "not_applicable",
             }
-        required = {"locator", "kind", "extraction_method", "confidence", "source_id", "source_revision", "block_ids"}
+        required = {
+            "locator", "kind", "extraction_method", "confidence", "source_id", "source_revision", "block_ids",
+            "crop_hash", "bbox", "caption_block_id", "review_status", "numeric_status",
+        }
         if not isinstance(raw, dict) or set(raw) - required:
             raise ResearchError(f"{label} has unsupported fields")
         kind = raw.get("kind", "other")
@@ -1029,6 +1073,23 @@ class ResearchEngine:
         if not isinstance(block_ids, list) or any(not isinstance(item, str) for item in block_ids):
             raise ResearchError(f"{label}.block_ids must be a string list")
         confidence = raw.get("confidence", 1.0 if raw.get("locator") else 0.5)
+        crop_hash = raw.get("crop_hash")
+        if crop_hash is not None and (not isinstance(crop_hash, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", crop_hash)):
+            raise ResearchError(f"{label}.crop_hash must be a sha256 hash or null")
+        bbox = raw.get("bbox")
+        if bbox is not None and (
+            not isinstance(bbox, list) or len(bbox) != 4 or any(isinstance(item, bool) or not isinstance(item, (int, float)) for item in bbox)
+        ):
+            raise ResearchError(f"{label}.bbox must contain four numbers or null")
+        caption_block_id = raw.get("caption_block_id")
+        if caption_block_id is not None:
+            caption_block_id = require_text(caption_block_id, f"{label}.caption_block_id", limit=100)
+        review_status = raw.get("review_status", "not_required")
+        numeric_status = raw.get("numeric_status", "not_applicable")
+        if review_status not in LOCATOR_REVIEW_STATUSES:
+            raise ResearchError(f"{label}.review_status is invalid")
+        if numeric_status not in LOCATOR_NUMERIC_STATUSES:
+            raise ResearchError(f"{label}.numeric_status is invalid")
         return {
             "locator": require_text(raw.get("locator", ""), f"{label}.locator", allow_empty=True, limit=2000),
             "kind": kind,
@@ -1037,6 +1098,11 @@ class ResearchEngine:
             "source_id": source_id,
             "source_revision": source_revision,
             "block_ids": unique(block_ids),
+            "crop_hash": crop_hash,
+            "bbox": bbox,
+            "caption_block_id": caption_block_id,
+            "review_status": review_status,
+            "numeric_status": numeric_status,
         }
 
     def _metadata_indexes(self) -> tuple[dict[str, str], dict[str, str]]:

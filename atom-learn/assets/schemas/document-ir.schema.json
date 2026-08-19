@@ -55,7 +55,52 @@
         "locator": {"type": "string", "minLength": 1, "maxLength": 1000},
         "extraction_method": {"enum": ["text", "structured", "pdf_text", "pdfplumber", "docx_xml", "html_dom", "ocr", "harness_vision"]},
         "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-        "text": {"type": "string", "minLength": 1, "maxLength": 200000}
+        "text": {"type": "string", "minLength": 1, "maxLength": 200000},
+        "caption_block_id": {"type": ["string", "null"], "pattern": "^block-[a-f0-9]{24}$"},
+        "crop_hash": {"type": ["string", "null"], "pattern": "^sha256:[a-f0-9]{64}$"},
+        "adjacent_block_ids": {
+          "type": "array", "uniqueItems": true,
+          "items": {"type": "string", "pattern": "^block-[a-f0-9]{24}$"}
+        },
+        "review_status": {"enum": ["not_required", "proposed", "reviewed", "rejected"]},
+        "numeric_status": {"enum": ["not_applicable", "unreviewed", "proposal", "verified", "rejected"]},
+        "table_structure": {
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object", "additionalProperties": false,
+              "required": ["row_count", "column_count", "header_rows", "rows"],
+              "properties": {
+                "row_count": {"type": "integer", "minimum": 1},
+                "column_count": {"type": "integer", "minimum": 1},
+                "header_rows": {"type": "integer", "minimum": 0},
+                "rows": {
+                  "type": "array", "minItems": 1,
+                  "items": {
+                    "type": "object", "additionalProperties": false,
+                    "required": ["row_index", "cells"],
+                    "properties": {
+                      "row_index": {"type": "integer", "minimum": 1},
+                      "cells": {
+                        "type": "array", "items": {
+                          "type": "object", "additionalProperties": false,
+                          "required": ["column_index", "text", "row_span", "column_span", "is_header"],
+                          "properties": {
+                            "column_index": {"type": "integer", "minimum": 1},
+                            "text": {"type": "string"},
+                            "row_span": {"type": "integer", "minimum": 1},
+                            "column_span": {"type": "integer", "minimum": 1},
+                            "is_header": {"type": "boolean"}
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          ]
+        }
       }
     }
   }

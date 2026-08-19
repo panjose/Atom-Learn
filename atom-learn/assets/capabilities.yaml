@@ -359,9 +359,14 @@ capabilities:
         symbol: "test_exam_process_source_consumes_shared_document_ir_and_retains_block_provenance"
       - path: tests/test_research.py
         symbol: "test_research_attach_source_binds_shared_document_ir_without_copying_full_text"
-    documentation: [README.md, README.zh-CN.md, atom-learn/references/DOCUMENT_IR.md, docs/V0_14_REMEDIATION_DESIGN.md]
+      - path: tests/test_document_ir.py
+        symbol: "test_vision_figure_numeric_values_are_proposals_until_reviewed"
+      - path: tests/test_research.py
+        symbol: "test_research_rejects_quantitative_claim_from_unreviewed_ocr_block"
+    documentation: [README.md, README.zh-CN.md, atom-learn/references/DOCUMENT_IR.md, docs/V0_15_PHASE9_IMPLEMENTATION.md]
     limitations:
-      - PDF table detection is best effort and bounding boxes remain null unless an extractor supplies trustworthy coordinates.
+      - PDF table and figure detection remains best effort; coordinates and crop hashes are only present when an extractor supplies trustworthy metadata.
+      - OCR and vision numeric values remain proposal-only until reviewed or reproducibly recalculated; this is an evidence gate, not automatic chart verification.
       - Sidecar OCR is available in the base runtime; automatic PyMuPDF/Tesseract OCR is a developer extra and is not distributed in the signed v0.14.2 base runtime.
       - Sources indexed before Document IR remain searchable but must be reingested before exam or research IR consumers can attach them.
 
