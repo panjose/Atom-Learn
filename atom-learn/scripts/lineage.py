@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter, defaultdict, deque
@@ -11,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+from jsonschema import Draft202012Validator
 
 from atomlearn import (
     SCHEMA_VERSION,
@@ -53,10 +55,40 @@ SOURCE_REF_KEYS = {"source_id", "locator"}
 THREAD_KEYS = {"id", "title", "kind", "goal", "atom_ids", "narrative", "confidence"}
 EVENT_KEYS = {"event_id", "revision", "type", "at", "course_revision", "details"}
 LINEAGE_VIEW_FILES = ["KNOWLEDGE_LINEAGE.md"]
+GRAPH_VIEW_VERSION = "graph-view-v1"
+GRAPH_EDGE_KINDS = {
+    "prerequisite", "containment", "scheduled-successor", "optional-branch", "citation", "semantic-related",
+}
 
 
 class LineageError(RuntimeError):
     """A user-correctable knowledge-lineage error."""
+
+
+def _graph_view_schema() -> dict[str, Any]:
+    from core_paths import CORE_ROOT
+
+    return json.loads((CORE_ROOT / "assets" / "schemas" / "graph-view.schema.json").read_text(encoding="utf-8"))
+
+
+def require_valid_graph_view(view: dict[str, Any]) -> None:
+    errors = sorted(Draft202012Validator(_graph_view_schema()).iter_errors(view), key=lambda item: list(item.path))
+    if errors:
+        details = "\n- ".join((".".join(str(part) for part in error.path) or "<root>") + ": " + error.message for error in errors)
+        raise LineageError("graph-view-v1 is invalid:\n- " + details)
+    node_ids = [item["id"] for item in view["nodes"]]
+    edge_ids = [item["id"] for item in view["edges"]]
+    if len(node_ids) != len(set(node_ids)) or len(edge_ids) != len(set(edge_ids)):
+        raise LineageError("graph-view-v1 contains duplicate node or edge IDs")
+    known_nodes = set(node_ids)
+    if any(edge["from"] not in known_nodes or edge["to"] not in known_nodes for edge in view["edges"]):
+        raise LineageError("graph-view-v1 contains an edge with an unknown endpoint")
+    focus_atom_id = view["focus_atom_id"]
+    if focus_atom_id is not None and focus_atom_id not in known_nodes:
+        raise LineageError("graph-view-v1 focus_atom_id is not visible under the selected filters")
+    focused_nodes = [item["id"] for item in view["nodes"] if item["focus"]]
+    if focused_nodes != ([focus_atom_id] if focus_atom_id is not None else []):
+        raise LineageError("graph-view-v1 focus flags do not match focus_atom_id")
 
 
 def template_dir() -> Path:
@@ -657,6 +689,175 @@ class LineageEngine:
             result["research"] = self._research_overlay()
         return result
 
+    @staticmethod
+    def _graph_edge_id(kind: str, source: str, target: str, relation: str | None = None) -> str:
+        payload = "|".join([kind, source, target, relation or ""])
+        return "edge-" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:24]
+
+    def graph_view(
+        self,
+        *,
+        focus: str = "atom-current",
+        include_required: bool = True,
+        include_optional: bool = True,
+        include_research: bool = False,
+    ) -> dict[str, Any]:
+        """Return the stable UI-agnostic graph contract; never mutate workspace state."""
+        if not include_required and not include_optional:
+            raise LineageError("graph-view must include required or optional Atoms")
+        structure = self._structure()
+        requested_focus = focus.strip() or "atom-current"
+        focus_atom_id: str | None
+        if requested_focus == "atom-current":
+            focus_atom_id = self.workspace.current.get("active_atom_id")
+            if focus_atom_id is not None:
+                focus_atom_id = self._resolve_atom_id(focus_atom_id)
+        else:
+            focus_atom_id = self._resolve_atom_id(require_id(requested_focus, "focus"))
+            if focus_atom_id is None:
+                raise LineageError(f"Unknown or unresolved archived focus Atom: {requested_focus}")
+        visible_atoms = {
+            atom_id
+            for atom_id in structure["topological_order"]
+            if (include_optional if self.workspace.atoms[atom_id].get("optional", False) else include_required)
+        }
+        if focus_atom_id not in visible_atoms:
+            focus_atom_id = None
+        nodes: list[dict[str, Any]] = []
+        for atom_id in structure["topological_order"]:
+            if atom_id not in visible_atoms:
+                continue
+            atom = self.workspace.atoms[atom_id]
+            nodes.append(
+                {
+                    "id": atom_id,
+                    "kind": "atom",
+                    "label": atom.get("title", atom_id),
+                    "status": atom.get("status", "unknown"),
+                    "module": atom.get("module"),
+                    "optional": bool(atom.get("optional", False)),
+                    "focus": atom_id == focus_atom_id,
+                }
+            )
+
+        edges: list[dict[str, Any]] = []
+
+        def add_edge(
+            kind: str,
+            source: str,
+            target: str,
+            *,
+            relation: str | None = None,
+            confidence: float = 1.0,
+        ) -> None:
+            if kind not in GRAPH_EDGE_KINDS or source not in visible_ids or target not in visible_ids:
+                return
+            edges.append(
+                {
+                    "id": self._graph_edge_id(kind, source, target, relation),
+                    "from": source,
+                    "to": target,
+                    "kind": kind,
+                    "relation": relation,
+                    "confidence": round(float(confidence), 3),
+                }
+            )
+
+        visible_ids = set(visible_atoms)
+        for target in structure["topological_order"]:
+            for source in self.workspace.atoms[target].get("prerequisites", []):
+                add_edge("prerequisite", source, target)
+
+        for parent_id, atom in self.workspace.atoms.items():
+            if parent_id not in visible_ids or atom.get("status") == "archived":
+                continue
+            expansion = atom.get("expansion")
+            if isinstance(expansion, dict):
+                for child_id in expansion.get("child_atom_ids", []):
+                    add_edge("containment", parent_id, child_id)
+            branch = atom.get("branch")
+            if isinstance(branch, dict):
+                add_edge("optional-branch", branch.get("anchor_atom_id", ""), parent_id, relation=branch.get("kind"))
+
+        for question in self.workspace.questions.get("items", []):
+            if not isinstance(question, dict) or question.get("classification") != "future_atom":
+                continue
+            source = self._resolve_atom_id(str(question.get("active_atom_id_at_creation") or ""))
+            target = self._resolve_atom_id(str(question.get("related_atom_id") or ""))
+            if source and target:
+                add_edge("scheduled-successor", source, target, relation=question.get("id"))
+
+        for relation in self._resolved_relations():
+            add_edge(
+                "semantic-related",
+                relation["from_atom_id"],
+                relation["to_atom_id"],
+                relation=relation["type"],
+                confidence=relation["confidence"],
+            )
+
+        if include_research:
+            research = self._research_overlay()
+            if research.get("enabled"):
+                from research import ResearchEngine
+
+                research_engine = ResearchEngine.load(str(self.workspace.root))
+                paper_ids = sorted(research_engine.papers)
+                for paper_id in paper_ids:
+                    paper = research_engine.papers[paper_id]
+                    nodes.append(
+                        {
+                            "id": f"paper:{paper_id}",
+                            "kind": "paper",
+                            "label": paper.get("title", paper_id),
+                            "status": paper.get("status", "unknown"),
+                            "module": paper.get("role"),
+                            "optional": False,
+                            "focus": False,
+                        }
+                    )
+                visible_ids.update(f"paper:{paper_id}" for paper_id in paper_ids)
+                for paper_id in paper_ids:
+                    paper = research_engine.papers[paper_id]
+                    for target_id in paper.get("cites", []):
+                        if target_id in research_engine.papers:
+                            add_edge("citation", f"paper:{paper_id}", f"paper:{target_id}", relation="cites")
+                    for citation in paper.get("citation_provenance", []):
+                        target_id = citation.get("target_paper_id") if isinstance(citation, dict) else None
+                        if target_id in research_engine.papers:
+                            add_edge(
+                                "citation",
+                                f"paper:{paper_id}",
+                                f"paper:{target_id}",
+                                relation=citation.get("direction", "provider"),
+                            )
+
+        edge_ids: set[str] = set()
+        unique_edges: list[dict[str, Any]] = []
+        for edge in sorted(edges, key=lambda item: (item["kind"], item["from"], item["to"], item["relation"] or "")):
+            if edge["id"] in edge_ids:
+                continue
+            edge_ids.add(edge["id"])
+            unique_edges.append(edge)
+        view = {
+            "kind": "atomlearn.graph-view",
+            "view_version": GRAPH_VIEW_VERSION,
+            "activation_edge_kind": "prerequisite",
+            "focus": requested_focus,
+            "focus_atom_id": focus_atom_id,
+            "nodes": nodes,
+            "edges": unique_edges,
+            "filters": {
+                "required": bool(include_required),
+                "optional": bool(include_optional),
+                "research": bool(include_research),
+            },
+            "revision": self.revision,
+            "course_revision": self.workspace.revision,
+        }
+        require_valid_graph_view(view)
+        return view
+
     def trace(self, atom_id: str, depth: int) -> dict[str, Any]:
         require_id(atom_id, "atom_id")
         resolved = self._resolve_atom_id(atom_id)
@@ -1095,6 +1296,19 @@ def build_parser() -> argparse.ArgumentParser:
     route.add_argument("workspace")
     route.add_argument("from_atom_id")
     route.add_argument("to_atom_id")
+    graph_view = sub.add_parser("graph-view", help="Export the stable UI-agnostic graph-view-v1 JSON contract")
+    graph_view.add_argument("workspace")
+    graph_view.add_argument("--focus", default="atom-current")
+    graph_view.add_argument("--hide-required", action="store_true")
+    graph_view.add_argument("--hide-optional", action="store_true")
+    graph_view.add_argument("--include-research", action="store_true")
+    interactive = sub.add_parser("interactive", help="Export an optional standalone interactive graph-view HTML adapter")
+    interactive.add_argument("workspace")
+    interactive.add_argument("--output")
+    interactive.add_argument("--focus", default="atom-current")
+    interactive.add_argument("--hide-required", action="store_true")
+    interactive.add_argument("--hide-optional", action="store_true")
+    interactive.add_argument("--include-research", action="store_true")
     return parser
 
 
@@ -1126,6 +1340,44 @@ def run(argv: list[str] | None = None) -> None:
         print(json.dumps(engine.trace(args.atom_id, args.depth), ensure_ascii=False, indent=2))
     elif args.action == "route":
         print(json.dumps(engine.route(args.from_atom_id, args.to_atom_id), ensure_ascii=False, indent=2))
+    elif args.action == "graph-view":
+        print(
+            json.dumps(
+                engine.graph_view(
+                    focus=args.focus,
+                    include_required=not args.hide_required,
+                    include_optional=not args.hide_optional,
+                    include_research=args.include_research,
+                ),
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+    elif args.action == "interactive":
+        from graph_adapter import render_interactive_graph
+
+        view = engine.graph_view(
+            focus=args.focus,
+            include_required=not args.hide_required,
+            include_optional=not args.hide_optional,
+            include_research=args.include_research,
+        )
+        output_path = Path(args.output).resolve() if args.output else engine.workspace.root / "KNOWLEDGE_GRAPH.html"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        render_interactive_graph(view, output_path)
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "adapter": "standalone-html-v1",
+                    "view_version": GRAPH_VIEW_VERSION,
+                    "output": str(output_path),
+                    "canonical_state_mutated": False,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     elif args.action == "render":
         engine.render()
         print(json.dumps({"ok": True, "views": LINEAGE_VIEW_FILES}))

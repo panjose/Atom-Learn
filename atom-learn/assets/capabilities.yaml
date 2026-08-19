@@ -370,6 +370,44 @@ capabilities:
       - Sidecar OCR is available in the base runtime; automatic PyMuPDF/Tesseract OCR is a developer extra and is not distributed in the signed v0.14.2 base runtime.
       - Sources indexed before Document IR remain searchable but must be reingested before exam or research IR consumers can attach them.
 
+  - id: lineage.graph_view_v1
+    title: UI-agnostic knowledge graph contract with optional read-only interactive adapter
+    status: implemented
+    default_mode: enabled
+    public_claim: true
+    availability: *stable_core
+    interfaces:
+      - lineage graph-view
+      - lineage interactive
+      - lineage overview
+      - lineage trace
+      - lineage route
+    implementation:
+      - path: atom-learn/scripts/lineage.py
+        symbol: "def graph_view"
+      - path: atom-learn/scripts/graph_adapter.py
+        symbol: "def render_interactive_graph"
+      - path: atom-learn/assets/schemas/graph-view.schema.json
+        symbol: '"view_version": {"const": "graph-view-v1"}'
+    verification:
+      - path: tests/test_lineage.py
+        symbol: "test_graph_view_v1_is_stable_read_only_and_preserves_markdown_fallback"
+      - path: tests/test_lineage.py
+        symbol: "test_graph_view_distinguishes_containment_optional_scheduled_and_citation_edges"
+      - path: tests/test_lineage.py
+        symbol: "test_optional_interactive_adapter_is_standalone_and_does_not_mutate_state"
+    documentation:
+      - README.md
+      - README.zh-CN.md
+      - atom-learn/SKILL.md
+      - atom-learn/references/KNOWLEDGE_LINEAGE.md
+      - atom-learn/references/LINEAGE_SCHEMA.md
+      - docs/V0_15_PHASE10_IMPLEMENTATION.md
+    limitations:
+      - The HTML adapter is a local read-only view, not a canonical state editor or hosted frontend.
+      - Only prerequisite edges authorize activation; all other edges are explanatory or organizational.
+      - Markdown overview, trace, and route remain the stable fallback when no interactive client is available.
+
   - id: orchestration.typed_start_v1
     title: Revision-bound low-burden harness orchestration from one request to first Atom confirmation
     status: implemented

@@ -40,6 +40,7 @@ py-modules = [
   "exam",
   "exam_schedule",
   "lineage",
+  "graph_adapter",
   "platform_state",
   "migrations",
   "user_profile",

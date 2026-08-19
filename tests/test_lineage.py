@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 import yaml
+from jsonschema import Draft202012Validator
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -343,3 +344,92 @@ def test_learning_overlay_discloses_skipped_and_deferred_atoms() -> None:
     rendered = (path / "KNOWLEDGE_LINEAGE.md").read_text(encoding="utf-8")
     assert "Provisionally skipped" in rendered
     assert "Deferred" in rendered
+
+
+def test_graph_view_v1_is_stable_read_only_and_preserves_markdown_fallback() -> None:
+    path = workspace("graph-view")
+    output(invoke("lineage", "import", path, "--input", payload(path, "lineage.yaml", semantic_map())))
+    before = (path / "KNOWLEDGE_LINEAGE.md").read_text(encoding="utf-8")
+    revision = output(invoke("lineage", "status", path))["lineage_revision"]
+    view = output(invoke("lineage", "graph-view", path, "--focus", "calculus.derivative.definition"))
+    schema = json.loads((ROOT / "atom-learn" / "assets" / "schemas" / "graph-view.schema.json").read_text(encoding="utf-8"))
+    Draft202012Validator(schema).validate(view)
+    assert view["view_version"] == "graph-view-v1"
+    assert view["activation_edge_kind"] == "prerequisite"
+    assert view["focus_atom_id"] == "calculus.derivative.definition"
+    assert {item["kind"] for item in view["edges"]} >= {"prerequisite", "semantic-related"}
+    assert output(invoke("lineage", "status", path))["lineage_revision"] == revision
+    assert (path / "KNOWLEDGE_LINEAGE.md").read_text(encoding="utf-8") == before
+
+
+def test_graph_view_distinguishes_containment_optional_scheduled_and_citation_edges() -> None:
+    path = workspace("graph-kinds")
+    revision = output(invoke("status", path, "--json"))["course"]["revision"]
+    activated = output(invoke("activate", path, "calculus.limit.approach", "--expected-revision", revision))
+    scheduled = {
+        "text": "Will the derivative definition be taught later?",
+        "concept": "derivative definition",
+        "relation": "scheduled_successor",
+        "rationale": "The destination is already present later in the prerequisite graph.",
+        "related_atom_id": "calculus.derivative.definition",
+    }
+    parked = output(
+        invoke(
+            "route-concept", path, "--input", payload(path, "scheduled.yaml", scheduled),
+            "--action", "park", "--expected-revision", activated["revision"],
+        )
+    )
+    optional = {
+        "text": "Can we add the historical context?",
+        "concept": "historical context",
+        "relation": "optional_extension",
+        "rationale": "It is useful context but not required for the active objective.",
+        "new_atom": {
+            "id": "calculus.limit.history",
+            "title": "Historical context for limits",
+            "objective": "Relate the historical context to the limit concept",
+        },
+    }
+    branched = output(
+        invoke(
+            "route-concept", path, "--input", payload(path, "optional.yaml", optional),
+            "--action", "add_optional_branch", "--confirmed", "--expected-revision", parked["revision"],
+        )
+    )
+    expansion = {
+        "reason_code": "learner_requested_detail",
+        "child_atoms": [
+            {"id": "calculus.limit.approach.why", "title": "Why approach matters", "objective": "Explain why approach is needed"},
+            {"id": "calculus.limit.approach.how", "title": "How approach works", "objective": "Apply approach step by step"},
+        ],
+    }
+    output(
+        invoke(
+            "expand", path, "calculus.limit.approach", "--plan", payload(path, "expansion.yaml", expansion),
+            "--confirmed", "--expected-revision", branched["revision"],
+        )
+    )
+    output(invoke("research", "init", path, "--field", "Agent reliability", "--question", "What works?", "--scope", "Methods"))
+    output(invoke("research", "import", path, "--input", RESEARCH_PLAN, "--expected-research-revision", 0))
+    view = output(invoke("lineage", "graph-view", path, "--include-research"))
+    kinds = {item["kind"] for item in view["edges"]}
+    assert {"prerequisite", "containment", "optional-branch", "scheduled-successor", "citation"} <= kinds
+    assert any(item["kind"] == "paper" for item in view["nodes"])
+    filtered = output(invoke("lineage", "graph-view", path, "--hide-optional"))
+    assert all(item["optional"] is False for item in filtered["nodes"])
+    assert all(item["kind"] != "paper" for item in filtered["nodes"])
+
+
+def test_optional_interactive_adapter_is_standalone_and_does_not_mutate_state() -> None:
+    path = workspace("interactive")
+    before = output(invoke("lineage", "status", path))["lineage_revision"]
+    target = path / "graph.html"
+    result = output(invoke("lineage", "interactive", path, "--output", target))
+    assert result["canonical_state_mutated"] is False
+    assert result["view_version"] == "graph-view-v1"
+    rendered = target.read_text(encoding="utf-8")
+    assert "AtomLearn Knowledge Graph" in rendered
+    assert '"view_version":"graph-view-v1"' in rendered
+    assert "https://" not in rendered and "<script src=" not in rendered
+    assert output(invoke("lineage", "status", path))["lineage_revision"] == before
+    assert (path / "KNOWLEDGE_LINEAGE.md").is_file()

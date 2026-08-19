@@ -7,6 +7,7 @@
 - Initialize and inspect
 - Build semantic context
 - Query the map
+- Export graph-view-v1
 - Apply the lenses
 - Keep it current
 - Quality and safety rules
@@ -119,6 +120,25 @@ python <SKILL_DIR>/scripts/atomlearn.py lineage route <workspace> <from-atom-id>
 ```
 
 The shortest route may traverse prerequisite or semantic edges. Every step exposes its relation type and traversal direction. Explain reverse prerequisite traversal as navigation only; it does not reverse the learning dependency.
+
+## Export graph-view-v1
+
+Use `graph-view` when a UI or harness needs a stable read model:
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py lineage graph-view <workspace> --focus atom-current
+python <SKILL_DIR>/scripts/atomlearn.py lineage graph-view <workspace> --hide-optional --include-research
+```
+
+The result is validated against [graph-view.schema.json](../assets/schemas/graph-view.schema.json). It keeps `prerequisite`, `containment`, `scheduled-successor`, `optional-branch`, `citation`, and `semantic-related` edges distinct. Required and optional Atom filters are independent, research papers are excluded by default, and `activation_edge_kind` is always `prerequisite`.
+
+The optional adapter writes a standalone HTML view with no external runtime dependency:
+
+```text
+python <SKILL_DIR>/scripts/atomlearn.py lineage interactive <workspace> --include-research
+```
+
+It supports search, focus, edge filtering, and node inspection but does not own state or change course/lineage revisions. `KNOWLEDGE_LINEAGE.md`, `overview`, `trace`, and `route` remain the stable fallback.
 
 ## Apply the lenses
 

@@ -196,7 +196,9 @@ Do not use `response.detail=detailed` as permission to collapse several child At
 4. For a concept's 来龙去脉, run `lineage trace <atom-id>`. For how two concepts connect, run `lineage route <from> <to>`.
 5. When more explanation is useful, use RAG to ground Atom roles, central questions, boundaries, semantic relations, and curated threads. Import them with an expected lineage revision.
 6. Use `motivates`, `defines`, `derives`, `generalizes`, `specializes`, `contrasts`, `analogous_to`, `extends`, `refines`, `supersedes`, `applies_to`, `implements`, `evaluates`, or `bridges` precisely. Do not substitute a generic `related_to` edge.
-7. Render and validate. Present a narrative spine plus relevant branches rather than dumping every node.
+7. Use `lineage graph-view` when a UI or harness needs the stable `graph-view-v1` contract. Keep prerequisite, containment, scheduled-successor, optional-branch, citation, and semantic-related edges distinct; only prerequisite edges authorize activation.
+8. Use `lineage interactive` only as an optional read-only adapter. It may search, focus, filter, collapse, or inspect the exported graph, but it must never own canonical state. Keep the Markdown overview/trace/route fallback complete.
+9. Render and validate. Present a narrative spine plus relevant branches rather than dumping every node.
 
 ```text
 python <SKILL_DIR>/scripts/atomlearn.py lineage init <workspace>
@@ -204,6 +206,8 @@ python <SKILL_DIR>/scripts/atomlearn.py lineage import <workspace> --input <line
 python <SKILL_DIR>/scripts/atomlearn.py lineage overview <workspace> --lens all
 python <SKILL_DIR>/scripts/atomlearn.py lineage trace <workspace> <atom-id> --depth 3
 python <SKILL_DIR>/scripts/atomlearn.py lineage route <workspace> <from-atom-id> <to-atom-id>
+python <SKILL_DIR>/scripts/atomlearn.py lineage graph-view <workspace> --focus atom-current
+python <SKILL_DIR>/scripts/atomlearn.py lineage interactive <workspace> --include-research
 ```
 
 Keep the prerequisite DAG authoritative for activation and mastery. Semantic edges explain meaning but never unlock Atoms. Ground every high-confidence relation in a registered course or RAG source; use `synthesized` only for an explicitly labeled synthesis.

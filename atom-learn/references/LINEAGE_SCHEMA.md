@@ -1,5 +1,7 @@
 # Knowledge lineage schema
 
+`graph-view-v1` is defined separately by [graph-view.schema.json](../assets/schemas/graph-view.schema.json). It is a generated read model, not canonical lineage state. Its `revision` binds lineage state, `course_revision` binds course state, and `activation_edge_kind: prerequisite` prevents clients from treating semantic, containment, branch, scheduled, or citation edges as unlock rules.
+
 ## Contents
 
 - Canonical files
