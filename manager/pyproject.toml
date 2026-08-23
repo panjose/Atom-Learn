@@ -1,6 +1,6 @@
 [project]
 name = "atomlearn-manager"
-version = "0.2.0"
+version = "0.3.0"
 description = "Stable signed release manager for side-by-side AtomLearn Core installations"
 readme = "README.md"
 requires-python = ">=3.10"

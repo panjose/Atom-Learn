@@ -19,7 +19,7 @@ The manager root must be isolated from both the AtomLearn user-data root and eve
 Install a reviewed Manager wheel independently from the signed Core artifact it will manage:
 
 ```powershell
-python -m pip install <REVIEWED_ATOMLEARN_MANAGER_WHEEL>
+python -m pip install "https://github.com/panjose/Atom-Learn/releases/download/v0.15.0/atomlearn_manager-0.3.0-py3-none-any.whl"
 atomlearn-manager --help
 atomlearn-core --help
 ```

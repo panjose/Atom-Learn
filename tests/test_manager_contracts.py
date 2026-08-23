@@ -661,6 +661,17 @@ def test_manager_atomic_writes_use_short_target_independent_temp_names(
         assert target.name not in temporary.name
 
 
+def test_runtime_bootstrap_uses_only_cpython_bundled_pip() -> None:
+    from atomlearn_manager.runtime import _bundled_pip_wheel
+
+    wheel = _bundled_pip_wheel()
+    assert wheel.name.startswith("pip-")
+    assert wheel.suffix == ".whl"
+    runtime_source = (MANAGER_ROOT / "atomlearn_manager" / "runtime.py").read_text(encoding="utf-8")
+    assert "venv.EnvBuilder(with_pip=False" in runtime_source
+    assert "venv.EnvBuilder(with_pip=True" not in runtime_source
+
+
 def test_tag_release_workflow_is_signed_gated_and_immutable() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "needs: [release-gates, scale-rag]" in workflow

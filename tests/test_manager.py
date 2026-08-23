@@ -197,7 +197,7 @@ def test_release_builder_rejects_a_private_key_missing_from_the_trust_bundle(tmp
     wrong_root.mkdir()
     wrong_private, _ = signing_material(wrong_root)
     source = synthetic_source(tmp_path, "0.13.0")
-    manager_wheel = tmp_path / "atomlearn_manager-0.2.0-py3-none-any.whl"
+    manager_wheel = tmp_path / "atomlearn_manager-0.3.0-py3-none-any.whl"
     manager_wheel.write_bytes(b"synthetic manager")
     commit = "e" * 40
     report = gate_report(tmp_path / "gate.json", "0.13.0", commit)
@@ -658,7 +658,7 @@ def build(
 ) -> dict:
     commit = commit_char * 40
     output_dir = tmp_path / f"release-{version}-{uuid.uuid4().hex}"
-    manager_wheel = tmp_path / f"manager-wheel-{uuid.uuid4().hex}" / "atomlearn_manager-0.2.0-py3-none-any.whl"
+    manager_wheel = tmp_path / f"manager-wheel-{uuid.uuid4().hex}" / "atomlearn_manager-0.3.0-py3-none-any.whl"
     manager_wheel.parent.mkdir(parents=True)
     manager_wheel.write_bytes(b"synthetic signed manager wheel")
     report = gate_report(tmp_path / f"gate-{version}-{uuid.uuid4().hex}.json", version, commit)
@@ -703,7 +703,7 @@ def build_profile_prerelease(
     system, architecture, python_minor = platform_identity()
     assert architecture == "amd64"
     output_dir = tmp_path / f"profile-release-{uuid.uuid4().hex}"
-    manager_wheel = tmp_path / f"profile-manager-{uuid.uuid4().hex}" / "atomlearn_manager-0.2.0-py3-none-any.whl"
+    manager_wheel = tmp_path / f"profile-manager-{uuid.uuid4().hex}" / "atomlearn_manager-0.3.0-py3-none-any.whl"
     manager_wheel.parent.mkdir(parents=True)
     manager_wheel.write_bytes(b"synthetic signed manager wheel")
     commit = "9" * 40
@@ -894,7 +894,7 @@ def test_signed_side_by_side_upgrade_and_paired_rollback(tmp_path: Path) -> None
     old = build(tmp_path, synthetic_source(tmp_path, "0.12.0"), "0.12.0", private_key, commit_char="a")
     current = build(tmp_path, synthetic_source(tmp_path, "0.13.0"), "0.13.0", private_key, commit_char="b")
     current_manifest = json.loads(Path(current["manifest"]).read_text(encoding="utf-8"))
-    assert current_manifest["manager_artifact"]["version"] == "0.2.0"
+    assert current_manifest["manager_artifact"]["version"] == "0.3.0"
     assert current_manifest["manager_artifact"]["sha256"] == current["manager_artifact_sha256"]
     with zipfile.ZipFile(current["artifact"]) as archive:
         embedded_gate = archive.read("atomlearn-0.13.0/release/gate-report.json")

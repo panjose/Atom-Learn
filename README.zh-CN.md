@@ -11,7 +11,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 > 当前知识原子尚未真正理解，就绝不推进。  
 > 在当前 Knowledge Atom 真正掌握前，不进入下一个知识原子。
 
-> **发布状态：**当前最新签名稳定版是 `v0.15.0`，并且只交付 `base` profile。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据始终是彼此独立的声明。
+> **发布状态：**当前最新签名稳定版是 `v0.14.2`。这个源码树是 `v0.15.0` 稳定候选，在 tag 工作流发布签名资产前仍属于 `development`；两条发行线都只交付 `base` profile。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据始终是彼此独立的声明。
 
 ## 已实现功能
 
@@ -37,7 +37,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 分析学习证据，并生成有边界、需审批的课程进化提案
 - 从规范化 YAML 状态生成学习、科研、个性化和进化视图
 
-发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。账本会分别记录交付等级、runtime、artifact、用户入口、工程验证、harness 行为证据和学习效果证据。签名 `v0.15.0` runtime 只交付 `base` profile；`ocr`、`scale` 和 `semantic` 是开发者/源码 extras，不包含在该稳定 runtime 中。AtomLearn 尚未建立任何学习增益效果结论。工程检查、评分器校准、本地策略实验和 study 记录契约都不得被描述成这种证据。
+发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。账本会分别记录交付等级、runtime、artifact、用户入口、工程验证、harness 行为证据和学习效果证据。`v0.15.0` 候选只有在签名发布成功后才会交付 `base` profile；`ocr`、`scale` 和 `semantic` 是开发者/源码 extras，不包含在该稳定 runtime 中。AtomLearn 尚未建立任何学习增益效果结论。工程检查、评分器校准、本地策略实验和 study 记录契约都不得被描述成这种证据。
 
 ## 安装
 
@@ -46,7 +46,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 先独立安装经过复核的 `atomlearn-manager` wheel，不要从它将管理的 Core 中安装 Manager。然后使用同一组幂等 bootstrap 命令预览并执行 trust 初始化、签名 Core/base runtime、Manager 所有的 Codex bridge 和最终 capability doctor：
 
 ```powershell
-python -m pip install <REVIEWED_ATOMLEARN_MANAGER_WHEEL>
+python -m pip install "https://github.com/panjose/Atom-Learn/releases/download/v0.15.0/atomlearn_manager-0.3.0-py3-none-any.whl"
 atomlearn-manager bootstrap plan 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
 atomlearn-manager bootstrap apply 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
 atomlearn-manager bootstrap status
@@ -67,7 +67,7 @@ atomlearn --help
 
 可编辑安装会提供更短的 `atomlearn` 控制台命令；把 Skill 目录单独复制后，仍支持直接运行 `python atom-learn/scripts/atomlearn.py ...`。
 
-确定性小语料 RAG 路径不需要模型运行时。在开发者/源码环境中，需要自动 OCR adapter 时安装 `.[ocr]`，需要 USearch HNSW generation 时安装 `.[scale]`，需要显式批准的本地 Sentence Transformers 模型时安装 `.[semantic]`。这些 extras 不存在于签名 `v0.15.0` base runtime 中，因此目前还不是稳定发行能力。sidecar OCR 与供应商生成向量的 attachment 仍可通过 base 路径使用。
+确定性小语料 RAG 路径不需要模型运行时。在开发者/源码环境中，需要自动 OCR adapter 时安装 `.[ocr]`，需要 USearch HNSW generation 时安装 `.[scale]`，需要显式批准的本地 Sentence Transformers 模型时安装 `.[semantic]`。这些 extras 不包含在 `v0.15.0` 候选计划发布的签名 base runtime 中，因此目前还不是稳定发行能力。sidecar OCR 与供应商生成向量的 attachment 仍可通过 base 路径使用。
 
 将仓库中的 `atom-learn` 目录复制或链接到个人 Codex Skills 目录，例如：
 
@@ -158,7 +158,7 @@ python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expect
 
 ## RAG 与纠错式 Web Search
 
-AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，稳定 base 还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 sidecar OCR 输出。检索会返回精确支持证据的 IR block ID 与有界 parent context，融合 SQLite FTS5 BM25 与默认本地多语言哈希向量，并可 attachment 供应商生成的向量。自动 OCR、显式批准的本地学习型 embedding、USearch HNSW 和 cross-encoder 重排是已实现的开发者/源码路径，不属于签名 `v0.15.0` base runtime 能力。小语料继续使用轻依赖路径；没有已安装且通过验证的 HNSW generation 时，大语料 dense 检索会以零扫描分块的方式跳过该分量。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
+AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，稳定 base 还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 sidecar OCR 输出。检索会返回精确支持证据的 IR block ID 与有界 parent context，融合 SQLite FTS5 BM25 与默认本地多语言哈希向量，并可 attachment 供应商生成的向量。自动 OCR、显式批准的本地学习型 embedding、USearch HNSW 和 cross-encoder 重排是已实现的开发者/源码路径，不属于 `v0.15.0` 候选计划发布的签名 base runtime 能力。小语料继续使用轻依赖路径；没有已安装且通过验证的 HNSW generation 时，大语料 dense 检索会以零扫描分块的方式跳过该分量。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
 
 Phase 9 将这个 IR 扩展为面向科研的图表证据契约。表格会保留行、列、表头和跨行/跨列结构；figure 和 table 可以携带页面几何、稳定 crop hash、caption 与相邻正文 locator、抽取置信度和复核状态。OCR/vision 识别出的数值默认只是 proposal。科研量化 claim 必须指向当前 Document IR block，并匹配 crop/元数据；证据过期、被拒绝或仍待复核时不能完成。
 
@@ -337,7 +337,7 @@ python atom-learn/scripts/atomlearn.py behavior validate-report --input behavior
 
 ### 签名 Release Manager
 
-Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Runtime recipe v2 会把有限的 profile 名称与能力集合、完整依赖锁、OS/架构/Python ABI、模型策略或显式模型文件锁、原生引擎要求以及目标平台 smoke 报告绑定到签名 release。Manager 会把每个 profile 离线安装到 `runtimes/<core>/<platform>/<profile-hash-prefix>/`，用不可变状态中的完整 hash 验证它，执行 preflight 与 Core smoke，然后才原子切换 active profile 指针。profile 安装失败或中断时旧 profile 仍然 active；Core 回滚与 profile 回滚使用彼此独立的配对事务历史。当前签名 `v0.15.0` 的交付声明仍然只有 `base`：`scale`、`semantic-cpu` 和 `ocr` 在完整签名矩阵通过前仍是候选 recipe，`semantic-gpu` 则是 experimental。
+Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Runtime recipe v2 会把有限的 profile 名称与能力集合、完整依赖锁、OS/架构/Python ABI、模型策略或显式模型文件锁、原生引擎要求以及目标平台 smoke 报告绑定到签名 release。Manager 会把每个 profile 离线安装到 `runtimes/<core>/<platform>/<profile-hash-prefix>/`，用不可变状态中的完整 hash 验证它，执行 preflight 与 Core smoke，然后才原子切换 active profile 指针。profile 安装失败或中断时旧 profile 仍然 active；Core 回滚与 profile 回滚使用彼此独立的配对事务历史。如果 `v0.15.0` 候选通过签名发布工作流，它的交付声明将只有 `base`：`scale`、`semantic-cpu` 和 `ocr` 在完整签名矩阵通过前仍是候选 recipe，`semantic-gpu` 则是 experimental。
 
 ```powershell
 atomlearn-manager bootstrap plan 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222

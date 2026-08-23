@@ -430,6 +430,61 @@ def runtime_python(runtime_root: Path) -> Path:
     return runtime_root / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
 
 
+def _bundled_pip_wheel() -> Path:
+    """Return the pip wheel trusted by the running CPython distribution."""
+    try:
+        import ensurepip
+
+        wheels = sorted((Path(ensurepip.__file__).resolve().parent / "_bundled").glob("pip-*.whl"))
+    except (ImportError, OSError) as exc:
+        raise ManagerError("The running Python distribution does not expose its bundled pip wheel") from exc
+    if len(wheels) != 1 or not wheels[0].is_file():
+        raise ManagerError("The running Python distribution must expose exactly one bundled pip wheel")
+    return wheels[0]
+
+
+def _create_runtime_environment(staging: Path) -> Path:
+    """Create a venv and bootstrap only pip from CPython's offline wheel.
+
+    Python 3.10 and 3.11 ``ensurepip`` also install a legacy setuptools wheel
+    containing deeply nested test fixtures. On Windows that can exceed the
+    traditional path limit for an otherwise valid Manager root. Runtime
+    recipes contain built wheels only, so setuptools is unnecessary here.
+    """
+    venv.EnvBuilder(with_pip=False, clear=False, symlinks=False).create(staging)
+    python = runtime_python(staging)
+    pip_wheel = _bundled_pip_wheel()
+    bootstrap = (
+        "import runpy,sys;"
+        "wheel=sys.argv.pop(1);"
+        "sys.path.insert(0,wheel);"
+        "sys.argv[0]=wheel;"
+        "runpy.run_module('pip',run_name='__main__')"
+    )
+    result = subprocess.run(
+        [
+            str(python),
+            "-c",
+            bootstrap,
+            str(pip_wheel),
+            "install",
+            "--no-index",
+            "--no-deps",
+            "--disable-pip-version-check",
+            str(pip_wheel),
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        timeout=120,
+        check=False,
+    )
+    if result.returncode != 0:
+        details = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
+        raise ManagerError(f"Cannot bootstrap the signed runtime's bundled pip: {details}")
+    return python
+
+
 def _runtime_content_hash(runtime_root: Path) -> str:
     digest = hashlib.sha256()
     paths = sorted(
@@ -553,8 +608,7 @@ def install_runtime(
         _mark_runtime_read_only(wheelhouse_staging)
         os.replace(wheelhouse_staging, wheelhouse)
     try:
-        venv.EnvBuilder(with_pip=True, clear=False, symlinks=False).create(staging)
-        python = runtime_python(staging)
+        python = _create_runtime_environment(staging)
         locked_wheels = [wheelhouse / item["filename"] for item in inspected["recipe"]["wheels"]]
         command = [
             str(python), "-m", "pip", "install", "--no-index", "--find-links", str(wheelhouse),
