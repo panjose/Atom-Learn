@@ -1,6 +1,6 @@
 kind: atomlearn.release-upgrade-fixture
 schema_version: 1
-target_core_version: 0.14.2
+target_core_version: 0.15.0
 schema_edges:
   - namespace: evidence
     from: 1
@@ -21,4 +21,6 @@ upgrade_paths:
   - from_core_version: 0.13.0
     expected: compatible_state_copy
   - from_core_version: 0.14.1
+    expected: compatible_state_copy
+  - from_core_version: 0.14.2
     expected: compatible_state_copy

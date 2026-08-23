@@ -1,6 +1,6 @@
 kind: atomlearn.capability-ledger
 schema_version: 2
-core_version: 0.14.2
+core_version: 0.15.0
 claim_policy:
   stable_runtime_profiles: [base]
   developer_extras: [ocr, scale, semantic]
@@ -367,7 +367,7 @@ capabilities:
     limitations:
       - PDF table and figure detection remains best effort; coordinates and crop hashes are only present when an extractor supplies trustworthy metadata.
       - OCR and vision numeric values remain proposal-only until reviewed or reproducibly recalculated; this is an evidence gate, not automatic chart verification.
-      - Sidecar OCR is available in the base runtime; automatic pypdfium2/Tesseract OCR is an unreleased v0.15 developer extra and is not distributed in the signed v0.14.2 base runtime.
+      - Sidecar OCR is available in the base runtime; automatic pypdfium2/Tesseract OCR remains a developer extra and is not distributed in the signed v0.15.0 base runtime.
       - Sources indexed before Document IR remain searchable but must be reingested before exam or research IR consumers can attach them.
 
   - id: lineage.graph_view_v1
@@ -490,7 +490,7 @@ capabilities:
       - docs/V0_14_REMEDIATION_DESIGN.md
     limitations:
       - Models are user-supplied local directories; AtomLearn never silently downloads them and rejects pickle-capable weights or custom model code.
-      - USearch and sentence-transformers remain developer/source optional extras and are not distributed in the signed v0.14.2 base runtime; the zero-provider deterministic path stays available for small corpora.
+      - USearch and sentence-transformers remain developer/source optional extras and are not distributed in the signed v0.15.0 base runtime; the zero-provider deterministic path stays available for small corpora.
       - Cross-encoders are activated only from a passing, current bundled benchmark profile and can be bypassed per query.
       - The held-out release suite establishes retrieval, parsing, citation, and grounding engineering performance only. Its default hash path is an explicitly non-learned baseline, and a learned profile still needs its distributed runtime plus the unchanged release set before a stable delivery claim.
 
@@ -608,7 +608,7 @@ capabilities:
     limitations:
       - The published convenience trust bundle is strongly trusted only when its fingerprint is verified through an independent channel.
       - The stable CI runtime matrix currently targets amd64 Windows and Linux; the bundle schema also models arm64 for future release gates.
-      - The current v0.14.2 delivery claim remains base-only. Scale, semantic-cpu, and OCR recipes are candidates until signed assets pass their full target-platform matrices; semantic-gpu remains experimental.
+      - The current v0.15.0 delivery claim remains base-only. Scale, semantic-cpu, and OCR recipes are candidates until signed assets pass their full target-platform matrices; semantic-gpu remains experimental.
       - Exact first-bootstrap migration of an existing official source copy requires the corresponding local signed Core artifact so identity can be established before installation.
 
   - id: review.adaptive_memory_v1

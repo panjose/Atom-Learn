@@ -10,7 +10,7 @@ The AtomLearn Release Manager is a separate, stable distribution. It installs si
 - Stable artifacts must use an exact immutable GitHub tagged-release URL. Branch archives, HTTP, decorated URLs, prerelease versions on the stable channel, and cross-repository assets are rejected.
 - Manifest v2 binds the artifact filename, byte size, SHA-256, normalized content-tree hash, embedded Core manifest, package version, schema declarations, commit, tag, CI gate report, Skill entry-point hash/protocol, capability ledger, runtime-profile registry, smoke fixtures, trust-bundle version, and target-specific runtime recipe.
 - New artifact code is not executed until signature, archive structure, hashes, and embedded identities have been verified.
-- A runtime bundle contains the complete wheelhouse, canonical profile recipe, and canonical target-platform smoke report, never a copied virtual environment. Manager installs every locked wheel with `pip --no-index --no-deps`; the base profile never fetches a model or OCR engine. The `v0.14.2` stable line declares only `base`; the signed registry defines `scale`, `semantic-cpu`, and `ocr` as promotion candidates and `semantic-gpu` as experimental without pretending those assets were delivered.
+- A runtime bundle contains the complete wheelhouse, canonical profile recipe, and canonical target-platform smoke report, never a copied virtual environment. Manager installs every locked wheel with `pip --no-index --no-deps`; the base profile never fetches a model or OCR engine. The `v0.15.0` stable line declares only `base`; the signed registry defines `scale`, `semantic-cpu`, and `ocr` as promotion candidates and `semantic-gpu` as experimental without pretending those assets were delivered.
 
 The manager root must be isolated from both the AtomLearn user-data root and every course workspace. Trust initialization never overwrites an existing trust root.
 
@@ -27,8 +27,8 @@ atomlearn-core --help
 Keep the release private key outside the repository and manager host. Manager carries a byte-identical convenience copy of the public trust bundle, but strong trust still requires comparing the active fingerprint through an independent channel. Preview and apply the complete onboarding through one command family:
 
 ```powershell
-atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
-atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap plan 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
 atomlearn-manager bootstrap status
 ```
 
@@ -105,8 +105,8 @@ Use an immutable signed release-manifest URL or a previously downloaded local ma
 
 ```powershell
 atomlearn-manager update check --manifest <MANIFEST_PATH_OR_HTTPS_URL> --channel stable
-atomlearn-manager update plan 0.14.2 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE>
-atomlearn-manager update apply 0.14.2 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE> --confirmed
+atomlearn-manager update plan 0.15.0 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE>
+atomlearn-manager update apply 0.15.0 --manifest <MANIFEST_PATH_OR_HTTPS_URL> --artifact <LOCAL_ZIP> --runtime-bundle <LOCAL_RUNTIME_ZIP> --data-dir <ABSOLUTE_USER_DATA> --workspace <ABSOLUTE_COURSE> --confirmed
 atomlearn-manager update status
 ```
 

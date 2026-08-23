@@ -11,7 +11,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 > Never advance while the current atom remains unclear.  
 > Do not move to the next Knowledge Atom until the current one is genuinely understood.
 
-> **Release status:** the latest signed stable release is `v0.14.2` and exposes only the `base` profile. `main` contains unreleased `v0.15` implementation work. Repository engineering status, stable delivery, harness/model behavior evidence, and human learning-effect evidence remain separate claims.
+> **Release status:** the latest signed stable release is `v0.15.0` and exposes only the `base` profile. Repository engineering status, stable delivery, harness/model behavior evidence, and human learning-effect evidence remain separate claims.
 
 ## Implemented Capabilities
 
@@ -37,7 +37,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Analyze learning evidence and propose bounded, approval-gated course evolution
 - Generate learning, research, personalization, and evolution views from canonical YAML state
 
-The release source of truth is the machine-readable [capability ledger](atom-learn/assets/capabilities.yaml). Implemented describes repository code status, not stable release delivery. The ledger separately records delivery level, runtime, artifact, entrypoint, engineering verification, harness-behavior evidence, and learning-effect evidence. The signed `v0.14.2` runtime exposes only the `base` profile; `ocr`, `scale`, and `semantic` are developer/source extras and are not included in that stable runtime. No AtomLearn learning-gain effect has been established. Engineering checks, scorer calibration, local strategy experiments, and the study-recording contract must never be presented as that evidence.
+The release source of truth is the machine-readable [capability ledger](atom-learn/assets/capabilities.yaml). Implemented describes repository code status, not stable release delivery. The ledger separately records delivery level, runtime, artifact, entrypoint, engineering verification, harness-behavior evidence, and learning-effect evidence. The signed `v0.15.0` runtime exposes only the `base` profile; `ocr`, `scale`, and `semantic` are developer/source extras and are not included in that stable runtime. No AtomLearn learning-gain effect has been established. Engineering checks, scorer calibration, local strategy experiments, and the study-recording contract must never be presented as that evidence.
 
 ## Installation
 
@@ -47,8 +47,8 @@ Install a reviewed `atomlearn-manager` wheel independently from the Core it will
 
 ```powershell
 python -m pip install <REVIEWED_ATOMLEARN_MANAGER_WHEEL>
-atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
-atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap plan 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
 atomlearn-manager bootstrap status
 ```
 
@@ -67,7 +67,7 @@ atomlearn --help
 
 The editable install exposes the short `atomlearn` console command. Direct `python atom-learn/scripts/atomlearn.py ...` invocation remains supported inside a copied Skill directory.
 
-The deterministic small-corpus RAG path needs no model runtime. In a developer/source environment, install `.[ocr]` for the automatic OCR adapter, `.[scale]` for USearch HNSW generations, or `.[semantic]` for explicitly approved local Sentence Transformers models. These extras are not present in signed `v0.14.2` base runtimes and therefore are not stable release capabilities yet. Sidecar OCR and provider-supplied vector attachment remain available through the base path.
+The deterministic small-corpus RAG path needs no model runtime. In a developer/source environment, install `.[ocr]` for the automatic OCR adapter, `.[scale]` for USearch HNSW generations, or `.[semantic]` for explicitly approved local Sentence Transformers models. These extras are not present in signed `v0.15.0` base runtimes and therefore are not stable release capabilities yet. Sidecar OCR and provider-supplied vector attachment remain available through the base path.
 
 Copy or link the repository's `atom-learn` directory into your personal Codex Skills directory, for example:
 
@@ -90,7 +90,7 @@ atomlearn status courses/calculus --json
 
 Every course render writes the five English views plus aligned `*.zh-CN.md` generated views, including `LEARNING_MAP.zh-CN.md`, `CURRENT.zh-CN.md`, and `PROGRESS.zh-CN.md`. Atom titles and learner content stay unchanged; navigation labels, statuses, and operational text are localized. See [SKILL.md](atom-learn/SKILL.md) for the complete command workflow and teaching behavior, and [SCHEMA.md](atom-learn/references/SCHEMA.md) for structured input formats. Runtime course state is stored in the learner's selected course workspace, not in the Skill installation directory.
 
-Core `0.14.2` retains read-only compatibility and deterministic migration planning while adding the remediation gates documented below. `atomlearn migrate status|plan|validate` never applies a migration; checking status does not create the platform user-data directory. See [Core Version and Migrations](atom-learn/references/MIGRATIONS.md).
+Core `0.15.0` retains read-only compatibility and deterministic migration planning while adding the remediation gates documented below. `atomlearn migrate status|plan|validate` never applies a migration; checking status does not create the platform user-data directory. See [Core Version and Migrations](atom-learn/references/MIGRATIONS.md).
 
 Cross-course personalization remains off until the learner explicitly runs `atomlearn profile enable <workspace>`. Global profiles contain only allowlisted enum signals, never import old workspace history automatically, and can be disabled, retired, exported, or reset without deleting their audit trail. `atomlearn policy effective|explain` merges current-turn, workspace, global, strategy, and Core layers with per-value provenance. See [User Profiles](atom-learn/references/USER_PROFILE.md) and [Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md).
 
@@ -158,7 +158,7 @@ Complete-source mode inventories and reconciles materials; outline mode treats o
 
 ## RAG and Corrective Web Search
 
-AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. The stable base preserves HTML and DOCX structure, PDF tables and formulas, plus locatable sidecar OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns exact supporting IR block IDs plus bounded parent context and fuses SQLite FTS5 BM25 with a default local multilingual hash vector; provider-supplied vectors can also be attached. Automatic OCR, approved local learned embeddings, USearch HNSW, and cross-encoder reranking are implemented developer/source paths, not signed `v0.14.2` base-runtime capabilities. Small corpora keep the dependency-light path; without an installed and verified HNSW generation, large dense retrieval skips that component with zero scanned chunks. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
+AtomLearn persists a provider-neutral RAG index inside each learner workspace. Every new source revision first becomes a versioned layout-preserving Document IR shared by retrieval, exam processing, and research attachment. The stable base preserves HTML and DOCX structure, PDF tables and formulas, plus locatable sidecar OCR output in addition to TXT, Markdown, RST, JSON, YAML, and CSV. Retrieval returns exact supporting IR block IDs plus bounded parent context and fuses SQLite FTS5 BM25 with a default local multilingual hash vector; provider-supplied vectors can also be attached. Automatic OCR, approved local learned embeddings, USearch HNSW, and cross-encoder reranking are implemented developer/source paths, not signed `v0.15.0` base-runtime capabilities. Small corpora keep the dependency-light path; without an installed and verified HNSW generation, large dense retrieval skips that component with zero scanned chunks. The harness makes the final direct-support judgment; rank scores are never treated as confidence.
 
 Phase 9 extends this IR for research-grade figure and table evidence. Tables retain row/column/header/span structure, while figures and tables may carry page geometry, a stable crop hash, caption and adjacent-text locators, extraction confidence, and review status. OCR/vision numeric observations are proposal-only by default. A quantitative research claim must point to a current Document IR block and matching crop/metadata, and cannot complete while the evidence is stale, rejected, or awaiting review.
 
@@ -337,11 +337,11 @@ The release ledger remains `harness_behavior: not_evaluated` until maintainers r
 
 ### Signed Release Manager
 
-Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. Runtime recipe v2 binds a finite profile name and capability set, full dependency lock, OS/architecture/Python ABI, model policy or explicit model-file lock, native-engine requirements, and a target-platform smoke report into the signed release. Manager installs each profile offline into `runtimes/<core>/<platform>/<profile-hash-prefix>/`, verifies the full hash in its immutable state, runs preflight and Core smoke, and only then atomically changes the active profile pointer. A failed or interrupted profile install leaves the old profile active; Core rollback and profile rollback retain separate paired transaction histories. The current signed `v0.14.2` delivery claim remains `base` only: `scale`, `semantic-cpu`, and `ocr` are candidate recipes until their complete signed matrices pass, while `semantic-gpu` is experimental.
+Core updates are handled by the independent `atomlearn-manager` distribution, never by a learning session. Runtime recipe v2 binds a finite profile name and capability set, full dependency lock, OS/architecture/Python ABI, model policy or explicit model-file lock, native-engine requirements, and a target-platform smoke report into the signed release. Manager installs each profile offline into `runtimes/<core>/<platform>/<profile-hash-prefix>/`, verifies the full hash in its immutable state, runs preflight and Core smoke, and only then atomically changes the active profile pointer. A failed or interrupted profile install leaves the old profile active; Core rollback and profile rollback retain separate paired transaction histories. The current signed `v0.15.0` delivery claim remains `base` only: `scale`, `semantic-cpu`, and `ocr` are candidate recipes until their complete signed matrices pass, while `semantic-gpu` is experimental.
 
 ```powershell
-atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
-atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap plan 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
 atomlearn-manager bootstrap status
 atomlearn-manager bootstrap recover
 atomlearn-manager update status
@@ -352,7 +352,7 @@ atomlearn-core version
 
 The bridge marker binds its resolver to the exact Manager root selected during bootstrap, including custom roots. `codex migrate plan` is read-only; `codex migrate apply --confirmed` takes over only an exact known official source tree, retains the source backup, and journals crash recovery. `profile plan` and `profile apply` select only a profile asset declared by the active signed manifest. Semantic activation requires an absolute local model directory whose revision and every required file hash match the signed lock; it never downloads a model or enables remote code. OCR activation distinguishes installed Python adapters from the required native engine. `doctor` reports `available`, `declared`, `installed`, `usable`, and `stable` independently with a typed blocker and remediation. Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for profile commands, fingerprint verification, key rotation, recovery, rollback, migration, and transport boundaries.
 
-All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.14.2 Release Notes](docs/releases/v0.14.2.md), and [Changelog](CHANGELOG.md).
+All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.15.0 Release Notes](docs/releases/v0.15.0.md), and [Changelog](CHANGELOG.md).
 
 ## Open Source and Community
 
@@ -396,6 +396,7 @@ Do not commit textbooks, paper corpora, exam answers, learner workspaces, `.atom
 - [Signed Release Manager Operations](atom-learn/references/RELEASE_MANAGER.md)
 - [Self-Evolution v2 Operations and Recovery](docs/SELF_EVOLUTION_V2_OPERATIONS.md)
 - [0.13.0 Release Notes](docs/releases/v0.13.0.md)
+- [0.15.0 Release Notes](docs/releases/v0.15.0.md)
 - [0.14.2 Release Notes](docs/releases/v0.14.2.md)
 
 ## Development Validation

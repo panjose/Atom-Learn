@@ -107,6 +107,12 @@ def check_metadata(failures: list[str]) -> None:
             failures.append(f"{relative} does not declare the public repository URL")
 
     root_project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    version_match = re.search(r'^version = "([0-9]+\.[0-9]+\.[0-9]+)"$', root_project, re.MULTILINE)
+    if version_match is None:
+        failures.append("pyproject.toml does not contain a plain semantic project version")
+        current_version = "unknown"
+    else:
+        current_version = version_match.group(1)
     runtime = (ROOT / "manager" / "atomlearn_manager" / "runtime.py").read_text(encoding="utf-8")
     profiles = (ROOT / "atom-learn" / "assets" / "runtime-profiles.yaml").read_text(encoding="utf-8")
     current_ocr_contract = root_project + runtime + profiles
@@ -117,8 +123,8 @@ def check_metadata(failures: list[str]) -> None:
 
     english = (ROOT / "README.md").read_text(encoding="utf-8")
     chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    if "unreleased `v0.15`" not in english or "尚未发布的 `v0.15`" not in chinese:
-        failures.append("bilingual README does not distinguish unreleased main from stable delivery")
+    if f"`v{current_version}`" not in english or f"`v{current_version}`" not in chinese:
+        failures.append("bilingual README does not identify the package release version")
     if "No AtomLearn learning-gain effect has been established." not in english:
         failures.append("README omits the learning-effect evidence boundary")
     code_blocks = lambda value: [block.strip() for block in re.findall(r"```[^\n]*\n(.*?)```", value, re.DOTALL)]
@@ -126,7 +132,7 @@ def check_metadata(failures: list[str]) -> None:
         failures.append("English and Chinese README code blocks are not aligned")
 
     citation = (ROOT / "CITATION.cff").read_text(encoding="utf-8")
-    for expected in ["cff-version: 1.2.0", 'license: "Apache-2.0"', 'version: "0.14.2"']:
+    for expected in ["cff-version: 1.2.0", 'license: "Apache-2.0"', f'version: "{current_version}"']:
         if expected not in citation:
             failures.append(f"CITATION.cff is missing {expected}")
 

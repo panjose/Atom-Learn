@@ -87,8 +87,8 @@ def test_runtime_wheel_declares_read_only_core_assets() -> None:
 def test_package_version_matches_core_manifest() -> None:
     project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     manifest = (ROOT / "atom-learn" / "assets" / "core-manifest.yaml").read_text(encoding="utf-8")
-    assert 'version = "0.14.2"' in project
-    assert "core_version: 0.14.2" in manifest
+    assert 'version = "0.15.0"' in project
+    assert "core_version: 0.15.0" in manifest
 
 
 def test_core_renderer_produces_chinese_view_labels() -> None:

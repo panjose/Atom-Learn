@@ -56,7 +56,7 @@ sources:
 python <SKILL_DIR>/scripts/atomlearn.py rag ingest <workspace> --input <sources.yaml>
 ```
 
-Supported local formats are TXT, Markdown, RST, HTML, JSON, YAML, CSV, PDF, and DOCX. Every new source revision first becomes the shared layout-preserving [Document IR](DOCUMENT_IR.md), whose stable block IDs are retained by retrieval chunks. HTML headings, lists, and tables retain structure. DOCX tables remain separate locatable sections. PDF extraction preserves pages, detected formulas, and tables through the base dependency set. Image-only pages use a `.pdf.ocr.txt`/`.ocr.txt` sidecar first. Optional pypdfium2 plus Tesseract automatic OCR is a developer/source extra in unreleased `v0.15`, not part of the signed `v0.14.2` base runtime; set `ocr: required` to fail unless every empty page is recovered. Do not copy private materials into the Skill installation or repository; the runtime index and IR belong under the learner workspace's ignored `.atomlearn/rag/` directory.
+Supported local formats are TXT, Markdown, RST, HTML, JSON, YAML, CSV, PDF, and DOCX. Every new source revision first becomes the shared layout-preserving [Document IR](DOCUMENT_IR.md), whose stable block IDs are retained by retrieval chunks. HTML headings, lists, and tables retain structure. DOCX tables remain separate locatable sections. PDF extraction preserves pages, detected formulas, and tables through the base dependency set. Image-only pages use a `.pdf.ocr.txt`/`.ocr.txt` sidecar first. Optional pypdfium2 plus Tesseract automatic OCR is a developer/source extra, not part of the signed `v0.15.0` base runtime; set `ocr: required` to fail unless every empty page is recovered. Do not copy private materials into the Skill installation or repository; the runtime index and IR belong under the learner workspace's ignored `.atomlearn/rag/` directory.
 
 For past papers and question banks, use one stable source ID per paper or collection and retain page/question locators. Keep full stems and marking schemes in this private source layer; pass only concise summaries and locators into the exam subsystem described in [EXAM_PREPARATION.md](EXAM_PREPARATION.md).
 
@@ -206,7 +206,7 @@ python <SKILL_DIR>/scripts/atomlearn.py rag attach-embeddings <workspace> --inpu
 
 Supply the same `embedding_model` identifier and a compatible `query_embedding` in the search payload. All stored and query vectors must use the same model and dimension; the CLI rejects mismatches. Profile replacements require confirmation and an atomic vector set for every active chunk. Dense retrieval joins BM25 and subword rankings through RRF; it never silently replaces exact-term retrieval.
 
-For local learned models, persisted USearch HNSW generations, native health isolation, parent-child context, named gates, and cross-encoder activation, follow [SEMANTIC_RAG.md](SEMANTIC_RAG.md). These paths are opt-in developer/source capabilities in `v0.14.2`; they are not distributed in the signed stable base runtime. A large corpus without a fresh HNSW generation skips dense retrieval with `scanned_chunks: 0`; it never silently falls back to a full Python vector scan.
+For local learned models, persisted USearch HNSW generations, native health isolation, parent-child context, named gates, and cross-encoder activation, follow [SEMANTIC_RAG.md](SEMANTIC_RAG.md). These paths are opt-in developer/source capabilities in `v0.15.0`; they are not distributed in the signed stable base runtime. A large corpus without a fresh HNSW generation skips dense retrieval with `scanned_chunks: 0`; it never silently falls back to a full Python vector scan.
 
 ## Handle source updates and privacy
 
@@ -220,10 +220,10 @@ For local learned models, persisted USearch HNSW generations, native health isol
 
 ## Troubleshoot
 
-- Empty PDF: add a form-feed-separated `.pdf.ocr.txt` sidecar, use a developer/source install with the `ocr` extra and Tesseract, or supply a searchable PDF; the signed `v0.14.2` base runtime does not include automatic OCR. Use `ocr: required` when silent page loss is unacceptable.
+- Empty PDF: add a form-feed-separated `.pdf.ocr.txt` sidecar, use a developer/source install with the `ocr` extra and Tesseract, or supply a searchable PDF; the signed `v0.15.0` base runtime does not include automatic OCR. Use `ocr: required` when silent page loss is unacceptable.
 - Exact identifier missed: add the exact identifier as an alternate query; BM25 is deliberately retained for this case.
 - Conceptual match missed: generate synonym/alias queries or attach provider embeddings, or explicitly approve a local learned model.
 - Too many near-duplicate chunks: rerank for diversity and select distinct source IDs; reduce `top_k` only after recall is adequate.
-- HNSW unavailable, stale, or corrupt: in a developer/source environment install `.[scale]`, run `rag index-status`, and build a new verified generation; the signed `v0.14.2` base runtime does not include this extra. Do not raise the brute-force boundary merely to hide the condition.
+- HNSW unavailable, stale, or corrupt: in a developer/source environment install `.[scale]`, run `rag index-status`, and build a new verified generation; the signed `v0.15.0` base runtime does not include this extra. Do not raise the brute-force boundary merely to hide the condition.
 - Global corpus question: use returned parent context and build section/document summaries as additional sources. Approximate nearest-neighbor retrieval improves scale but does not by itself perform corpus-wide synthesis.
 - Coverage unexpectedly stale: inspect the current intake and Goal Contract revisions with `intake status`, regenerate requirements, and submit a new coverage report.

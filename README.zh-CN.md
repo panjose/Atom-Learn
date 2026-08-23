@@ -11,7 +11,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 > 当前知识原子尚未真正理解，就绝不推进。  
 > 在当前 Knowledge Atom 真正掌握前，不进入下一个知识原子。
 
-> **发布状态：**当前最新签名稳定版是 `v0.14.2`，并且只交付 `base` profile。`main` 包含尚未发布的 `v0.15` 实现。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据始终是彼此独立的声明。
+> **发布状态：**当前最新签名稳定版是 `v0.15.0`，并且只交付 `base` profile。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据始终是彼此独立的声明。
 
 ## 已实现功能
 
@@ -37,7 +37,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 分析学习证据，并生成有边界、需审批的课程进化提案
 - 从规范化 YAML 状态生成学习、科研、个性化和进化视图
 
-发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。账本会分别记录交付等级、runtime、artifact、用户入口、工程验证、harness 行为证据和学习效果证据。签名 `v0.14.2` runtime 只交付 `base` profile；`ocr`、`scale` 和 `semantic` 是开发者/源码 extras，不包含在该稳定 runtime 中。AtomLearn 尚未建立任何学习增益效果结论。工程检查、评分器校准、本地策略实验和 study 记录契约都不得被描述成这种证据。
+发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。账本会分别记录交付等级、runtime、artifact、用户入口、工程验证、harness 行为证据和学习效果证据。签名 `v0.15.0` runtime 只交付 `base` profile；`ocr`、`scale` 和 `semantic` 是开发者/源码 extras，不包含在该稳定 runtime 中。AtomLearn 尚未建立任何学习增益效果结论。工程检查、评分器校准、本地策略实验和 study 记录契约都不得被描述成这种证据。
 
 ## 安装
 
@@ -47,8 +47,8 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 ```powershell
 python -m pip install <REVIEWED_ATOMLEARN_MANAGER_WHEEL>
-atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
-atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap plan 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
 atomlearn-manager bootstrap status
 ```
 
@@ -67,7 +67,7 @@ atomlearn --help
 
 可编辑安装会提供更短的 `atomlearn` 控制台命令；把 Skill 目录单独复制后，仍支持直接运行 `python atom-learn/scripts/atomlearn.py ...`。
 
-确定性小语料 RAG 路径不需要模型运行时。在开发者/源码环境中，需要自动 OCR adapter 时安装 `.[ocr]`，需要 USearch HNSW generation 时安装 `.[scale]`，需要显式批准的本地 Sentence Transformers 模型时安装 `.[semantic]`。这些 extras 不存在于签名 `v0.14.2` base runtime 中，因此目前还不是稳定发行能力。sidecar OCR 与供应商生成向量的 attachment 仍可通过 base 路径使用。
+确定性小语料 RAG 路径不需要模型运行时。在开发者/源码环境中，需要自动 OCR adapter 时安装 `.[ocr]`，需要 USearch HNSW generation 时安装 `.[scale]`，需要显式批准的本地 Sentence Transformers 模型时安装 `.[semantic]`。这些 extras 不存在于签名 `v0.15.0` base runtime 中，因此目前还不是稳定发行能力。sidecar OCR 与供应商生成向量的 attachment 仍可通过 base 路径使用。
 
 将仓库中的 `atom-learn` 目录复制或链接到个人 Codex Skills 目录，例如：
 
@@ -90,7 +90,7 @@ atomlearn status courses/calculus --json
 
 每次课程渲染都会写出五份英文视图和对齐的 `*.zh-CN.md` 中文生成视图，包括 `LEARNING_MAP.zh-CN.md`、`CURRENT.zh-CN.md` 与 `PROGRESS.zh-CN.md`。Atom 标题和学习者内容保持原样；导航标签、状态和操作文字会本地化。完整命令流程和教学行为见 [SKILL.md](atom-learn/SKILL.md)，结构化输入格式见 [SCHEMA.md](atom-learn/references/SCHEMA.md)。运行时课程状态存放在学习者选择的课程工作区，而不是 Skill 安装目录。
 
-Core `0.14.2` 保留只读兼容性与确定性迁移规划，并加入下文所述的修复门禁。`atomlearn migrate status|plan|validate` 不会应用迁移；仅查看状态也不会创建平台用户数据目录。详见 [Core 版本与迁移](atom-learn/references/MIGRATIONS.md)。
+Core `0.15.0` 保留只读兼容性与确定性迁移规划，并加入下文所述的修复门禁。`atomlearn migrate status|plan|validate` 不会应用迁移；仅查看状态也不会创建平台用户数据目录。详见 [Core 版本与迁移](atom-learn/references/MIGRATIONS.md)。
 
 跨课程个性化默认关闭，只有学习者明确运行 `atomlearn profile enable <workspace>` 后才启用。全局画像只包含白名单枚举信号，不自动导入旧 workspace 历史，并可在不删除审计记录的情况下停用、退役、导出或重置。`atomlearn policy effective|explain` 会合并当前轮、workspace、全局、策略和 Core 层，并给出逐值来源。详见[用户画像](atom-learn/references/USER_PROFILE.md)和[Effective Policy](atom-learn/references/EFFECTIVE_POLICY.md)。
 
@@ -158,7 +158,7 @@ python atom-learn/scripts/atomlearn.py intake complete courses/calculus --expect
 
 ## RAG 与纠错式 Web Search
 
-AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，稳定 base 还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 sidecar OCR 输出。检索会返回精确支持证据的 IR block ID 与有界 parent context，融合 SQLite FTS5 BM25 与默认本地多语言哈希向量，并可 attachment 供应商生成的向量。自动 OCR、显式批准的本地学习型 embedding、USearch HNSW 和 cross-encoder 重排是已实现的开发者/源码路径，不属于签名 `v0.14.2` base runtime 能力。小语料继续使用轻依赖路径；没有已安装且通过验证的 HNSW generation 时，大语料 dense 检索会以零扫描分块的方式跳过该分量。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
+AtomLearn 会在每个学习工作区中持久化一个不绑定供应商的 RAG 索引。每个新的 source revision 都会先转换为供检索、考试处理和科研关联共用的版本化、保留布局的 Document IR。除 TXT、Markdown、RST、JSON、YAML 和 CSV 外，稳定 base 还会保留 HTML 与 DOCX 结构、PDF 表格与公式，以及带 locator 的 sidecar OCR 输出。检索会返回精确支持证据的 IR block ID 与有界 parent context，融合 SQLite FTS5 BM25 与默认本地多语言哈希向量，并可 attachment 供应商生成的向量。自动 OCR、显式批准的本地学习型 embedding、USearch HNSW 和 cross-encoder 重排是已实现的开发者/源码路径，不属于签名 `v0.15.0` base runtime 能力。小语料继续使用轻依赖路径；没有已安装且通过验证的 HNSW generation 时，大语料 dense 检索会以零扫描分块的方式跳过该分量。最终的直接支持判定由 harness 完成；排序分数绝不会被当成可信度。
 
 Phase 9 将这个 IR 扩展为面向科研的图表证据契约。表格会保留行、列、表头和跨行/跨列结构；figure 和 table 可以携带页面几何、稳定 crop hash、caption 与相邻正文 locator、抽取置信度和复核状态。OCR/vision 识别出的数值默认只是 proposal。科研量化 claim 必须指向当前 Document IR block，并匹配 crop/元数据；证据过期、被拒绝或仍待复核时不能完成。
 
@@ -337,11 +337,11 @@ python atom-learn/scripts/atomlearn.py behavior validate-report --input behavior
 
 ### 签名 Release Manager
 
-Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Runtime recipe v2 会把有限的 profile 名称与能力集合、完整依赖锁、OS/架构/Python ABI、模型策略或显式模型文件锁、原生引擎要求以及目标平台 smoke 报告绑定到签名 release。Manager 会把每个 profile 离线安装到 `runtimes/<core>/<platform>/<profile-hash-prefix>/`，用不可变状态中的完整 hash 验证它，执行 preflight 与 Core smoke，然后才原子切换 active profile 指针。profile 安装失败或中断时旧 profile 仍然 active；Core 回滚与 profile 回滚使用彼此独立的配对事务历史。当前签名 `v0.14.2` 的交付声明仍然只有 `base`：`scale`、`semantic-cpu` 和 `ocr` 在完整签名矩阵通过前仍是候选 recipe，`semantic-gpu` 则是 experimental。
+Core 更新由独立的 `atomlearn-manager` 发行包负责，学习 session 永远不能执行更新。Runtime recipe v2 会把有限的 profile 名称与能力集合、完整依赖锁、OS/架构/Python ABI、模型策略或显式模型文件锁、原生引擎要求以及目标平台 smoke 报告绑定到签名 release。Manager 会把每个 profile 离线安装到 `runtimes/<core>/<platform>/<profile-hash-prefix>/`，用不可变状态中的完整 hash 验证它，执行 preflight 与 Core smoke，然后才原子切换 active profile 指针。profile 安装失败或中断时旧 profile 仍然 active；Core 回滚与 profile 回滚使用彼此独立的配对事务历史。当前签名 `v0.15.0` 的交付声明仍然只有 `base`：`scale`、`semantic-cpu` 和 `ocr` 在完整签名矩阵通过前仍是候选 recipe，`semantic-gpu` 则是 experimental。
 
 ```powershell
-atomlearn-manager bootstrap plan 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
-atomlearn-manager bootstrap apply 0.14.2 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
+atomlearn-manager bootstrap plan 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222
+atomlearn-manager bootstrap apply 0.15.0 --expected-fingerprint sha256:19e079c2aece68bae50eac9af779e3e0bb74e04edebaf43a2ad3d08e71dbb222 --confirmed
 atomlearn-manager bootstrap status
 atomlearn-manager bootstrap recover
 atomlearn-manager update status
@@ -352,7 +352,7 @@ atomlearn-core version
 
 bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root，包括自定义 root。`codex migrate plan` 只读；`codex migrate apply --confirmed` 只接管已知官方 release 的完全一致源码树，并保留源码备份及崩溃恢复日志。`profile plan` 与 `profile apply` 只能选择 active 签名 manifest 已声明的 profile asset。语义 profile 激活时必须提供绝对路径的本地模型目录，其 revision 与每个必要文件 hash 都要匹配签名模型锁；系统绝不会下载模型或启用 remote code。OCR 激活会区分已安装的 Python adapter 与必需的原生引擎。`doctor` 会分别报告 `available`、`declared`、`installed`、`usable` 和 `stable`，并给出有类型的阻塞原因与修复建议。公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。profile 命令、指纹核验、密钥轮换、恢复、回滚、迁移和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
 
-所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.14.2 Release Notes](docs/releases/v0.14.2.md)和[Changelog](CHANGELOG.md)。
+所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.15.0 Release Notes](docs/releases/v0.15.0.md)和[Changelog](CHANGELOG.md)。
 
 ## 开源与社区
 
@@ -396,6 +396,7 @@ AtomLearn 使用 [Apache License 2.0](LICENSE) 开源。直接依赖与再分发
 - [签名 Release Manager 操作说明](atom-learn/references/RELEASE_MANAGER.md)
 - [自进化 v2 操作与恢复](docs/SELF_EVOLUTION_V2_OPERATIONS.md)
 - [0.13.0 Release Notes](docs/releases/v0.13.0.md)
+- [0.15.0 Release Notes](docs/releases/v0.15.0.md)
 - [0.14.2 Release Notes](docs/releases/v0.14.2.md)
 
 ## 开发验证

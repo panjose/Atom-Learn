@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased - v0.15
+## Unreleased
+
+- No unreleased changes.
+
+## 0.15.0 - release-ready
 
 - Open-source readiness adds Apache-2.0 licensing and package metadata, third-party notices, and replaces the AGPL/commercial PyMuPDF OCR renderer with the Apache-2.0/BSD-3-Clause pypdfium2 adapter while preserving sidecar OCR, Tesseract, and fail-closed evidence behavior.
-- Community readiness adds contribution, conduct, security, support, governance, citation, ownership, issue, and pull-request contracts; the bilingual README now identifies unreleased `main`, stable delivery, private-reporting, privacy-safe contribution, and Apache-2.0 boundaries.
-- Public-repository gates now scan required governance files, tracked privacy paths, credential patterns, user-specific paths, full Git history, and built wheel license material without echoing matched secrets. Dedicated Open Source Readiness, CodeQL, and Dependabot configuration plus an aligned bilingual administrator checklist keep source-controlled guarantees separate from GitHub settings that require manual verification.
+- Community readiness adds contribution, conduct, security, support, governance, citation, ownership, issue, and pull-request contracts; the bilingual README now identifies signed `v0.15.0` stable delivery, private-reporting, privacy-safe contribution, and Apache-2.0 boundaries.
+- Public-repository gates now scan required governance files, tracked privacy paths, credential patterns, user-specific paths, full Git history, and built wheel license material without echoing matched secrets. Dedicated Open Source Readiness and CodeQL workflows plus security-only Dependabot configuration and an aligned bilingual administrator checklist keep source-controlled guarantees separate from optional GitHub defense-in-depth settings.
 - Phase 10 adds the schema-validated `graph-view-v1` UI-agnostic knowledge-map contract, typed prerequisite/containment/scheduled/optional/citation/semantic edges, explicit required/optional/research filters, and a dependency-free read-only HTML adapter while retaining Markdown lineage fallback.
 - Phase 9 extends the shared Document IR with structured table rows/columns/headers/spans and figure/table provenance metadata (`bbox`, crop hash, caption and adjacent locators). OCR/vision numeric output is proposal-only by default; research quantitative claims now require current block-level provenance and reviewed or reproducible evidence, otherwise completion fails closed for review or abstention.
 - Phase 8 adds a shared provenance-cached research provider contract for Crossref, OpenAlex, PubMed, Semantic Scholar, and arXiv; typed retry/failure and unsupported-citation-graph semantics; DOI/title deduplication with provider disagreements and citation provenance; plus a reviewable claim-level evidence matrix with effect direction, support/opposition, conditional boundaries, and source locators.
@@ -15,8 +19,10 @@
 - Phase 3 adds signed immutable runtime recipe v2 profiles with dependency locks, target-platform smoke reports, safe local model locks, native OCR preflight, side-by-side profile transactions, capability doctor, interruption recovery, and paired profile rollback. The current stable delivery claim remains base-only until candidate profile matrices pass.
 - Phase 2 adds a versioned task-form-to-dimension matrix, immutable scorer-v2 profiles and Evidence v3 snapshots, conservative v1/v2 compatibility, multi-Evidence mastery aggregation, evidence-family/window policy, and an activation-blocking Mastery Feasibility Preflight. Choice and numeric correctness can no longer be copied into incompatible higher-order mastery dimensions.
 - Phase 1 unifies Goal Contract, Corpus Policy, and revision-bound coverage across source, outline, topic, and mixed intake. Closed-corpus gaps fail closed without Web Search, and legacy readiness is rechecked instead of trusted.
-- Phase 0 upgrades the capability ledger to schema v2 and separates repository implementation from stable delivery. The release gate now attests the stable runtime profile, developer-only extras, artifact/entrypoint availability, harness-behavior evidence, and product learning-effect evidence. The signed `v0.14.2` line truthfully exposes only `base`; `ocr`, `scale`, and `semantic` remain developer/source extras until immutable signed runtime profiles ship.
+- Phase 0 upgrades the capability ledger to schema v2 and separates repository implementation from stable delivery. The release gate now attests the stable runtime profile, developer-only extras, artifact/entrypoint availability, harness-behavior evidence, and product learning-effect evidence. The signed `v0.15.0` line truthfully exposes only `base`; `ocr`, `scale`, and `semantic` remain developer/source extras until immutable signed runtime profiles ship.
 - Public documentation now labels source installation separately from Manager onboarding, distinguishes sidecar OCR and provider vectors from optional automatic OCR/local learned retrieval, and states that engineering tests, calibration, local experiments, and the study contract do not establish a causal AtomLearn learning-gain result.
+
+See [0.15.0 release notes](docs/releases/v0.15.0.md) for the signed delivery boundary, compatibility, and verification requirements.
 
 ## 0.14.2 - release-ready
 

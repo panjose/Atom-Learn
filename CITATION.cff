@@ -7,8 +7,8 @@ authors:
 repository-code: "https://github.com/panjose/Atom-Learn"
 url: "https://github.com/panjose/Atom-Learn"
 license: "Apache-2.0"
-version: "0.14.2"
-date-released: "2026-08-17"
+version: "0.15.0"
+date-released: "2026-08-23"
 keywords:
   - "atomic learning"
   - "retrieval-augmented generation"

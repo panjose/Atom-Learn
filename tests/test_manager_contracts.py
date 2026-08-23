@@ -52,7 +52,7 @@ def test_capability_ledger_is_strict_versioned_and_truthful() -> None:
     Draft202012Validator.check_schema(schema)
     Draft202012Validator(schema).validate(ledger)
     assert ledger["schema_version"] == 2
-    assert ledger["core_version"] == "0.14.2"
+    assert ledger["core_version"] == "0.15.0"
     assert ledger["claim_policy"] == {
         "stable_runtime_profiles": ["base"],
         "developer_extras": ["ocr", "scale", "semantic"],
@@ -219,7 +219,7 @@ def test_release_gate_report_requires_attested_ci_and_never_overwrites(tmp_path:
         str(ROOT / "release" / "gate.py"),
         "write",
         "--tag",
-        "v0.14.2",
+        "v0.15.0",
         "--commit-sha",
         "b" * 40,
         "--output",

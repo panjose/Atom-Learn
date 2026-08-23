@@ -95,7 +95,7 @@ def test_public_claims_disclose_delivery_and_learning_evidence_boundaries() -> N
 
 def test_repository_markdown_has_no_broken_relative_links() -> None:
     missing: list[str] = []
-    ignored = {".git", ".pytest_cache", ".test-workspaces", "__pycache__"}
+    ignored = {".git", ".private", ".pytest_cache", ".test-workspaces", "__pycache__"}
     for directory, directories, files in os.walk(ROOT):
         directories[:] = [name for name in directories if name not in ignored]
         for name in files:
@@ -189,7 +189,8 @@ def test_public_repository_automation_and_checklists_are_aligned() -> None:
         (update["package-ecosystem"], update["directory"])
         for update in updates
     } == {("pip", "/"), ("pip", "/manager"), ("github-actions", "/")}
-    assert all(update["schedule"]["interval"] == "weekly" for update in updates)
+    assert all(update["schedule"]["interval"] == "monthly" for update in updates)
+    assert all(update["open-pull-requests-limit"] == 0 for update in updates)
 
     codeql_text = (ROOT / ".github" / "workflows" / "codeql.yml").read_text(encoding="utf-8")
     readiness_text = (ROOT / ".github" / "workflows" / "oss-readiness.yml").read_text(encoding="utf-8")

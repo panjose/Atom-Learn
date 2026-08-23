@@ -1,6 +1,6 @@
 kind: atomlearn.runtime-profile-registry
 schema_version: 1
-core_version: 0.14.2
+core_version: 0.15.0
 stable_profiles: [base]
 profiles:
   - name: base

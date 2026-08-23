@@ -6,6 +6,7 @@
 
 - `[x]` 表示该控制项已经进入当前源码树，并受仓库验证保护。
 - `[ ]` 表示维护者必须核验或配置 GitHub 状态；源码 commit 无法证明外部状态。
+- 明确标注“可选”的项目属于纵深防御建议；仓库 owner 接受剩余风险时，不阻塞公开发布。
 - 任何隐私、凭据、来源、许可或发行签名问题未解决时，都不能把仓库设为公开。
 
 ## 仓库基线
@@ -14,9 +15,9 @@
 - [x] 可选 OCR adapter 使用 pypdfium2/PDFium 而不是 PyMuPDF；构建后会检查 wheel 内容和许可元数据。
 - [x] `CONTRIBUTING.md`、`CODE_OF_CONDUCT.md`、`SECURITY.md`、`SUPPORT.md`、`GOVERNANCE.md` 和 `CITATION.cff` 已定义社区契约。
 - [x] Issue forms、Pull Request 模板、CODEOWNERS、Dependabot、CodeQL 和 Open Source Readiness workflow 已纳入版本控制。
-- [x] 中英文 README 都将 `main` 标注为尚未发布的 `v0.15`，说明签名 `v0.14.2` 只交付 base profile，并明确 AtomLearn 尚未建立学习增益效果结论。
+- [x] 中英文 README 都说明签名 `v0.15.0` 只交付 base profile，并明确 AtomLearn 尚未建立学习增益效果结论。
 - [x] `python release/open_source_gate.py` 会检查必要文件、受跟踪的隐私路径、凭据模式、用户专属绝对路径、Git 历史和可选构建 wheel，同时不会输出匹配到的 secret 原文。
-- [ ] 决定是否在公开发布前交付签名 `v0.15.0`。在此之前，README 和能力账本中的相关声明必须继续明确标记为尚未发布的实现工作。
+- [ ] 发布并独立核验签名 `v0.15.0` manifest、Core、Manager 与完整 base runtime 矩阵，然后才能把 release notes 视为稳定交付证据。
 
 ## 隐私与历史审计
 
@@ -24,7 +25,7 @@
 - [ ] 在已抓取全部 refs 的完整 clone 中运行 `python release/open_source_gate.py --json`，再独立复核结果和 GitHub secret-scanning alerts。模式匹配只是后备防线，不能证明绝对不存在 secret。
 - [ ] 确认历史上提交过的所有凭据均已吊销并轮换，即使后来已从文件中移除；绝不能只依赖删除。
 - [ ] 确认任何公开 ref 或托管 artifact 中都不存在学习者状态、受版权保护的教材、论文语料、考试答案、未发表结果、模型凭据、cookie、签名私钥或发布密钥备份。
-- [ ] 决定是否接受公开 commit author 邮箱 `242panjose@gmail.com`。当前 Git 历史包含该邮箱。不要轻率重写已签名或已打 tag 的历史：历史重写会改变 commit identity，必须另做迁移与发行完整性方案。
+- [x] 仓库 owner 已于 2026-08-23 接受公开 commit author 邮箱 `242panjose@gmail.com`。当前 Git 历史包含该邮箱；不要轻率重写已签名或已打 tag 的历史，因为历史重写会改变 commit identity，必须另做迁移与发行完整性方案。
 - [ ] 检查仓库 collaborator、deploy key、webhook、GitHub App、Actions secret/variable、environment、Pages、Codespaces 和 package 权限。修改可见性不等于获准公开任何 secret。
 
 ## GitHub 安全与治理
@@ -33,8 +34,8 @@
 - [ ] 核验 dependency graph、Dependabot alerts 和 Dependabot security updates；公开前先分流处理初始 alerts。
 - [ ] 核验公开仓库 secret scanning，复核每一条 alert，并在账号或套餐允许时启用仓库 push protection。
 - [ ] 仓库公开后，确认已提交的 CodeQL workflow 成功运行。对于没有 GitHub Code Security 权限的私有仓库，它会有意跳过。
-- [ ] 为 `main` 建立 ruleset：要求 Pull Request 以及 `Validate AtomLearn`、`Open Source Readiness`、`CodeQL` 成功；阻止 branch 删除和 force push；只设置范围很窄的紧急 bypass 角色。
-- [ ] 保护 `v*` tag，禁止更新和删除；所有已发布 tag、manifest、runtime bundle、trust bundle 和签名都必须视为不可变。
+- [ ] 可选：为 `main` 建立 ruleset，要求 Pull Request 以及 `Validate AtomLearn`、`Open Source Readiness`、`CodeQL` 成功，阻止 branch 删除和 force push，并只设置范围很窄的紧急 bypass 角色。
+- [ ] 可选：保护 `v*` tag，禁止更新和删除；所有已发布 tag、manifest、runtime bundle、trust bundle 和签名仍必须视为不可变。
 - [ ] 将 Actions 默认权限限制为只读；要求首次贡献者运行审批；复核允许使用的第三方 Actions。
 - [ ] 以最小权限配置 release environment、`ATOMLEARN_RELEASE_PRIVATE_KEY` 和 `ATOMLEARN_RELEASE_KEY_ID`，并按需设置 required reviewer。私钥绝不能进入仓库文件或日志。
 

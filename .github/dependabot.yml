@@ -3,19 +3,22 @@ updates:
   - package-ecosystem: pip
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 0
     labels:
       - dependencies
   - package-ecosystem: pip
     directory: "/manager"
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 0
     labels:
       - dependencies
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
+    open-pull-requests-limit: 0
     labels:
       - dependencies

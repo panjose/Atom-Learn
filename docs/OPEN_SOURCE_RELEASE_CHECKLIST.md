@@ -11,6 +11,8 @@ any visibility, ownership, release, or security-setting change.
   repository validation.
 - `[ ]` means a maintainer must verify or configure GitHub state. A source
   commit cannot prove that external state.
+- Items explicitly marked optional are defense-in-depth recommendations and do
+  not block publication when the repository owner accepts the residual risk.
 - Do not make the repository public while any privacy, credential, provenance,
   licensing, or release-signing item remains unresolved.
 
@@ -24,15 +26,15 @@ any visibility, ownership, release, or security-setting change.
   `GOVERNANCE.md`, and `CITATION.cff` define the community contract.
 - [x] Issue forms, the pull-request template, CODEOWNERS, Dependabot, CodeQL,
   and the Open Source Readiness workflow are version controlled.
-- [x] English and Chinese READMEs identify `main` as unreleased `v0.15`, the
-  signed `v0.14.2` base-only delivery boundary, and the absence of an
+- [x] English and Chinese READMEs identify signed `v0.15.0` base-only delivery
+  and the absence of an
   established AtomLearn learning-gain result.
 - [x] `python release/open_source_gate.py` scans required files, tracked private
   paths, credential patterns, user-specific absolute paths, Git history, and
   optional built wheels without printing a matched secret.
-- [ ] Decide whether to publish a signed `v0.15.0` before the public launch.
-  Until then, keep all README and capability-ledger claims explicitly marked as
-  unreleased implementation work.
+- [ ] Publish and independently verify the signed `v0.15.0` manifest, Core,
+  Manager, and complete base runtime matrix before treating the release notes as
+  stable delivery evidence.
 
 ## Privacy and history audit
 
@@ -46,10 +48,10 @@ any visibility, ownership, release, or security-setting change.
 - [ ] Confirm that no learner state, copyrighted textbook, paper corpus, exam
   answer, unpublished result, model credential, cookie, signing private key, or
   release-key backup exists in any public ref or hosted artifact.
-- [ ] Decide whether exposing commit-author email `242panjose@gmail.com` is
-  acceptable. Current Git history contains it. Do not rewrite signed/tagged
-  history casually: rewriting changes commit identities and requires a separate
-  migration and release-integrity plan.
+- [x] The repository owner accepted public exposure of commit-author email
+  `242panjose@gmail.com` on 2026-08-23. Current Git history contains it; do not
+  rewrite signed/tagged history casually because rewriting changes commit
+  identities and requires a separate migration and release-integrity plan.
 - [ ] Review repository collaborators, deploy keys, webhooks, GitHub Apps,
   Actions secrets/variables, environments, Pages, Codespaces, and package
   permissions. Visibility changes do not grant permission to expose a secret.
@@ -65,10 +67,10 @@ any visibility, ownership, release, or security-setting change.
 - [ ] Confirm the checked-in CodeQL workflow runs successfully after the
   repository becomes public. It intentionally skips private repositories that
   do not have GitHub Code Security access.
-- [ ] Create a `main` ruleset that requires pull requests and successful checks
+- [ ] Optional: create a `main` ruleset that requires pull requests and successful checks
   for `Validate AtomLearn`, `Open Source Readiness`, and `CodeQL`; block branch
   deletion and force pushes; define a narrow emergency bypass role.
-- [ ] Protect `v*` tags against update and deletion. Treat every published tag,
+- [ ] Optional: protect `v*` tags against update and deletion. Treat every published tag,
   manifest, runtime bundle, trust bundle, and signature as immutable.
 - [ ] Limit Actions permissions to read by default, require approval for
   first-time contributors, and review which third-party actions are allowed.

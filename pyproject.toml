@@ -1,6 +1,6 @@
 [project]
 name = "atom-learn"
-version = "0.14.2"
+version = "0.15.0"
 description = "Atomic source-grounded learning with closed-loop hybrid RAG, concept routing, research, exams, and knowledge maps"
 readme = "README.md"
 requires-python = ">=3.10"
