@@ -139,8 +139,10 @@ def read_data(path: Path) -> dict[str, Any]:
 
 def atomic_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    with temporary.open("w", encoding="utf-8", newline="\n") as handle:
+    # Keep the transaction filename independent of the target filename. This
+    # preserves precious path budget on Windows for deeply nested workspaces.
+    temporary = path.with_name(f".tmp-{uuid.uuid4().hex[:12]}")
+    with temporary.open("x", encoding="utf-8", newline="\n") as handle:
         handle.write(content)
         handle.flush()
         os.fsync(handle.fileno())

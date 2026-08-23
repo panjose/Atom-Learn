@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "atom-learn" / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 
+import platform_state as platform_state_module  # noqa: E402
 from migrations import (  # noqa: E402
     MigrationError,
     MigrationRegistry,
@@ -60,6 +61,30 @@ def test_user_data_root_is_lazy_and_requires_absolute_override(tmp_path: Path, m
     monkeypatch.setenv("ATOMLEARN_DATA_DIR", "relative/state")
     with pytest.raises(PlatformStateError, match="must be absolute"):
         resolve_user_data_root()
+
+
+def test_platform_atomic_write_uses_a_short_target_independent_temp_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    replaced: list[tuple[Path, Path]] = []
+    real_replace = os.replace
+
+    def capture_replace(source: str | Path, target: str | Path) -> None:
+        replaced.append((Path(source), Path(target)))
+        real_replace(source, target)
+
+    monkeypatch.setattr(platform_state_module.os, "replace", capture_replace)
+    target = tmp_path / "a-very-long-platform-state-name-that-must-not-be-copied.yaml"
+    platform_state_module.atomic_text(target, "ok\n")
+
+    assert target.read_text(encoding="utf-8") == "ok\n"
+    assert len(replaced) == 1
+    temporary, destination = replaced[0]
+    assert destination == target
+    assert temporary.parent == target.parent
+    assert temporary.name.startswith(".tmp-")
+    assert len(temporary.name) == 17
+    assert target.name not in temporary.name
 
 
 def test_namespace_store_rejects_stale_revision_and_preserves_current_state(tmp_path: Path) -> None:

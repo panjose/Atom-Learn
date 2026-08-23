@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import sys
 from pathlib import Path
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -70,6 +73,31 @@ def test_short_console_entry_point_and_supported_python_range_are_declared() -> 
     project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
     assert 'atomlearn = "atomlearn:main"' in project
     assert 'requires-python = ">=3.10"' in project
+
+
+def test_workspace_atomic_write_uses_a_short_target_independent_temp_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    module = local_module("atomlearn")
+    replaced: list[tuple[Path, Path]] = []
+    real_replace = os.replace
+
+    def capture_replace(source: str | Path, target: str | Path) -> None:
+        replaced.append((Path(source), Path(target)))
+        real_replace(source, target)
+
+    monkeypatch.setattr(module.os, "replace", capture_replace)
+    target = tmp_path / "a-very-long-target-name-that-must-not-be-copied-into-the-temp-name.yaml"
+    module.atomic_text(target, "ok\n")
+
+    assert target.read_text(encoding="utf-8") == "ok\n"
+    assert len(replaced) == 1
+    temporary, destination = replaced[0]
+    assert destination == target
+    assert temporary.parent == target.parent
+    assert temporary.name.startswith(".tmp-")
+    assert len(temporary.name) == 17
+    assert target.name not in temporary.name
 
 
 def test_runtime_wheel_declares_read_only_core_assets() -> None:

@@ -6,6 +6,7 @@
 
 ## 0.15.0 - release-ready
 
+- Windows atomic state writes now use short, target-independent exclusive temporary filenames, preserving atomic replacement while avoiding avoidable path-length failures in deeply nested course and Manager workspaces. Documentation validation also excludes local virtual environments from repository link checks.
 - Open-source readiness adds Apache-2.0 licensing and package metadata, third-party notices, and replaces the AGPL/commercial PyMuPDF OCR renderer with the Apache-2.0/BSD-3-Clause pypdfium2 adapter while preserving sidecar OCR, Tesseract, and fail-closed evidence behavior.
 - Community readiness adds contribution, conduct, security, support, governance, citation, ownership, issue, and pull-request contracts; the bilingual README now identifies signed `v0.15.0` stable delivery, private-reporting, privacy-safe contribution, and Apache-2.0 boundaries.
 - Public-repository gates now scan required governance files, tracked privacy paths, credential patterns, user-specific paths, full Git history, and built wheel license material without echoing matched secrets. Dedicated Open Source Readiness and CodeQL workflows plus security-only Dependabot configuration and an aligned bilingual administrator checklist keep source-controlled guarantees separate from optional GitHub defense-in-depth settings.

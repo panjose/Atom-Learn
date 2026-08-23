@@ -95,7 +95,7 @@ def test_public_claims_disclose_delivery_and_learning_evidence_boundaries() -> N
 
 def test_repository_markdown_has_no_broken_relative_links() -> None:
     missing: list[str] = []
-    ignored = {".git", ".private", ".pytest_cache", ".test-workspaces", "__pycache__"}
+    ignored = {".git", ".private", ".pytest_cache", ".test-workspaces", ".venv", "venv", "__pycache__"}
     for directory, directories, files in os.walk(ROOT):
         directories[:] = [name for name in directories if name not in ignored]
         for name in files:

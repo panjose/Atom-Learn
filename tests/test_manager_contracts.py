@@ -633,6 +633,34 @@ def test_manager_cli_serializes_stable_error_envelopes(tmp_path: Path) -> None:
     assert error["error"]["code"] == "manager_error"
 
 
+def test_manager_atomic_writes_use_short_target_independent_temp_names(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from atomlearn_manager import common
+
+    replaced: list[tuple[Path, Path]] = []
+    real_replace = os.replace
+
+    def capture_replace(source: str | Path, target: str | Path) -> None:
+        replaced.append((Path(source), Path(target)))
+        real_replace(source, target)
+
+    monkeypatch.setattr(common.os, "replace", capture_replace)
+    text_target = tmp_path / "a-very-long-manager-state-name-that-must-not-be-copied.yaml"
+    bytes_target = tmp_path / "a-very-long-manager-payload-name-that-must-not-be-copied.bin"
+    common.atomic_text(text_target, "ok\n")
+    common.atomic_bytes(bytes_target, b"ok\n")
+
+    assert text_target.read_text(encoding="utf-8") == "ok\n"
+    assert bytes_target.read_bytes() == b"ok\n"
+    assert [target for _, target in replaced] == [text_target, bytes_target]
+    for temporary, target in replaced:
+        assert temporary.parent == target.parent
+        assert temporary.name.startswith(".tmp-")
+        assert len(temporary.name) == 17
+        assert target.name not in temporary.name
+
+
 def test_tag_release_workflow_is_signed_gated_and_immutable() -> None:
     workflow = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "needs: [release-gates, scale-rag]" in workflow
