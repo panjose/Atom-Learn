@@ -26,6 +26,7 @@ license metadata shipped by each installed distribution remains authoritative.
 | tomli | Python 3.10 TOML compatibility | MIT |
 | pytest | Development tests | MIT |
 | Hypothesis | Property-based development tests | MPL-2.0 |
+| Contributor Covenant 3.0 | Community code of conduct source text | CC-BY-SA-4.0 |
 
 The signed runtime builder may redistribute third-party wheels. Their embedded
 license files and notices must remain in the wheelhouse and resulting runtime.
@@ -36,3 +37,6 @@ Project links and current license declarations are available from the package
 indexes and upstream repositories named in `pyproject.toml` and
 `manager/pyproject.toml`. Please report a missing or incorrect notice through
 the repository's security or issue-reporting process.
+
+`CODE_OF_CONDUCT.md` is adapted from Contributor Covenant 3.0. Its attribution
+and CC-BY-SA-4.0 source license are retained in that file.

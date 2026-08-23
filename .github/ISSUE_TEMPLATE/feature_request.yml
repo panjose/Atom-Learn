@@ -1,0 +1,37 @@
+name: Feature request
+description: Propose a concrete learning, research, exam, retrieval, or maintainer workflow improvement.
+title: "[Feature]: "
+labels: [enhancement, needs-triage]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem and user workflow
+      description: Who is blocked, at which step, and what observable outcome is needed?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed boundary
+      description: Describe the smallest useful behavior, command, schema, or documentation change.
+    validations:
+      required: true
+  - type: textarea
+    id: invariants
+    attributes:
+      label: Safety, privacy, and evidence implications
+      description: Note impacts on prerequisites, Evidence, review, RAG provenance, private content, self-evolution authority, or release claims.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: This proposal contains no private learner data, copyrighted source dump, credential, or release key.
+          required: true

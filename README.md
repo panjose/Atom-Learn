@@ -2,10 +2,16 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+[![Validate AtomLearn](https://github.com/panjose/Atom-Learn/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/panjose/Atom-Learn/actions/workflows/validate.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776AB.svg)](pyproject.toml)
+
 AtomLearn is a source-grounded AI Skill for progressive learning and research reading. It can reorganize textbooks into a prerequisite-aware Knowledge Atom graph, or map a research field into a guided paper graph for critical reading and evidence synthesis.
 
 > Never advance while the current atom remains unclear.  
 > Do not move to the next Knowledge Atom until the current one is genuinely understood.
+
+> **Release status:** the latest signed stable release is `v0.14.2` and exposes only the `base` profile. `main` contains unreleased `v0.15` implementation work. Repository engineering status, stable delivery, harness/model behavior evidence, and human learning-effect evidence remain separate claims.
 
 ## Implemented Capabilities
 
@@ -347,6 +353,18 @@ atomlearn-core version
 The bridge marker binds its resolver to the exact Manager root selected during bootstrap, including custom roots. `codex migrate plan` is read-only; `codex migrate apply --confirmed` takes over only an exact known official source tree, retains the source backup, and journals crash recovery. `profile plan` and `profile apply` select only a profile asset declared by the active signed manifest. Semantic activation requires an absolute local model directory whose revision and every required file hash match the signed lock; it never downloads a model or enables remote code. OCR activation distinguishes installed Python adapters from the required native engine. `doctor` reports `available`, `declared`, `installed`, `usable`, and `stable` independently with a typed blocker and remediation. Public releases require no credential. For a private GitHub Release, Manager first tries the public URL and then uses `ATOMLEARN_GITHUB_TOKEN`, `GH_TOKEN`, or the GitHub CLI credential helper without storing the token in a manifest, workspace, or URL. See [Signed Release Manager](atom-learn/references/RELEASE_MANAGER.md) for profile commands, fingerprint verification, key rotation, recovery, rollback, migration, and transport boundaries.
 
 All self-evolution v2 capabilities remain default-off and independently reversible. The hardened tag-only release workflow now requires Windows/Linux Python 3.10–3.13, property tests, replay and v1 compatibility, migration fixtures, every-stage update fault injection, an independent Capsule privacy attack corpus, capability smoke including adaptive review, and a signed gate report before stable assets can be published. See the [Operations and Recovery Runbook](docs/SELF_EVOLUTION_V2_OPERATIONS.md), [0.14.2 Release Notes](docs/releases/v0.14.2.md), and [Changelog](CHANGELOG.md).
+
+## Open Source and Community
+
+AtomLearn is licensed under the [Apache License 2.0](LICENSE). Direct dependency and redistribution notices are recorded in [Third-Party Notices](THIRD_PARTY_NOTICES.md); the optional OCR path uses pypdfium2/PDFium instead of an AGPL renderer. The `NOTICE` file and all third-party license material must remain with redistributed artifacts.
+
+- Read [Contributing](CONTRIBUTING.md) before opening a pull request. Contributions use synthetic or privacy-minimized fixtures and must preserve AtomLearn's state, Evidence, review, privacy, and release-claim boundaries.
+- Community participation follows the [Code of Conduct](CODE_OF_CONDUCT.md).
+- Report vulnerabilities through GitHub private vulnerability reporting, never a public issue; see the [Security Policy](SECURITY.md).
+- Usage channels and diagnostic requirements are documented in [Support](SUPPORT.md), while maintainer and release authority are documented in [Governance](GOVERNANCE.md).
+- Cite the exact release used through [CITATION.cff](CITATION.cff).
+
+Do not commit textbooks, paper corpora, exam answers, learner workspaces, `.atomlearn/` state, tokens, cookies, model credentials, or release private keys. Public examples and tests must remain synthetic, licensed, or privacy-minimized.
 
 ## Design Documentation
 

@@ -1,0 +1,10 @@
+# Default review ownership
+* @panjose
+
+# Release trust, automation, and package metadata
+/.github/ @panjose
+/release/ @panjose
+/manager/ @panjose
+/pyproject.toml @panjose
+/LICENSE @panjose
+/NOTICE @panjose

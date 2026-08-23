@@ -4,6 +4,8 @@ import os
 import re
 from pathlib import Path
 
+import yaml
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -39,6 +41,7 @@ def test_english_and_chinese_readmes_stay_structurally_aligned() -> None:
         "Exam Analysis and Targeted Preparation",
         "Session-Based Self-Adaptation",
         "Self-Evolution",
+        "Open Source and Community",
         "Design Documentation",
         "Development Validation",
     ]
@@ -57,6 +60,7 @@ def test_english_and_chinese_readmes_stay_structurally_aligned() -> None:
         "试题分析与针对性备考",
         "基于 Session 的自适应",
         "自进化",
+        "开源与社区",
         "设计文档",
         "开发验证",
     ]
@@ -125,3 +129,44 @@ def test_open_source_license_and_package_metadata_are_complete() -> None:
         assert "https://github.com/panjose/Atom-Learn" in project
     assert 'pypdfium2>=4.30,<6' in root_project
     assert "PyMuPDF" not in root_project
+
+
+def test_open_source_community_contracts_are_present_and_privacy_safe() -> None:
+    required = [
+        "CONTRIBUTING.md",
+        "SECURITY.md",
+        "SUPPORT.md",
+        "GOVERNANCE.md",
+        "CODE_OF_CONDUCT.md",
+        "CITATION.cff",
+        ".github/CODEOWNERS",
+        ".github/PULL_REQUEST_TEMPLATE.md",
+        ".github/ISSUE_TEMPLATE/bug_report.yml",
+        ".github/ISSUE_TEMPLATE/feature_request.yml",
+        ".github/ISSUE_TEMPLATE/config.yml",
+    ]
+    assert all((ROOT / path).is_file() for path in required)
+
+    contributing = (ROOT / "CONTRIBUTING.md").read_text(encoding="utf-8")
+    security = (ROOT / "SECURITY.md").read_text(encoding="utf-8")
+    conduct = (ROOT / "CODE_OF_CONDUCT.md").read_text(encoding="utf-8")
+    assert "privacy-minimized" in contributing
+    assert "exactly one Active Atom" in contributing
+    assert "private vulnerability reporting" in " ".join(security.split())
+    assert "Do not open a public issue" in security
+    assert "Contributor Covenant 3.0" in conduct
+    assert "CC BY-SA 4.0" in conduct
+
+    citation = yaml.safe_load((ROOT / "CITATION.cff").read_text(encoding="utf-8"))
+    assert citation["cff-version"] == "1.2.0"
+    assert citation["license"] == "Apache-2.0"
+    assert citation["repository-code"] == "https://github.com/panjose/Atom-Learn"
+
+    for path in [
+        ROOT / ".github" / "ISSUE_TEMPLATE" / "bug_report.yml",
+        ROOT / ".github" / "ISSUE_TEMPLATE" / "feature_request.yml",
+        ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml",
+    ]:
+        assert isinstance(yaml.safe_load(path.read_text(encoding="utf-8")), dict)
+    config = yaml.safe_load((ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml").read_text(encoding="utf-8"))
+    assert config["blank_issues_enabled"] is False

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/panjose/Atom-Learn/security/advisories/new
+    about: Report vulnerabilities privately; never include exploit details in a public issue.
+  - name: Usage and design discussion
+    url: https://github.com/panjose/Atom-Learn/discussions
+    about: Ask questions or discuss workflows after GitHub Discussions is enabled.

@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use AtomLearn in software, teaching, or research, please cite this repository and the exact release used."
+title: "AtomLearn: Atomic Source-Grounded Learning and Research Reading"
+type: software
+authors:
+  - family-names: "panjose"
+repository-code: "https://github.com/panjose/Atom-Learn"
+url: "https://github.com/panjose/Atom-Learn"
+license: "Apache-2.0"
+version: "0.14.2"
+date-released: "2026-08-17"
+keywords:
+  - "atomic learning"
+  - "retrieval-augmented generation"
+  - "AI education"
+  - "research reading"
+  - "knowledge graphs"

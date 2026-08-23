@@ -2,10 +2,16 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+[![Validate AtomLearn](https://github.com/panjose/Atom-Learn/actions/workflows/validate.yml/badge.svg?branch=main)](https://github.com/panjose/Atom-Learn/actions/workflows/validate.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Python 3.10–3.13](https://img.shields.io/badge/python-3.10%E2%80%933.13-3776AB.svg)](pyproject.toml)
+
 AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI Skill。它既可以把教材重组为带先修依赖的 Knowledge Atom 图，也可以把科研领域组织为用于批判性阅读与证据综合的导向论文图。
 
 > 当前知识原子尚未真正理解，就绝不推进。  
 > 在当前 Knowledge Atom 真正掌握前，不进入下一个知识原子。
+
+> **发布状态：**当前最新签名稳定版是 `v0.14.2`，并且只交付 `base` profile。`main` 包含尚未发布的 `v0.15` 实现。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据始终是彼此独立的声明。
 
 ## 已实现功能
 
@@ -347,6 +353,18 @@ atomlearn-core version
 bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root，包括自定义 root。`codex migrate plan` 只读；`codex migrate apply --confirmed` 只接管已知官方 release 的完全一致源码树，并保留源码备份及崩溃恢复日志。`profile plan` 与 `profile apply` 只能选择 active 签名 manifest 已声明的 profile asset。语义 profile 激活时必须提供绝对路径的本地模型目录，其 revision 与每个必要文件 hash 都要匹配签名模型锁；系统绝不会下载模型或启用 remote code。OCR 激活会区分已安装的 Python adapter 与必需的原生引擎。`doctor` 会分别报告 `available`、`declared`、`installed`、`usable` 和 `stable`，并给出有类型的阻塞原因与修复建议。公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。profile 命令、指纹核验、密钥轮换、恢复、回滚、迁移和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
 
 所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.14.2 Release Notes](docs/releases/v0.14.2.md)和[Changelog](CHANGELOG.md)。
+
+## 开源与社区
+
+AtomLearn 使用 [Apache License 2.0](LICENSE) 开源。直接依赖与再分发声明记录在[第三方许可说明](THIRD_PARTY_NOTICES.md)中；可选 OCR 路径使用 pypdfium2/PDFium，而不再依赖 AGPL renderer。再分发制品必须保留 `NOTICE` 及所有第三方许可材料。
+
+- 提交 Pull Request 前请阅读[贡献指南](CONTRIBUTING.md)。贡献只能使用合成或隐私最小化 fixture，并且必须保持 AtomLearn 的状态、Evidence、复核、隐私和发布声明边界。
+- 社区参与遵守[行为准则](CODE_OF_CONDUCT.md)。
+- 漏洞必须通过 GitHub 私密漏洞报告提交，不能放入公开 Issue；详见[安全策略](SECURITY.md)。
+- 使用渠道与诊断信息要求见[支持说明](SUPPORT.md)，维护者与发布权限见[治理说明](GOVERNANCE.md)。
+- 请通过 [CITATION.cff](CITATION.cff) 引用实际使用的准确版本。
+
+请勿提交教材、论文语料库、考试答案、学习者 workspace、`.atomlearn/` 状态、token、cookie、模型凭据或发布私钥。公开示例和测试必须保持为合成内容、具有适当许可的内容或隐私最小化内容。
 
 ## 设计文档
 
