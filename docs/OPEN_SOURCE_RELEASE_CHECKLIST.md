@@ -32,7 +32,7 @@ any visibility, ownership, release, or security-setting change.
 - [x] `python release/open_source_gate.py` scans required files, tracked private
   paths, credential patterns, user-specific absolute paths, Git history, and
   optional built wheels without printing a matched secret.
-- [ ] Publish and independently verify the signed `v0.15.0` manifest, Core,
+- [x] Publish and independently verify the signed `v0.15.0` manifest, Core,
   Manager, and complete base runtime matrix before treating the release notes as
   stable delivery evidence.
 

@@ -17,7 +17,7 @@
 - [x] Issue forms、Pull Request 模板、CODEOWNERS、Dependabot、CodeQL 和 Open Source Readiness workflow 已纳入版本控制。
 - [x] 中英文 README 都说明签名 `v0.15.0` 只交付 base profile，并明确 AtomLearn 尚未建立学习增益效果结论。
 - [x] `python release/open_source_gate.py` 会检查必要文件、受跟踪的隐私路径、凭据模式、用户专属绝对路径、Git 历史和可选构建 wheel，同时不会输出匹配到的 secret 原文。
-- [ ] 发布并独立核验签名 `v0.15.0` manifest、Core、Manager 与完整 base runtime 矩阵，然后才能把 release notes 视为稳定交付证据。
+- [x] 发布并独立核验签名 `v0.15.0` manifest、Core、Manager 与完整 base runtime 矩阵，然后才能把 release notes 视为稳定交付证据。
 
 ## 隐私与历史审计
 

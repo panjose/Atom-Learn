@@ -4,7 +4,7 @@
 
 - No unreleased changes.
 
-## 0.15.0 - release-ready
+## 0.15.0 - 2026-08-23
 
 - Release Manager `0.3.0` gives the materially changed Manager and Windows runtime bootstrap a new immutable package identity instead of republishing different code under the `0.2.0` wheel version used by `v0.14.2`.
 - Windows atomic state writes now use short, target-independent exclusive temporary filenames, preserving atomic replacement while avoiding avoidable path-length failures in deeply nested course and Manager workspaces. Signed runtimes bootstrap only CPython's bundled pip wheel instead of the unnecessary legacy setuptools payload installed by Python 3.10/3.11 `ensurepip`, keeping deep Windows Manager roots compatible. Documentation validation also excludes local virtual environments from repository link checks.
