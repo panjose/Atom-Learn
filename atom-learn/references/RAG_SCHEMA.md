@@ -63,7 +63,7 @@ passages:
 
 `authority` is one of `primary`, `official`, `peer_reviewed`, `textbook`, `user`, `secondary`, or `unknown`.
 
-HTML headings, lists, and tables, DOCX headings and tables, and PDF pages, formulas, and detected tables become typed Document IR blocks with distinct locators. Tables have child cells, OCR pages use `ocr_text`, and every retrieval chunk stores its owning `document_ir_block_ids`. PDF OCR first reads a form-feed-separated `.pdf.ocr.txt` or `.ocr.txt` sidecar, then tries the optional PyMuPDF/Tesseract integration. `ocr: required` fails when any image-only page remains unrecovered. See [DOCUMENT_IR.md](DOCUMENT_IR.md) and its public JSON Schema.
+HTML headings, lists, and tables, DOCX headings and tables, and PDF pages, formulas, and detected tables become typed Document IR blocks with distinct locators. Tables have child cells, OCR pages use `ocr_text`, and every retrieval chunk stores its owning `document_ir_block_ids`. PDF OCR first reads a form-feed-separated `.pdf.ocr.txt` or `.ocr.txt` sidecar, then tries the optional pypdfium2/Tesseract integration. `ocr: required` fails when any image-only page remains unrecovered. See [DOCUMENT_IR.md](DOCUMENT_IR.md) and its public JSON Schema.
 
 ## Web evidence ingestion
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 
@@ -90,13 +91,37 @@ def test_public_claims_disclose_delivery_and_learning_evidence_boundaries() -> N
 
 def test_repository_markdown_has_no_broken_relative_links() -> None:
     missing: list[str] = []
-    for path in ROOT.rglob("*.md"):
-        if any(part in {".git", ".pytest_cache", ".test-workspaces"} for part in path.parts):
-            continue
-        for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
-            if "://" in target or target.startswith(("#", "mailto:")):
+    ignored = {".git", ".pytest_cache", ".test-workspaces", "__pycache__"}
+    for directory, directories, files in os.walk(ROOT):
+        directories[:] = [name for name in directories if name not in ignored]
+        for name in files:
+            if not name.endswith(".md"):
                 continue
-            relative = target.split("#", 1)[0]
-            if relative and not (path.parent / relative).resolve().exists():
-                missing.append(f"{path.relative_to(ROOT)} -> {target}")
+            path = Path(directory) / name
+            for target in re.findall(r"\[[^\]]*\]\(([^)]+)\)", path.read_text(encoding="utf-8")):
+                if "://" in target or target.startswith(("#", "mailto:")):
+                    continue
+                relative = target.split("#", 1)[0]
+                if relative and not (path.parent / relative).resolve().exists():
+                    missing.append(f"{path.relative_to(ROOT)} -> {target}")
     assert not missing, "broken relative Markdown links:\n" + "\n".join(missing)
+
+
+def test_open_source_license_and_package_metadata_are_complete() -> None:
+    license_text = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    assert "Apache License" in license_text
+    assert "Version 2.0, January 2004" in license_text
+    assert license_text == (ROOT / "manager" / "LICENSE").read_text(encoding="utf-8")
+    assert "Copyright 2026 panjose" in (ROOT / "NOTICE").read_text(encoding="utf-8")
+    notices = (ROOT / "THIRD_PARTY_NOTICES.md").read_text(encoding="utf-8")
+    assert "pypdfium2 / PDFium" in notices
+    assert "PyMuPDF" not in notices
+
+    root_project = (ROOT / "pyproject.toml").read_text(encoding="utf-8")
+    manager_project = (ROOT / "manager" / "pyproject.toml").read_text(encoding="utf-8")
+    for project in [root_project, manager_project]:
+        assert 'license = "Apache-2.0"' in project
+        assert 'authors = [{ name = "panjose" }]' in project
+        assert "https://github.com/panjose/Atom-Learn" in project
+    assert 'pypdfium2>=4.30,<6' in root_project
+    assert "PyMuPDF" not in root_project

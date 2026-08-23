@@ -2,6 +2,7 @@
 
 ## Unreleased - v0.15
 
+- Open-source readiness adds Apache-2.0 licensing and package metadata, third-party notices, and replaces the AGPL/commercial PyMuPDF OCR renderer with the Apache-2.0/BSD-3-Clause pypdfium2 adapter while preserving sidecar OCR, Tesseract, and fail-closed evidence behavior.
 - Phase 10 adds the schema-validated `graph-view-v1` UI-agnostic knowledge-map contract, typed prerequisite/containment/scheduled/optional/citation/semantic edges, explicit required/optional/research filters, and a dependency-free read-only HTML adapter while retaining Markdown lineage fallback.
 - Phase 9 extends the shared Document IR with structured table rows/columns/headers/spans and figure/table provenance metadata (`bbox`, crop hash, caption and adjacent locators). OCR/vision numeric output is proposal-only by default; research quantitative claims now require current block-level provenance and reviewed or reproducible evidence, otherwise completion fails closed for review or abstention.
 - Phase 8 adds a shared provenance-cached research provider contract for Crossref, OpenAlex, PubMed, Semantic Scholar, and arXiv; typed retry/failure and unsupported-citation-graph semantics; DOI/title deduplication with provider disagreements and citation provenance; plus a reviewable claim-level evidence matrix with effect direction, support/opposition, conditional boundaries, and source locators.

@@ -40,7 +40,7 @@ profiles:
     release_status: candidate
     capabilities: [base, ocr]
     stability: stable
-    python_modules: [fitz, pytesseract, PIL]
+    python_modules: [pypdfium2, pytesseract, PIL]
     native_requirements:
       - id: tesseract
         command: tesseract

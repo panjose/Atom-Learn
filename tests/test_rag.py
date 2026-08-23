@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import types
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -537,6 +538,59 @@ def test_ocr_sidecar_recovers_image_only_pdf_with_page_locator() -> None:
     assert ocr_blocks[0]["extraction_method"] == "ocr"
     assert ocr_blocks[0]["confidence"] < 1.0
     assert result["results"][0]["document_ir_block_ids"] == [ocr_blocks[0]["block_id"]]
+
+
+def test_optional_ocr_adapter_uses_pypdfium2_and_closes_render_resources(monkeypatch) -> None:
+    scripts = str(ROOT / "atom-learn" / "scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    import rag
+
+    closed = {"document": False, "page": False, "bitmap": False, "image": False}
+
+    class FakeImage:
+        def close(self) -> None:
+            closed["image"] = True
+
+    class FakeBitmap:
+        def to_pil(self) -> FakeImage:
+            return FakeImage()
+
+        def close(self) -> None:
+            closed["bitmap"] = True
+
+    class FakePage:
+        def render(self, *, scale: int) -> FakeBitmap:
+            assert scale == 2
+            return FakeBitmap()
+
+        def close(self) -> None:
+            closed["page"] = True
+
+    class FakeDocument:
+        def __init__(self, path: str) -> None:
+            assert path.endswith("scan.pdf")
+
+        def __getitem__(self, index: int) -> FakePage:
+            assert index == 0
+            return FakePage()
+
+        def close(self) -> None:
+            closed["document"] = True
+
+    monkeypatch.setitem(sys.modules, "pypdfium2", types.SimpleNamespace(PdfDocument=FakeDocument))
+    monkeypatch.setitem(
+        sys.modules,
+        "pytesseract",
+        types.SimpleNamespace(image_to_string=lambda _image, *, lang: f"OCR text ({lang})"),
+    )
+
+    sections = rag.ocr_pdf_sections(RUN_ROOT / "ocr-adapter-fixture" / "scan.pdf", [1], "eng")
+
+    assert sections == [
+        {"locator": "page 1 [OCR]", "section": "Page 1 OCR", "text": "OCR text (eng)"}
+    ]
+    assert all(closed.values())
 
 
 def test_correct_command_emits_web_tasks_then_closes_the_loop() -> None:

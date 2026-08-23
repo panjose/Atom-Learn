@@ -367,7 +367,7 @@ capabilities:
     limitations:
       - PDF table and figure detection remains best effort; coordinates and crop hashes are only present when an extractor supplies trustworthy metadata.
       - OCR and vision numeric values remain proposal-only until reviewed or reproducibly recalculated; this is an evidence gate, not automatic chart verification.
-      - Sidecar OCR is available in the base runtime; automatic PyMuPDF/Tesseract OCR is a developer extra and is not distributed in the signed v0.14.2 base runtime.
+      - Sidecar OCR is available in the base runtime; automatic pypdfium2/Tesseract OCR is an unreleased v0.15 developer extra and is not distributed in the signed v0.14.2 base runtime.
       - Sources indexed before Document IR remain searchable but must be reingested before exam or research IR consumers can attach them.
 
   - id: lineage.graph_view_v1

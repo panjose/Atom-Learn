@@ -3,6 +3,8 @@ __pycache__/
 .pytest_cache/
 *.egg-info/
 .test-workspaces/
+build/
+dist/
 
 # Local secrets and release-key backups. Never commit this directory.
 .private/

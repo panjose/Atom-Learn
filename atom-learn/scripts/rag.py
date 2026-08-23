@@ -393,22 +393,37 @@ def ocr_pdf_sections(path: Path, page_numbers: list[int], language: str) -> list
                 if page_number <= len(pages) and pages[page_number - 1].strip()
             ]
     try:
-        import fitz
+        import pypdfium2 as pdfium
         import pytesseract
-        from PIL import Image
     except ImportError:
         return []
     sections: list[dict[str, str]] = []
-    document = fitz.open(str(path))
-    for page_number in page_numbers:
-        page = document[page_number - 1]
-        pixmap = page.get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
-        image = Image.frombytes("RGB", [pixmap.width, pixmap.height], pixmap.samples)
-        content = pytesseract.image_to_string(image, lang=language).strip()
-        if content:
-            sections.append(
-                {"locator": f"page {page_number} [OCR]", "section": f"Page {page_number} OCR", "text": content}
-            )
+    document = pdfium.PdfDocument(str(path))
+    try:
+        for page_number in page_numbers:
+            page = document[page_number - 1]
+            bitmap = None
+            image = None
+            try:
+                bitmap = page.render(scale=2)
+                image = bitmap.to_pil()
+                content = pytesseract.image_to_string(image, lang=language).strip()
+                if content:
+                    sections.append(
+                        {
+                            "locator": f"page {page_number} [OCR]",
+                            "section": f"Page {page_number} OCR",
+                            "text": content,
+                        }
+                    )
+            finally:
+                if image is not None:
+                    image.close()
+                if bitmap is not None:
+                    bitmap.close()
+                page.close()
+    finally:
+        document.close()
     return sections
 
 

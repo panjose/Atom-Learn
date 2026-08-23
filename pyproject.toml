@@ -2,7 +2,31 @@
 name = "atom-learn"
 version = "0.14.2"
 description = "Atomic source-grounded learning with closed-loop hybrid RAG, concept routing, research, exams, and knowledge maps"
+readme = "README.md"
 requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE", "THIRD_PARTY_NOTICES.md"]
+authors = [{ name = "panjose" }]
+keywords = [
+  "ai-learning",
+  "atomic-learning",
+  "codex-skill",
+  "education",
+  "rag",
+  "research",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+]
 dependencies = [
   "PyYAML>=6.0",
   "pypdf>=4.3",
@@ -16,10 +40,17 @@ dependencies = [
 atomlearn = "atomlearn:main"
 
 [project.optional-dependencies]
-ocr = ["PyMuPDF>=1.24", "pytesseract>=0.3.13", "Pillow>=10.0"]
+ocr = ["pypdfium2>=4.30,<6", "pytesseract>=0.3.13", "Pillow>=10.0"]
 scale = ["usearch>=2.26,<3"]
 semantic = ["sentence-transformers>=5.2,<6"]
 dev = ["pytest>=8.0", "hypothesis>=6.120"]
+
+[project.urls]
+Homepage = "https://github.com/panjose/Atom-Learn"
+Documentation = "https://github.com/panjose/Atom-Learn#readme"
+Issues = "https://github.com/panjose/Atom-Learn/issues"
+Repository = "https://github.com/panjose/Atom-Learn.git"
+Changelog = "https://github.com/panjose/Atom-Learn/blob/main/CHANGELOG.md"
 
 [tool.setuptools]
 package-dir = {"" = "atom-learn/scripts", atomlearn_assets = "atom-learn"}
@@ -75,3 +106,7 @@ markers = [
   "fast: read-only unit, schema, documentation, and CLI-contract checks",
   "integration: filesystem and subprocess end-to-end workflow checks",
 ]
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"

@@ -68,7 +68,7 @@ PROFILE_SPECS: dict[str, dict[str, Any]] = {
     "ocr": {
         "capabilities": ["base", "ocr"],
         "stability": "stable",
-        "python_modules": ["fitz", "pytesseract", "PIL"],
+        "python_modules": ["pypdfium2", "pytesseract", "PIL"],
         "native_requirements": [
             {"id": "tesseract", "command": "tesseract", "version_args": ["--version"]}
         ],
