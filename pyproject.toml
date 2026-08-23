@@ -42,7 +42,7 @@ atomlearn = "atomlearn:main"
 [project.optional-dependencies]
 ocr = ["pypdfium2>=4.30,<6", "pytesseract>=0.3.13", "Pillow>=10.0"]
 scale = ["usearch>=2.26,<3"]
-semantic = ["sentence-transformers>=5.2,<6"]
+semantic = ["sentence-transformers>=5.2,<7"]
 dev = ["pytest>=8.0", "hypothesis>=6.120"]
 
 [project.urls]
