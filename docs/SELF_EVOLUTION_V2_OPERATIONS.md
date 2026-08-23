@@ -106,7 +106,10 @@ The workflow refuses branch publication. The release builder refuses tag/package
 - `tests/fixtures/migrations/supported-upgrade-paths.yaml`: declared version-path and schema-edge inventory.
 - `tests/fixtures/releases/gate-report-v0.13.0.json`: strict release-gate example.
 - `.github/workflows/validate.yml`: ordinary cross-platform branch CI.
-- `.github/workflows/release.yml`: tag-only signed publication.
+- `.github/workflows/release.yml`: exact-tag signed publication, with an explicit
+  maintainer-only manual recovery path for an existing tag that has not produced
+  a GitHub Release; the recovery reruns the complete platform matrix against the
+  immutable tag and refuses to replace an existing Release.
 
 ## Known operational limits
 

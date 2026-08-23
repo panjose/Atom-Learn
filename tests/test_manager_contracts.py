@@ -687,3 +687,10 @@ def test_tag_release_workflow_is_signed_gated_and_immutable() -> None:
     assert "atomlearn-trust-bundle.json" in workflow
     assert "gh release create" in workflow
     assert "branches:" not in workflow
+    assert "workflow_dispatch:" in workflow
+    assert "ref: ${{ env.RELEASE_TAG }}" in workflow
+    assert 'git tag --points-at HEAD --list "$RELEASE_TAG"' in workflow
+    assert "Release $RELEASE_TAG already exists and cannot be replaced" in workflow
+    assert "find runtime-dist -type f -name '*.zip' -print0" in workflow
+    assert "Expected exactly eight runtime bundles" in workflow
+    assert "find runtime-dist -maxdepth 1" not in workflow

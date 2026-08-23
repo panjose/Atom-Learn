@@ -352,7 +352,7 @@ atomlearn-core version
 
 bridge marker 会把 resolver 绑定到 bootstrap 选择的准确 Manager root，包括自定义 root。`codex migrate plan` 只读；`codex migrate apply --confirmed` 只接管已知官方 release 的完全一致源码树，并保留源码备份及崩溃恢复日志。`profile plan` 与 `profile apply` 只能选择 active 签名 manifest 已声明的 profile asset。语义 profile 激活时必须提供绝对路径的本地模型目录，其 revision 与每个必要文件 hash 都要匹配签名模型锁；系统绝不会下载模型或启用 remote code。OCR 激活会区分已安装的 Python adapter 与必需的原生引擎。`doctor` 会分别报告 `available`、`declared`、`installed`、`usable` 和 `stable`，并给出有类型的阻塞原因与修复建议。公开 release 无需 credential。私有 GitHub Release 会先尝试公开 URL，再使用 `ATOMLEARN_GITHUB_TOKEN`、`GH_TOKEN` 或 GitHub CLI credential helper；token 不会写入 manifest、workspace 或 URL。profile 命令、指纹核验、密钥轮换、恢复、回滚、迁移和传输边界详见[签名 Release Manager](atom-learn/references/RELEASE_MANAGER.md)。
 
-所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的 tag-only 发布流水线要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.15.0 Release Notes](docs/releases/v0.15.0.md)和[Changelog](CHANGELOG.md)。
+所有自进化 v2 能力仍然默认关闭，并且可以分别安全退出。加固后的精确标签发布流水线——无论由新标签触发，还是由维护者为尚未发布的既有标签显式恢复——都要求 Windows/Linux Python 3.10–3.13、属性测试、replay 与 v1 兼容性、迁移夹具、覆盖更新全部阶段的故障注入、独立 Capsule 隐私攻击语料、包含自适应复习的能力 smoke 以及签名 gate report 全部通过，才允许发布 stable assets。详见[操作与恢复手册](docs/SELF_EVOLUTION_V2_OPERATIONS.md)、[0.15.0 Release Notes](docs/releases/v0.15.0.md)和[Changelog](CHANGELOG.md)。
 
 ## 开源与社区
 
