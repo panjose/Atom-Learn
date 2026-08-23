@@ -74,6 +74,7 @@ suite before opening a pull request.
 python -m pytest -m fast
 python -m pytest -m integration
 python release/gate.py validate-skill
+python release/open_source_gate.py
 python -m build . --wheel
 python -m build manager --wheel
 ```

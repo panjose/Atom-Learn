@@ -363,6 +363,7 @@ AtomLearn is licensed under the [Apache License 2.0](LICENSE). Direct dependency
 - Report vulnerabilities through GitHub private vulnerability reporting, never a public issue; see the [Security Policy](SECURITY.md).
 - Usage channels and diagnostic requirements are documented in [Support](SUPPORT.md), while maintainer and release authority are documented in [Governance](GOVERNANCE.md).
 - Cite the exact release used through [CITATION.cff](CITATION.cff).
+- Before changing repository visibility, complete the maintainer-only items in the [Open-Source Release Checklist](docs/OPEN_SOURCE_RELEASE_CHECKLIST.md).
 
 Do not commit textbooks, paper corpora, exam answers, learner workspaces, `.atomlearn/` state, tokens, cookies, model credentials, or release private keys. Public examples and tests must remain synthetic, licensed, or privacy-minimized.
 

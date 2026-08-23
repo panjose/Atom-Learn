@@ -363,6 +363,7 @@ AtomLearn 使用 [Apache License 2.0](LICENSE) 开源。直接依赖与再分发
 - 漏洞必须通过 GitHub 私密漏洞报告提交，不能放入公开 Issue；详见[安全策略](SECURITY.md)。
 - 使用渠道与诊断信息要求见[支持说明](SUPPORT.md)，维护者与发布权限见[治理说明](GOVERNANCE.md)。
 - 请通过 [CITATION.cff](CITATION.cff) 引用实际使用的准确版本。
+- 修改仓库可见性前，请完成[开源发布检查清单](docs/OPEN_SOURCE_RELEASE_CHECKLIST.zh-CN.md)中的维护者操作项。
 
 请勿提交教材、论文语料库、考试答案、学习者 workspace、`.atomlearn/` 状态、token、cookie、模型凭据或发布私钥。公开示例和测试必须保持为合成内容、具有适当许可的内容或隐私最小化内容。
 

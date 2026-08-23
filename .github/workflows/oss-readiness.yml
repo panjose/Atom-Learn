@@ -1,0 +1,37 @@
+name: Open Source Readiness
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  repository-and-artifacts:
+    name: Repository and wheel policy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project and build tooling
+        run: python -m pip install -e ".[dev]" -e ./manager build
+      - name: Scan repository files and Git history
+        run: python release/open_source_gate.py --json
+      - name: Run open-source contract tests
+        run: python -m pytest tests/test_documentation.py tests/test_open_source_gate.py -q
+      - name: Build Core and Manager wheels
+        run: |
+          python -m build . --wheel --outdir oss-dist
+          python -m build manager --wheel --outdir oss-dist
+      - name: Validate wheel license metadata and notices
+        run: python release/open_source_gate.py --skip-history --wheel-dir oss-dist --json

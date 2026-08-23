@@ -170,3 +170,45 @@ def test_open_source_community_contracts_are_present_and_privacy_safe() -> None:
         assert isinstance(yaml.safe_load(path.read_text(encoding="utf-8")), dict)
     config = yaml.safe_load((ROOT / ".github" / "ISSUE_TEMPLATE" / "config.yml").read_text(encoding="utf-8"))
     assert config["blank_issues_enabled"] is False
+
+
+def test_public_repository_automation_and_checklists_are_aligned() -> None:
+    required = [
+        ".github/dependabot.yml",
+        ".github/workflows/codeql.yml",
+        ".github/workflows/oss-readiness.yml",
+        "docs/OPEN_SOURCE_RELEASE_CHECKLIST.md",
+        "docs/OPEN_SOURCE_RELEASE_CHECKLIST.zh-CN.md",
+        "release/open_source_gate.py",
+    ]
+    assert all((ROOT / path).is_file() for path in required)
+
+    dependabot = yaml.safe_load((ROOT / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    updates = dependabot["updates"]
+    assert {
+        (update["package-ecosystem"], update["directory"])
+        for update in updates
+    } == {("pip", "/"), ("pip", "/manager"), ("github-actions", "/")}
+    assert all(update["schedule"]["interval"] == "weekly" for update in updates)
+
+    codeql_text = (ROOT / ".github" / "workflows" / "codeql.yml").read_text(encoding="utf-8")
+    readiness_text = (ROOT / ".github" / "workflows" / "oss-readiness.yml").read_text(encoding="utf-8")
+    validate_text = (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
+    release_text = (ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert "if: github.event.repository.private == false" in codeql_text
+    assert "github/codeql-action/init@v3" in codeql_text
+    assert "github/codeql-action/analyze@v3" in codeql_text
+    assert "fetch-depth: 0" in readiness_text
+    assert "--wheel-dir oss-dist" in readiness_text
+    assert "release/open_source_gate.py" in validate_text
+    assert "release/open_source_gate.py" in release_text
+
+    english = (ROOT / "docs" / "OPEN_SOURCE_RELEASE_CHECKLIST.md").read_text(encoding="utf-8")
+    chinese = (ROOT / "docs" / "OPEN_SOURCE_RELEASE_CHECKLIST.zh-CN.md").read_text(encoding="utf-8")
+    statuses = lambda value: re.findall(r"^- \[([ x])\]", value, re.MULTILINE)
+    assert statuses(english) == statuses(chinese)
+    assert statuses(english).count("x") >= 6
+    assert statuses(english).count(" ") >= 20
+    assert "242panjose@gmail.com" in english and "242panjose@gmail.com" in chinese
+    assert "No comic or promotional image is part of this launch." in english
+    assert "本次发布不加入漫画或宣传图片。" in chinese
