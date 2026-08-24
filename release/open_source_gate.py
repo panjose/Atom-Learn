@@ -125,8 +125,10 @@ def check_metadata(failures: list[str]) -> None:
     chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
     if f"`v{current_version}`" not in english or f"`v{current_version}`" not in chinese:
         failures.append("bilingual README does not identify the package release version")
-    if "No AtomLearn learning-gain effect has been established." not in english:
-        failures.append("README omits the learning-effect evidence boundary")
+    learning_path_english = "AtomLearn evaluates learning outcomes through the consented `atomlearn study` workflow"
+    learning_path_chinese = "AtomLearn 通过明确同意的 `atomlearn study` 工作流评估学习效果"
+    if learning_path_english not in english or learning_path_chinese not in chinese:
+        failures.append("bilingual README omits the learning-effect study and evidence-layer path")
     code_blocks = lambda value: [block.strip() for block in re.findall(r"```[^\n]*\n(.*?)```", value, re.DOTALL)]
     if code_blocks(english) != code_blocks(chinese):
         failures.append("English and Chinese README code blocks are not aligned")

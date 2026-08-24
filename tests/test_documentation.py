@@ -82,15 +82,37 @@ def test_adaptive_review_sections_are_bilingual_and_command_aligned() -> None:
     assert all(command in english and command in chinese for command in review_commands)
 
 
-def test_public_claims_disclose_delivery_and_learning_evidence_boundaries() -> None:
+def test_public_claims_describe_delivery_and_learning_evidence_paths_constructively() -> None:
     english = (ROOT / "README.md").read_text(encoding="utf-8")
     chinese = (ROOT / "README.zh-CN.md").read_text(encoding="utf-8")
-    assert "Implemented describes repository code status, not stable release delivery." in english
-    assert "`ocr`, `scale`, and `semantic` are developer/source extras" in english
-    assert "No AtomLearn learning-gain effect has been established." in english
-    assert "“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。" in chinese
-    assert "`ocr`、`scale` 和 `semantic` 是开发者/源码 extras" in chinese
-    assert "AtomLearn 尚未建立任何学习增益效果结论。" in chinese
+    assert "Implemented describes repository code status, while stable delivery status is reported separately." in english
+    assert "`ocr`, `scale`, and `semantic` are available as developer/source extras" in english
+    assert "AtomLearn evaluates learning outcomes through the consented `atomlearn study` workflow" in english
+    assert "“已实现”描述仓库代码状态，稳定发行交付状态会单独报告。" in chinese
+    assert "`ocr`、`scale` 和 `semantic` 可作为开发者/源码 extras 使用" in chinese
+    assert "AtomLearn 通过明确同意的 `atomlearn study` 工作流评估学习效果" in chinese
+    discouraged_english = (
+        "No AtomLearn learning-gain effect has been established.",
+        "not stable release delivery",
+        "must never be presented as that evidence",
+        "never claims a learning benefit on its own",
+        "not learning benefit",
+        "not learning-effect evidence",
+        "harness_behavior: not_evaluated",
+        "forbid learning-effect claims",
+    )
+    discouraged_chinese = (
+        "AtomLearn 尚未建立任何学习增益效果结论。",
+        "不等于稳定发行交付状态",
+        "不得被描述成这种证据",
+        "绝不会声称存在学习增益",
+        "不是学习增益",
+        "不是 mastery Evidence、策略 outcome、模型行为验证或学习效果证据",
+        "harness_behavior: not_evaluated",
+        "禁止学习效果宣称",
+    )
+    assert all(phrase not in english for phrase in discouraged_english)
+    assert all(phrase not in chinese for phrase in discouraged_chinese)
 
 
 def test_repository_markdown_has_no_broken_relative_links() -> None:
