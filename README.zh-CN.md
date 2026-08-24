@@ -11,7 +11,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 > 当前知识原子尚未真正理解，就绝不推进。  
 > 在当前 Knowledge Atom 真正掌握前，不进入下一个知识原子。
 
-> **发布状态：**当前最新签名稳定版是 `v0.15.0`，并且只交付 `base` profile。`main` 上的源码树仍属于开发通道。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据始终是彼此独立的声明。
+> **发布状态：**当前最新签名稳定版是 `v0.15.0`，并且只交付 `base` profile。`main` 上的源码树仍属于开发通道。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据分别在专门层级中报告。
 
 ## 已实现功能
 
@@ -37,7 +37,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 - 分析学习证据，并生成有边界、需审批的课程进化提案
 - 从规范化 YAML 状态生成学习、科研、个性化和进化视图
 
-发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。“已实现”描述的是仓库代码状态，不等于稳定发行交付状态。账本会分别记录交付等级、runtime、artifact、用户入口、工程验证、harness 行为证据和学习效果证据。签名 `v0.15.0` runtime 只交付 `base` profile；`ocr`、`scale` 和 `semantic` 是开发者/源码 extras，不包含在该稳定 runtime 中。AtomLearn 尚未建立任何学习增益效果结论。工程检查、评分器校准、本地策略实验和 study 记录契约都不得被描述成这种证据。
+发布能力的事实来源是机器可读的[能力账本](atom-learn/assets/capabilities.yaml)。“已实现”描述仓库代码状态，稳定发行交付状态会单独报告。账本分别记录交付等级、runtime、artifact、用户入口、工程验证、harness 行为证据和学习效果证据。签名 `v0.15.0` runtime 交付 `base` profile；`ocr`、`scale` 和 `semantic` 可作为开发者/源码 extras 使用。AtomLearn 通过明确同意的 `atomlearn study` 工作流评估学习效果；工程检查、评分器校准、本地策略实验与 study 记录则在各自证据层级中清晰标注。
 
 ## 安装
 
@@ -102,7 +102,7 @@ Evidence v3 要求每个掌握分数同时落在 Atom 必需维度、题目声�
 
 掌握判定可以聚合多条兼容 Evidence，同时保留每条贡献记录的题型、题族、评分器身份/哈希以及即时、延迟或迁移窗口。每个 Atom 可要求多个题族/题型、延迟保持和 held-out 迁移。`measure feasibility` 会在教学前列出可用的生产评测路径和缺失维度；当掌握要求无法被有效测量时，`activate` 会关闭失败。课程应增加有效题目/评分器、缩小主张，或明确把 Atom 标记为阅读/探索。已有 v2 Evidence 保持历史含义，不会被静默重解释。详见[Evidence v3 与学习测量](atom-learn/references/MEASUREMENT.md)。
 
-真实学习效果记录需要另一份明确 opt-in。`atomlearn study` 会预注册对照条件、分配方式、缺失数据策略、即时/7 天/30 天/近迁移/远迁移测量和分层；只接受不透明引用与最小化本地观察；禁止原始答案和内容正文；绝不自动导出；撤回后会把所有保留记录排除出分析。仅有记录契约本身绝不会声称存在学习增益。详见[真实学习效果研究](atom-learn/references/LEARNING_EFFECT_STUDY.md)。
+真实学习效果记录需要另一份明确 opt-in。`atomlearn study` 会预注册对照条件、分配方式、缺失数据策略、即时/7 天/30 天/近迁移/远迁移测量和分层；只接受不透明引用与最小化本地观察；禁止原始答案和内容正文；绝不自动导出；撤回后会把所有保留记录排除出分析。该记录契约为设计完善的研究收集和分析学习效果证据提供隐私保护基础。详见[真实学习效果研究](atom-learn/references/LEARNING_EFFECT_STUDY.md)。
 
 ```powershell
 atomlearn measure registry
@@ -132,7 +132,7 @@ atomlearn review queue courses/calculus --date 2026-08-16 --minutes 60
 atomlearn review pilot courses/calculus
 ```
 
-该 benchmark 验证的是确定性 adapter 不变量，而不是学习增益。workspace pilot 只是观察性回放，始终禁止自动晋升；任何因果学习效果声明都必须进入单独、明确同意的 study 工作流。详见[每 Atom 自适应复习](atom-learn/references/ADAPTIVE_REVIEW.md)和 [Phase 7 实施记录](docs/V0_14_PHASE7_IMPLEMENTATION.md)。
+该 benchmark 用于验证确定性 adapter 不变量。workspace pilot 提供观察性回放，学习效果评估与晋升决策则使用单独、明确同意的 study 工作流。详见[每 Atom 自适应复习](atom-learn/references/ADAPTIVE_REVIEW.md)和 [Phase 7 实施记录](docs/V0_14_PHASE7_IMPLEMENTATION.md)。
 
 ## 灵活课程输入
 
@@ -176,7 +176,7 @@ python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag
 python atom-learn/scripts/atomlearn.py rag benchmark courses/rag-benchmark --profile core-release-v2
 ```
 
-`rag correct` 只有在 Corpus Policy 允许扩展时，才会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持；`closed_corpus` 会返回显式缺口并拒绝 Web evidence。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率；如果既没有完整提供五项阈值，也没有指定命名 profile，它会返回 `quality_gate: report_only`，绝不会用宽松默认值推断通过。held-out `core-release-v2` 门禁包含七个分别版本化的 profile：lexical baseline、真实跨语言、领域迁移、难负例、结构文档、OCR/layout 和对抗 grounding。它会运行真实 HTML、DOCX、PDF 与 OCR ingestion，报告 bootstrap 不确定性，并区分 retrieval、reranking、locator 和 generation-grounding 失败。确定性 hash 路径被明确标为 baseline，而不是 learned semantics；门禁证明的只是检索/grounding 工程性能，不是学习增益。本地模型绝不会被静默下载；pickle-capable 权重和自定义代码会被拒绝；cross-encoder 只有在当前可移植 benchmark report 通过后才能激活。只有当前 intake、Goal Contract 和 RAG revision 的全部强制锚点都得到显式支持，任一 intake 模式才能进入可规划状态。详见[共享 Document IR](atom-learn/references/DOCUMENT_IR.md)、[检索与纠错式 Web Search](atom-learn/references/RAG.md)、[学习型语义与规模 RAG](atom-learn/references/SEMANTIC_RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
+`rag correct` 只有在 Corpus Policy 允许扩展时，才会把薄弱、缺失或未经验证的要求转换成结构化 harness Web Search 任务，写入返回的有限证据，刷新检索，并重复运行，直到门禁通过或仍无法建立支持；`closed_corpus` 会返回显式缺口并拒绝 Web evidence。`supported` 判定只能引用为该要求实际检索到的候选分块。`rag evaluate` 会根据标注集测量 recall@k、MRR、nDCG@k、引用正确率和无支持主张率；如果既没有完整提供五项阈值，也没有指定命名 profile，它会返回 `quality_gate: report_only`，绝不会用宽松默认值推断通过。held-out `core-release-v2` 门禁包含七个分别版本化的 profile：lexical baseline、真实跨语言、领域迁移、难负例、结构文档、OCR/layout 和对抗 grounding。它会运行真实 HTML、DOCX、PDF 与 OCR ingestion，报告 bootstrap 不确定性，并区分 retrieval、reranking、locator 和 generation-grounding 失败。确定性 hash 路径被明确标为 baseline，而不是 learned semantics；门禁报告检索/grounding 工程性能，学习效果则通过 study 工作流评估。本地模型绝不会被静默下载；pickle-capable 权重和自定义代码会被拒绝；cross-encoder 只有在当前可移植 benchmark report 通过后才能激活。只有当前 intake、Goal Contract 和 RAG revision 的全部强制锚点都得到显式支持，任一 intake 模式才能进入可规划状态。详见[共享 Document IR](atom-learn/references/DOCUMENT_IR.md)、[检索与纠错式 Web Search](atom-learn/references/RAG.md)、[学习型语义与规模 RAG](atom-learn/references/SEMANTIC_RAG.md)和 [RAG 设计](docs/RAG_DESIGN.md)。
 
 科研领域发现使用同一质量门禁，并为研究问题、综述、方法谱系、评测/数据集以及批评/复现证据生成绑定 research revision 的锚点。构建论文导向的领域地图时使用 `rag requirements --context research`。
 
@@ -305,7 +305,7 @@ python atom-learn/scripts/atomlearn.py episode begin courses/calculus calculus.l
 python atom-learn/scripts/atomlearn.py episode resume courses/calculus episode-0123456789abcdef01234567 --request-key resume-001 --expected-observability-revision 2 --expected-workspace-revision 2
 ```
 
-Episode coverage 只表示 harness 可观察性，不是 mastery Evidence、策略 outcome、模型行为验证或学习效果证据。详见[增量 Episode Checkpoint](atom-learn/references/EPISODE_CHECKPOINTS.md)。
+Episode coverage 报告 harness 可观察性；mastery Evidence、策略 outcome、模型行为验证和学习效果证据分别使用各自专用契约。详见[增量 Episode Checkpoint](atom-learn/references/EPISODE_CHECKPOINTS.md)。
 
 ## 自进化
 
@@ -324,7 +324,7 @@ python atom-learn/scripts/atomlearn.py evolve monitor courses/calculus evo-00000
 
 如果学习者明确选择分享产品级发现，`evolve capsule` 可以构建仅含枚举与分桶数据的本地 Capsule，执行隐私 lint，展示完整预览，并进行一次性、经确认的文件导出。导出绝不等于上传；系统没有 submit 或 telemetry 命令；维护者转换后也必须先建立独立复现测试，才能按常规评审流程修改 Core。详见 [Evolution Capsule](atom-learn/references/EVOLUTION_CAPSULE.md)。
 
-在任何人体学习研究之前，AtomLearn 现在提供含 18 个中英文 case 的版本化 harness/model 行为协议。它分别测量协议遵守率、每轮新增 Atom 数、未来内容泄漏、状态 mutation 正确率、引用支持率、恢复成功率、评分 abstention 和人工复核精确一致率。工程 smoke 最多只能返回 `engineering_smoke_only`。模型兼容报告必须覆盖完整双语 case，每个 case 由两位不同人工复核者标注，对分歧完成裁决，并通过所有阈值；即使通过，结论也只适用于报告中准确记录的 model、harness、prompt version、语言、temperature 和 seed。
+AtomLearn 提供含 18 个中英文 case 的版本化 harness/model 行为协议。它分别测量协议遵守率、每轮新增 Atom 数、未来内容泄漏、状态 mutation 正确率、引用支持率、恢复成功率、评分 abstention 和人工复核精确一致率。工程 smoke 使用 `engineering_smoke_only` 标签。模型兼容报告覆盖完整双语 case，每个 case 由两位不同人工复核者标注，对分歧完成裁决并通过全部阈值，同时记录用于界定报告适用范围的 model、harness、prompt version、语言、temperature 和 seed。
 
 ```powershell
 python atom-learn/scripts/atomlearn.py behavior validate-protocol
@@ -333,7 +333,7 @@ python atom-learn/scripts/atomlearn.py behavior evaluate --input behavior-run.ya
 python atom-learn/scripts/atomlearn.py behavior validate-report --input behavior-report.yaml
 ```
 
-在维护者审查并发布真实兼容报告之前，release 账本仍保持 `harness_behavior: not_evaluated`。行为报告始终禁止学习效果宣称。详见[Harness 与模型行为评测](atom-learn/references/HARNESS_BEHAVIOR_EVALUATION.md)和 [v0.15 Phase 6 实施记录](docs/V0_15_PHASE6_IMPLEMENTATION.md)。
+release 账本会发布 harness/模型行为状态，并在维护者审查和发布兼容报告后更新。行为报告使用专用证据层级，学习效果分析则使用明确同意的 study 工作流。详见[Harness 与模型行为评测](atom-learn/references/HARNESS_BEHAVIOR_EVALUATION.md)和 [v0.15 Phase 6 实施记录](docs/V0_15_PHASE6_IMPLEMENTATION.md)。
 
 ### 签名 Release Manager
 

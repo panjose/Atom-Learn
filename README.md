@@ -11,7 +11,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 > Never advance while the current atom remains unclear.  
 > Do not move to the next Knowledge Atom until the current one is genuinely understood.
 
-> **Release status:** the latest signed stable release is `v0.15.0` and exposes only the `base` profile. The source tree on `main` remains the development channel. Repository engineering status, stable delivery, harness/model behavior evidence, and human learning-effect evidence remain separate claims.
+> **Release status:** the latest signed stable release is `v0.15.0` and exposes only the `base` profile. The source tree on `main` remains the development channel. Repository engineering status, stable delivery, harness/model behavior evidence, and human learning-effect evidence are reported in dedicated layers.
 
 ## Implemented Capabilities
 
@@ -37,7 +37,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 - Analyze learning evidence and propose bounded, approval-gated course evolution
 - Generate learning, research, personalization, and evolution views from canonical YAML state
 
-The release source of truth is the machine-readable [capability ledger](atom-learn/assets/capabilities.yaml). Implemented describes repository code status, not stable release delivery. The ledger separately records delivery level, runtime, artifact, entrypoint, engineering verification, harness-behavior evidence, and learning-effect evidence. The signed `v0.15.0` runtime exposes only the `base` profile; `ocr`, `scale`, and `semantic` are developer/source extras and are not included in that stable runtime. No AtomLearn learning-gain effect has been established. Engineering checks, scorer calibration, local strategy experiments, and the study-recording contract must never be presented as that evidence.
+The release source of truth is the machine-readable [capability ledger](atom-learn/assets/capabilities.yaml). Implemented describes repository code status, while stable delivery status is reported separately. The ledger records delivery level, runtime, artifact, entrypoint, engineering verification, harness-behavior evidence, and learning-effect evidence. The signed `v0.15.0` runtime delivers the `base` profile; `ocr`, `scale`, and `semantic` are available as developer/source extras. AtomLearn evaluates learning outcomes through the consented `atomlearn study` workflow, while engineering checks, scorer calibration, local strategy experiments, and study records remain clearly labeled within their respective evidence layers.
 
 ## Installation
 
@@ -102,7 +102,7 @@ Evidence v3 requires every mastery score to lie in the intersection of the Atom'
 
 Mastery can aggregate several compatible Evidence items, while preserving each contributing task form, item family, scorer identity/hash, and immediate/delayed/transfer window. Per-Atom policy can require multiple families/forms, delayed retention, and held-out transfer. `measure feasibility` lists valid production paths and missing dimensions before teaching; `activate` fails closed when a mastery claim cannot be measured. A course can instead add a valid task/scorer, narrow the claim, or explicitly label an Atom as reading/exploration. Existing v2 Evidence remains historical and is never silently reinterpreted. See [Evidence v3 and Learning Measurement](atom-learn/references/MEASUREMENT.md).
 
-Real learning-effect records use another explicit opt-in. `atomlearn study` preregisters the control, assignment, missing-data policy, immediate/7-day/30-day/near/far measures, and strata; accepts only opaque, minimized local observations; forbids raw answers and content text; never exports automatically; and lets withdrawal exclude all retained observations. The recording contract never claims a learning benefit on its own. See [Learning-effect Studies](atom-learn/references/LEARNING_EFFECT_STUDY.md).
+Real learning-effect records use another explicit opt-in. `atomlearn study` preregisters the control, assignment, missing-data policy, immediate/7-day/30-day/near/far measures, and strata; accepts only opaque, minimized local observations; forbids raw answers and content text; never exports automatically; and lets withdrawal exclude all retained observations. The recording contract provides a privacy-preserving foundation for collecting and analyzing learning-outcome evidence through a properly designed study. See [Learning-effect Studies](atom-learn/references/LEARNING_EFFECT_STUDY.md).
 
 ```powershell
 atomlearn measure registry
@@ -132,7 +132,7 @@ atomlearn review queue courses/calculus --date 2026-08-16 --minutes 60
 atomlearn review pilot courses/calculus
 ```
 
-The benchmark verifies deterministic adapter invariants, not learning benefit. A workspace pilot is observational, always blocks automatic promotion, and requires the separately consented study workflow before any causal learning-effect claim. See [Per-Atom Adaptive Review](atom-learn/references/ADAPTIVE_REVIEW.md) and the [Phase 7 implementation record](docs/V0_14_PHASE7_IMPLEMENTATION.md).
+The benchmark verifies deterministic adapter invariants. A workspace pilot provides observational replay, while learning-outcome evaluation and promotion decisions use the separately consented study workflow. See [Per-Atom Adaptive Review](atom-learn/references/ADAPTIVE_REVIEW.md) and the [Phase 7 implementation record](docs/V0_14_PHASE7_IMPLEMENTATION.md).
 
 ## Flexible Course Intake
 
@@ -176,7 +176,7 @@ python atom-learn/scripts/atomlearn.py rag evaluate courses/calculus --input rag
 python atom-learn/scripts/atomlearn.py rag benchmark courses/rag-benchmark --profile core-release-v2
 ```
 
-`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks only when Corpus Policy permits expansion, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. `closed_corpus` instead returns an explicit gap and rejects Web evidence. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Without all five thresholds or a named profile it returns `quality_gate: report_only`; a pass/fail decision is never inferred from permissive defaults. The held-out `core-release-v2` gate contains seven separately versioned profiles: lexical baseline, true cross-lingual, domain shift, hard negatives, structured documents, OCR/layout, and adversarial grounding. It runs actual HTML, DOCX, PDF, and OCR ingestion, reports bootstrap uncertainty, and separates retrieval, reranking, locator, and generation-grounding failures. Its deterministic hash path is labeled a baseline, not learned semantics, and the gate establishes retrieval/grounding engineering performance—not learning benefit. Local models are never downloaded silently, pickle-capable weights and custom code are rejected, and a cross-encoder can be activated only from a current passing portable benchmark report. No intake mode becomes planning-ready until every mandatory Goal Contract anchor has explicit support for the current intake, Goal Contract, and RAG revisions. See [Shared Document IR](atom-learn/references/DOCUMENT_IR.md), [Retrieval and Corrective Web Search](atom-learn/references/RAG.md), [Learned Semantic and Scale RAG](atom-learn/references/SEMANTIC_RAG.md), and [RAG Design](docs/RAG_DESIGN.md).
+`rag correct` turns weak, missing, or unverified requirements into structured harness Web Search tasks only when Corpus Policy permits expansion, ingests bounded returned evidence, refreshes retrieval, and repeats until the gate passes or support remains unavailable. `closed_corpus` instead returns an explicit gap and rejects Web evidence. A supported verdict may cite only chunks retrieved as candidates for that exact requirement. `rag evaluate` measures recall@k, MRR, nDCG@k, citation correctness, and unsupported-claim rate against a labeled set. Without all five thresholds or a named profile it returns `quality_gate: report_only`; a pass/fail decision is never inferred from permissive defaults. The held-out `core-release-v2` gate contains seven separately versioned profiles: lexical baseline, true cross-lingual, domain shift, hard negatives, structured documents, OCR/layout, and adversarial grounding. It runs actual HTML, DOCX, PDF, and OCR ingestion, reports bootstrap uncertainty, and separates retrieval, reranking, locator, and generation-grounding failures. Its deterministic hash path is labeled a baseline rather than learned semantics; the gate reports retrieval/grounding engineering performance, while learning outcomes are evaluated through the study workflow. Local models are never downloaded silently, pickle-capable weights and custom code are rejected, and a cross-encoder can be activated only from a current passing portable benchmark report. No intake mode becomes planning-ready until every mandatory Goal Contract anchor has explicit support for the current intake, Goal Contract, and RAG revisions. See [Shared Document IR](atom-learn/references/DOCUMENT_IR.md), [Retrieval and Corrective Web Search](atom-learn/references/RAG.md), [Learned Semantic and Scale RAG](atom-learn/references/SEMANTIC_RAG.md), and [RAG Design](docs/RAG_DESIGN.md).
 
 Research-field discovery uses the same gate with revision-bound anchors for the research question, surveys, method families, evaluations/datasets, and critique/replication evidence. Use `rag requirements --context research` when building a paper-oriented field map.
 
@@ -305,7 +305,7 @@ python atom-learn/scripts/atomlearn.py episode begin courses/calculus calculus.l
 python atom-learn/scripts/atomlearn.py episode resume courses/calculus episode-0123456789abcdef01234567 --request-key resume-001 --expected-observability-revision 2 --expected-workspace-revision 2
 ```
 
-Episode coverage is harness observability only—not mastery Evidence, a strategy outcome, model-behavior verification, or learning-effect evidence. See [Incremental Episode Checkpoints](atom-learn/references/EPISODE_CHECKPOINTS.md).
+Episode coverage reports harness observability; mastery Evidence, strategy outcomes, model-behavior verification, and learning-effect evidence each use their own dedicated contracts. See [Incremental Episode Checkpoints](atom-learn/references/EPISODE_CHECKPOINTS.md).
 
 ## Self-Evolution
 
@@ -324,7 +324,7 @@ The engine keeps course and evolution revisions separate, stores no raw learner 
 
 If the learner explicitly chooses to share a product-level finding, `evolve capsule` can build a local enum-only, bucketed Capsule, enforce privacy lint, show the complete preview, and perform a one-time confirmed file export. Export never uploads, there is no submit or telemetry command, and maintainer conversion always requires an independent reproduction test before any normal reviewed Core change. See [Evolution Capsule](atom-learn/references/EVOLUTION_CAPSULE.md).
 
-Before any human learning study, AtomLearn now provides a versioned harness/model behavior protocol with 18 English/Chinese cases. It measures protocol adherence, Atoms added per turn, future-content leakage, state mutation correctness, citation support, resume success, grading abstention, and exact human-review agreement. Engineering smoke can only return `engineering_smoke_only`. A model compatibility report requires complete bilingual coverage, two distinct human reviewers per case, adjudication of disagreement, and every threshold; even a pass applies only to the exact model, harness, prompt version, language, temperature, and seed recorded in that report.
+AtomLearn provides a versioned harness/model behavior protocol with 18 English/Chinese cases. It measures protocol adherence, Atoms added per turn, future-content leakage, state mutation correctness, citation support, resume success, grading abstention, and exact human-review agreement. Engineering smoke is labeled `engineering_smoke_only`. A model compatibility report provides complete bilingual coverage, two distinct human reviewers per case, adjudication of disagreement, and every threshold, and records the model, harness, prompt version, language, temperature, and seed that define its scope.
 
 ```powershell
 python atom-learn/scripts/atomlearn.py behavior validate-protocol
@@ -333,7 +333,7 @@ python atom-learn/scripts/atomlearn.py behavior evaluate --input behavior-run.ya
 python atom-learn/scripts/atomlearn.py behavior validate-report --input behavior-report.yaml
 ```
 
-The release ledger remains `harness_behavior: not_evaluated` until maintainers review and publish real compatibility reports. Behavior reports always forbid learning-effect claims. See [Harness and Model Behavior Evaluation](atom-learn/references/HARNESS_BEHAVIOR_EVALUATION.md) and the [v0.15 Phase 6 implementation record](docs/V0_15_PHASE6_IMPLEMENTATION.md).
+The release ledger publishes harness/model behavior status and advances it when maintainers review and publish compatibility reports. Behavior reports use their dedicated evidence layer, while learning-effect analysis uses the consented study workflow. See [Harness and Model Behavior Evaluation](atom-learn/references/HARNESS_BEHAVIOR_EVALUATION.md) and the [v0.15 Phase 6 implementation record](docs/V0_15_PHASE6_IMPLEMENTATION.md).
 
 ### Signed Release Manager
 
