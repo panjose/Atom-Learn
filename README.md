@@ -13,7 +13,7 @@ AtomLearn is a source-grounded AI Skill for progressive learning and research re
 
 > **Release status:** the latest signed stable release is `v0.15.0` and exposes only the `base` profile. The source tree on `main` remains the development channel. Repository engineering status, stable delivery, harness/model behavior evidence, and human learning-effect evidence are reported in dedicated layers.
 
-![AtomLearn framework: flexible inputs become a Knowledge Atom Graph and an adaptive learning loop](docs/assets/atomlearn-framework.png)
+![AtomLearn framework: flexible inputs become a Knowledge Atom Graph and an adaptive learning loop](docs/assets/atomlearn-framework.svg)
 
 ## Implemented Capabilities
 

@@ -13,7 +13,7 @@ AtomLearn 是一个面向渐进式学习和科研论文阅读的资料驱动 AI 
 
 > **发布状态：**当前最新签名稳定版是 `v0.15.0`，并且只交付 `base` profile。`main` 上的源码树仍属于开发通道。仓库工程状态、稳定交付、harness/模型行为证据与人体学习效果证据分别在专门层级中报告。
 
-![AtomLearn 框架：灵活输入经过 Knowledge Atom Graph，进入自适应学习闭环](docs/assets/atomlearn-framework.png)
+![AtomLearn 框架：灵活输入经过 Knowledge Atom Graph，进入自适应学习闭环](docs/assets/atomlearn-framework.svg)
 
 ## 已实现功能
 

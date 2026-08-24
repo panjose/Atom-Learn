@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1672" height="941" viewBox="0 0 1672 941" role="img" aria-labelledby="title desc" shape-rendering="geometricPrecision" text-rendering="geometricPrecision">
+  <title id="title">AtomLearn learning framework</title>
+  <desc id="desc">Flexible inputs pass through grounded intake into a Knowledge Atom Graph, an adaptive learning loop, and learning outcomes. Session signals support bounded evolution.</desc>
+
+  <defs>
+    <linearGradient id="graphBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f7faff"/>
+    </linearGradient>
+    <linearGradient id="loopBg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fbfdf8"/>
+      <stop offset="1" stop-color="#f5faef"/>
+    </linearGradient>
+    <linearGradient id="activeBg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fffdf6"/>
+      <stop offset="1" stop-color="#fff5dc"/>
+    </linearGradient>
+    <linearGradient id="topicIconGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8fc0ed"/>
+      <stop offset="0.42" stop-color="#2f7fd6"/>
+      <stop offset="1" stop-color="#5ba1e5"/>
+    </linearGradient>
+    <linearGradient id="sourcesIconGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#799873"/>
+      <stop offset="0.42" stop-color="#174e20"/>
+      <stop offset="1" stop-color="#5f865c"/>
+    </linearGradient>
+    <linearGradient id="goalIconGradient" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c4dcf7"/>
+      <stop offset="0.55" stop-color="#8eb8eb"/>
+      <stop offset="1" stop-color="#649cdf"/>
+    </linearGradient>
+    <filter id="shadow" x="-15%" y="-15%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#0b2352" flood-opacity="0.10"/>
+    </filter>
+    <marker id="arrowNavy" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#0b2c66"/>
+    </marker>
+    <marker id="arrowGreen" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="12" markerHeight="12" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#23652d"/>
+    </marker>
+    <marker id="arrowLight" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#8dadd3"/>
+    </marker>
+    <style>
+      .title { font-family: Arial, Helvetica, sans-serif; font-size: 46px; font-weight: 700; fill: #07194b; }
+      .panel-title { font-family: Arial, Helvetica, sans-serif; font-size: 22px; font-weight: 700; fill: #07194b; text-anchor: middle; }
+      .graph-title { font-size: 28px; }
+      .loop-title { font-size: 21px; }
+      .card-label { font-family: Arial, Helvetica, sans-serif; font-size: 15px; font-weight: 600; fill: #0a1d4f; }
+      .small-label { font-family: Arial, Helvetica, sans-serif; font-size: 14px; font-weight: 600; fill: #16325f; }
+      .panel { stroke-width: 2; rx: 16; }
+      .card { fill: #ffffff; stroke: #c8d0dc; stroke-width: 1.5; rx: 12; }
+      .node { fill: #ffffff; stroke: #0b2c66; stroke-width: 2; rx: 16; filter: url(#shadow); }
+      .icon-navy { fill: none; stroke: #0b2c66; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+      .icon-green { fill: none; stroke: #23652d; stroke-width: 2.3; stroke-linecap: round; stroke-linejoin: round; }
+      .flow { fill: none; stroke: #0b2c66; stroke-width: 3; marker-end: url(#arrowNavy); }
+      .thin-flow { fill: none; stroke: #0b2c66; stroke-width: 2.3; marker-end: url(#arrowNavy); }
+      .loop-flow { fill: none; stroke: #23652d; stroke-width: 3; marker-end: url(#arrowGreen); }
+      .feedback { fill: none; stroke: #8dadd3; stroke-width: 1.6; marker-end: url(#arrowLight); }
+    </style>
+  </defs>
+
+  <rect width="1672" height="941" fill="#ffffff"/>
+  <text class="title" x="836" y="58" text-anchor="middle">AtomLearn</text>
+
+  <!-- Flexible inputs -->
+  <rect class="panel" x="49" y="110" width="177" height="558" fill="#fdfcf9" stroke="#39475d"/>
+  <text class="panel-title" x="137.5" y="159">Flexible</text>
+  <text class="panel-title" x="137.5" y="188">Inputs</text>
+
+  <g>
+    <rect class="card" x="62" y="208" width="147" height="75"/>
+    <g transform="translate(72 218)">
+      <path d="M0 0 C0.99 0.33 1.98 0.66 3 1 C3.188 3.562 3.188 3.562 3 6 C4.65 6 6.3 6 8 6 C8 9 8 9 6.828 10.57 C6.307 11.083 5.787 11.596 5.25 12.125 C4.74 12.643 4.229 13.161 3.703 13.695 C1.777 15.171 0.395 15.679 -2 16 C-2.66 15.67 -3.32 15.34 -4 15 C-4.227 15.536 -4.454 16.073 -4.688 16.625 C-5.849 18.728 -6.992 20.212 -8.562 22 C-10.561 24.314 -11.456 25.952 -12 29 C-14 31 -14 31 -16.5 31.312 C-19 31 -19 31 -20.312 29.812 C-21.271 27.284 -21.469 25.68 -21 23 C-18.139 20.758 -16.659 20 -13 20 C-11.684 18.688 -11.684 18.688 -10.438 17 C-9.184 15.313 -9.184 15.313 -8 14 C-7.34 14 -6.68 14 -6 14 C-6.029 13.74 -6.029 13.74 -6.176 12.426 C-6.539 6.805 -6.539 6.805 -4.922 4.391 C-3.562 3.062 -3.562 3.062 -1 1 C-0.67 0.67 -0.34 0.34 0 0 Z " fill="url(#topicIconGradient)" transform="translate(41,2)"/>
+      <path d="M0 0 C-0.375 2.437 -0.375 2.437 -1 5 C-1.33 5.165 -1.33 5.165 -3 6 C-3.66 5.67 -4.32 5.34 -5 5 C-10.5 4.317 -14.882 4.727 -19.562 7.793 C-23.344 10.968 -24.724 14.99 -25.16 19.746 C-25.393 24.948 -24.565 29.427 -22 34 C-18.012 37.888 -14.685 39.152 -9.188 39.312 C-5.186 39.248 -2.383 38.943 0.75 36.371 C4.829 31.897 6.169 27.922 6.024 21.845 C5.94 20.115 5.797 18.387 5.652 16.66 C5.767 15.782 5.882 14.904 6 14 C8.504 13.121 8.504 13.121 11 13 C12.964 19.922 12.976 26.728 9.938 33.312 C6.765 38.95 2.918 42.509 -2.812 45.438 C-9.122 46.551 -14.801 46.047 -20.375 42.75 C-25.659 39.029 -29.372 34.289 -31 28 C-31.921 19.675 -30.854 12.504 -25.75 5.75 C-18.669 -2.078 -9.696 -3.232 0 0 Z " fill="url(#topicIconGradient)" transform="translate(34,6)"/>
+      <path d="M0 0 C0.66 0.33 1.32 0.66 2 1 C1.67 1.99 1.34 2.98 1 4 C-1 4.044 -3 4.039 -5 4 C-7.55 4.85 -8.653 5.531 -10.25 7.688 C-11.281 10.865 -11.707 13.736 -11 17 C-9.692 19.246 -8.236 20.68 -6 22 C-2.338 22.673 -0.777 22.525 2.312 20.438 C3.986 18.02 4.26 17.163 4.562 14.375 C5 11 5 11 6.5 9.5 C6.995 9.335 7.49 9.17 8 9 C9 10 9 10 9.25 13.188 C9.172 17.915 7.544 21.401 4.25 24.812 C1.224 26.41 -1.601 27.118 -5 27 C-9.665 25.354 -12.491 23.275 -15 19 C-16.199 14.557 -16.348 11.086 -14.938 6.688 C-10.808 0.96 -6.983 -0.671 0 0 Z " fill="url(#topicIconGradient)" transform="translate(28,15)"/>
+    </g>
+    <text class="card-label" x="136" y="251">Topic</text>
+  </g>
+  <g>
+    <rect class="card" x="62" y="296" width="147" height="75"/>
+    <g transform="translate(72 307)">
+      <path d="M0 0 C0.683 -0.008 1.366 -0.016 2.069 -0.024 C3.513 -0.038 4.956 -0.049 6.399 -0.057 C8.616 -0.074 10.832 -0.118 13.049 -0.162 C14.449 -0.172 15.85 -0.181 17.25 -0.188 C17.917 -0.205 18.583 -0.223 19.27 -0.241 C21.131 -0.232 21.131 -0.232 24.059 0.238 C24.984 2.265 24.984 2.265 25.059 4.238 C24.399 4.238 23.739 4.238 23.059 4.238 C23.059 6.548 23.059 8.858 23.059 11.238 C23.719 11.238 24.379 11.238 25.059 11.238 C24.969 13.086 24.969 13.086 24.059 15.238 C21.269 16.479 18.554 17.369 15.631 18.217 C13.867 18.797 13.867 18.797 11.059 20.238 C10.656 22.898 10.656 22.898 11.059 25.238 C13.867 25.284 16.402 25.197 19.059 24.238 C20.348 21.926 20.577 19.884 21.059 17.238 C21.719 17.238 22.379 17.238 23.059 17.238 C23.028 17.723 23.028 17.723 22.871 20.176 C22.933 21.186 22.995 22.197 23.059 23.238 C24.049 23.568 25.039 23.898 26.059 24.238 C25.107 27.304 24.137 28.192 21.34 29.832 C15.582 32.169 9.244 31.815 3.121 31.926 C1.852 31.959 0.583 31.994 -0.686 32.029 C-3.771 32.114 -6.856 32.181 -9.941 32.238 C-9.941 34.218 -9.941 36.198 -9.941 38.238 C-5.972 38.263 -2.003 38.281 1.967 38.293 C3.318 38.298 4.669 38.305 6.02 38.314 C7.959 38.326 9.897 38.332 11.836 38.336 C12.443 38.341 13.051 38.346 13.676 38.352 C15.138 38.352 16.599 38.3 18.059 38.238 C19.466 36.831 19.372 35.63 19.621 33.676 C19.765 32.541 19.91 31.407 20.059 30.238 C21.049 30.238 22.039 30.238 23.059 30.238 C23.059 32.218 23.059 34.198 23.059 36.238 C23.719 36.238 24.379 36.238 25.059 36.238 C25.059 37.228 25.059 38.218 25.059 39.238 C19.297 43.953 13.366 43.797 6.215 43.65 C4.365 43.613 2.516 43.609 0.666 43.609 C-10.664 43.515 -10.664 43.515 -14.191 39.988 C-15.339 37.312 -15.172 35.12 -14.941 32.238 C-14.756 31.795 -14.756 31.795 -13.816 29.551 C-13.528 28.788 -13.239 28.025 -12.941 27.238 C-13.251 26.785 -13.56 26.331 -13.879 25.863 C-15.433 23.486 -14.786 21.671 -14.328 18.957 C-13.941 17.238 -13.941 17.238 -12.941 14.238 C-13.271 13.578 -13.601 12.918 -13.941 12.238 C-14.615 7.184 -14.615 7.184 -12.895 4.77 C-8.668 0.493 -5.761 0.064 0 0 Z M-9.397 6.013 C-10.941 8.238 -10.941 8.238 -11.108 10.464 C-10.723 11.049 -10.338 11.635 -9.941 12.238 C-7.572 12.614 -5.652 12.704 -3.281 12.629 C-2.617 12.623 -1.952 12.618 -1.268 12.612 C0.863 12.589 2.991 12.539 5.121 12.488 C6.562 12.468 8.003 12.45 9.443 12.434 C12.982 12.389 16.52 12.32 20.059 12.238 C20.059 9.598 20.059 6.958 20.059 4.238 C16.287 4.139 12.515 4.067 8.743 4.019 C7.46 3.998 6.178 3.971 4.896 3.937 C3.049 3.888 1.203 3.865 -0.645 3.848 C-1.755 3.827 -2.865 3.806 -4.009 3.784 C-6.941 4.238 -6.941 4.238 -9.397 6.013 Z M-10.941 19.238 C-10.941 24.238 -10.941 24.238 -9.665 25.539 C-7.753 26.315 -6.426 26.469 -4.367 26.434 C-3.7 26.427 -3.033 26.421 -2.346 26.414 C-1.655 26.397 -0.965 26.381 -0.254 26.363 C0.448 26.354 1.15 26.345 1.873 26.336 C3.602 26.312 5.33 26.277 7.059 26.238 C7.059 23.928 7.059 21.618 7.059 19.238 C1.119 19.238 -4.821 19.238 -10.941 19.238 Z " fill="url(#sourcesIconGradient)" transform="translate(18.94140625,5.76171875)"/>
+    </g>
+    <text class="card-label" x="136" y="339">Sources</text>
+  </g>
+  <g>
+    <rect class="card" x="62" y="384" width="147" height="78"/>
+    <path d="M82 401 H107 Q111 401 111 405 V437 L104 444 H82 Q78 444 78 440 V405 Q78 401 82 401 Z M104 444 V437 H111" fill="none" stroke="#d97500" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M86 413 H87 M94 413 H104 M86 424 H87 M94 424 H104 M86 435 H87 M94 435 H101" stroke="#d97500" stroke-width="2.2" stroke-linecap="round"/>
+    <text class="card-label" x="136" y="429">Outline</text>
+  </g>
+  <g>
+    <rect class="card" x="62" y="474" width="147" height="78"/>
+    <path d="M81 492 H102 L111 501 V535 H81 Z M102 492 V502 H111" fill="none" stroke="#5b3ac7" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M88 512 H103 M88 521 H104 M88 530 H101" stroke="#5b3ac7" stroke-width="2.2" stroke-linecap="round"/>
+    <text class="card-label" x="136" y="519">Papers</text>
+  </g>
+  <g>
+    <rect class="card" x="62" y="564" width="147" height="78"/>
+    <rect x="79" y="581" width="33" height="44" rx="3" fill="none" stroke="#d6293e" stroke-width="2.2"/>
+    <path d="M86 594 L92 600 L103 588 M86 610 H104 M86 618 H101" fill="none" stroke="#d6293e" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="card-label" x="136" y="609">Exams</text>
+  </g>
+
+  <!-- Input arrows -->
+  <path class="thin-flow" d="M226 245 H284"/>
+  <path class="thin-flow" d="M226 333 H284"/>
+  <path class="thin-flow" d="M226 423 H284"/>
+  <path class="thin-flow" d="M226 513 H284"/>
+  <path class="thin-flow" d="M226 603 H284"/>
+
+  <!-- Grounded intake -->
+  <rect class="panel" x="289" y="136" width="211" height="529" fill="#f8fbff" stroke="#7fa6da"/>
+  <text class="panel-title" x="394.5" y="191">Grounded Intake</text>
+  <g>
+    <rect class="card" x="302" y="231" width="185" height="92" stroke="#9fc2ef"/>
+    <g transform="translate(310 245) scale(0.5)">
+      <path d="M0 0 C1.32 0.66 2.64 1.32 4 2 C5.32 2.33 6.64 2.66 8 3 C8.33 3.66 8.66 4.32 9 5 C17 5 17 5 18 3 C19.32 2.67 20.64 2.34 22 2 C22.33 1.67 22.66 1.34 23 1 C33 1 33 1 37 3 C45.667 5.889 45.667 5.889 53 1 C57 3 57 3 59 7 C59.33 7.165 59.33 7.165 61 8 C61.745 10.981 62.397 13.986 63 17 C63.66 17.33 64.32 17.66 65 18 C65 18.99 65 19.98 65 21 C65.66 21.33 66.32 21.66 67 22 C69.754 33.018 65.658 34.074 57 41 C57 42.98 57 44.96 57 47 C48.522 56.239 48.522 56.239 45 58 C44.34 58.825 44.34 58.825 41 63 C40.175 63.165 40.175 63.165 36 64 C35.01 64.99 34.02 65.98 33 67 C25 67 25 67 22 64 C20.845 64.165 20.845 64.165 15 65 C-5.109 47.764 -5.109 47.764 -4 40 C-7.639 36.967 -11.301 33.96 -15 31 C-13.25 22.25 -13.25 22.25 -11 20 C-11 19.34 -11 18.68 -11 18 C-10.34 17.34 -9.68 16.68 -9 16 C-9 15.34 -9 14.68 -9 14 C-8.34 13.34 -7.68 12.68 -7 12 C-7 11.34 -7 10.68 -7 10 C-6.34 9.34 -5.68 8.68 -5 8 C-5 7.34 -5 6.68 -5 6 C-4.34 5.34 -3.68 4.68 -3 4 C-2.01 2.68 -1.02 1.36 0 0 Z M27 6 C26.67 6.99 26.34 7.98 26 9 C25.01 8.67 24.02 8.34 23 8 C13.798 15.991 13.798 15.991 15 22 C15.99 21.67 16.98 21.34 18 21 C18 20.34 18 19.68 18 19 C18.99 19.33 19.98 19.66 21 20 C22.32 18.68 23.64 17.36 25 16 C34.84 16 37.805 20.832 44.625 27.875 C47.059 30.226 49.493 32.578 52 35 C53.32 34.34 54.64 33.68 56 33 C54 27 54 27 52 23 C51.34 21.02 50.68 19.04 50 17 C47.275 11.55 45.952 12.19 40 11 C39.34 10.67 38.68 10.34 38 10 C37.67 10.165 37.67 10.165 36 11 C35.67 10.01 35.34 9.02 35 8 C34.175 7.835 34.175 7.835 30 7 C29.01 6.67 28.02 6.34 27 6 Z M7 12 C6.34 13.98 5.68 15.96 5 18 C4.67 18.66 4.34 19.32 4 20 C4.33 20.66 4.66 21.32 5 22 C4.01 22.33 3.02 22.66 2 23 C1.67 24.65 1.34 26.3 1 28 C0.01 28.99 -0.98 29.98 -2 31 C0 35 0 35 4 35 C4 34.34 4 33.68 4 33 C4.66 33 5.32 33 6 33 C6.33 33.99 6.66 34.98 7 36 C8.65 36.99 10.3 37.98 12 39 C13.526 40.567 15.053 42.135 16.625 43.75 C21 48 21 48 24 47 C24.33 47.99 24.66 48.98 25 50 C25.495 49.835 25.495 49.835 28 49 C28.66 50.32 29.32 51.64 30 53 C35 56 35 56 38 57 C36 53 36 53 30 47 C30.33 45.35 30.66 43.7 31 42 C35 44 35 44 43 52 C43.66 52 44.32 52 45 52 C43 46 43 46 36 39 C36.33 37.35 36.66 35.7 37 34 C40 35 40 35 42 39 C49 46 49 46 52 45 C48.989 38.979 44.333 34.91 39.625 30.125 C37.74 28.189 35.856 26.253 33.914 24.258 C29 20 29 20 25 22 C23.35 23.32 21.7 24.64 20 26 C15 28 15 28 9 24 C8 19 8 19 11 14 C11 13.34 11 12.68 11 12 C9.68 12 8.36 12 7 12 Z M3 40 C2 42 2 42 3 44 C2.34 44 1.68 44 1 44 C1.33 44.99 1.66 45.98 2 47 C6 45 6 45 8 41 C6.35 40.67 4.7 40.34 3 40 Z M8 49 C8.33 49.99 8.66 50.98 9 52 C13 50 13 50 13 46 C11 46 11 46 8 49 Z M14 55 C14.66 56.32 15.32 57.64 16 59 C20 57 20 57 20 53 C18 53 18 53 14 55 Z M25 56 C25 60 25 60 29 62 C29 58 29 58 25 56 Z " fill="url(#goalIconGradient)" transform="translate(26,26)"/>
+    </g>
+    <text class="card-label" x="368" y="282">Goal Contract</text>
+  </g>
+  <path class="thin-flow" d="M394 323 V368"/>
+  <g>
+    <rect class="card" x="302" y="374" width="185" height="94" stroke="#9fc2ef"/>
+    <rect x="322" y="397" width="30" height="39" rx="3" fill="none" stroke="#5a96de" stroke-width="2.1"/>
+    <path d="M329 407 H344 M329 415 H342 M329 423 H337" stroke="#5a96de" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="350" cy="429" r="9" fill="#fff" stroke="#5a96de" stroke-width="2.1"/>
+    <path d="M357 436 L364 443" stroke="#5a96de" stroke-width="2.1" stroke-linecap="round"/>
+    <text class="card-label" x="373" y="427">Document IR</text>
+  </g>
+  <path class="thin-flow" d="M394 468 V512"/>
+  <g>
+    <rect class="card" x="302" y="518" width="185" height="94" stroke="#9fc2ef"/>
+    <circle cx="335" cy="556" r="18" fill="none" stroke="#5a96de" stroke-width="2.1"/>
+    <path d="M317 556 H353 M335 538 C327 546 327 566 335 574 M335 538 C343 546 343 566 335 574 M320 548 C328 552 342 552 350 548 M320 564 C328 560 342 560 350 564" fill="none" stroke="#5a96de" stroke-width="1.8"/>
+    <circle cx="350" cy="570" r="8" fill="#fff" stroke="#5a96de" stroke-width="2"/>
+    <path d="M356 576 L362 582" stroke="#5a96de" stroke-width="2" stroke-linecap="round"/>
+    <text class="small-label" x="363" y="570" font-size="13">RAG + Web Search</text>
+  </g>
+
+  <path class="flow" d="M500 393 H550"/>
+
+  <!-- Knowledge Atom Graph -->
+  <rect class="panel" x="555" y="91" width="499" height="618" fill="url(#graphBg)" stroke="#09265c"/>
+  <text class="panel-title graph-title" x="804.5" y="139">Knowledge Atom Graph</text>
+
+  <!-- Graph edges -->
+  <path class="flow" d="M744 231 L685 288"/>
+  <path class="flow" d="M850 231 L910 288"/>
+  <path class="flow" d="M653 375 L623 460"/>
+  <path class="thin-flow" d="M700 375 L785 460" stroke-dasharray="10 9"/>
+  <path class="flow" d="M927 375 L958 460"/>
+  <path class="flow" d="M622 547 L690 607"/>
+  <path class="flow" d="M794 547 V607"/>
+  <path class="flow" d="M960 547 L907 607"/>
+
+  <g>
+    <rect class="node" x="744" y="166" width="106" height="84"/>
+    <path class="icon-navy" d="M797 190 V212 M797 212 L779 230 M797 212 L815 230"/>
+    <circle cx="797" cy="190" r="8" fill="#89a4ca" stroke="#0b2c66" stroke-width="2"/>
+    <circle cx="779" cy="230" r="8" fill="#89a4ca" stroke="#0b2c66" stroke-width="2"/>
+    <circle cx="815" cy="230" r="8" fill="#89a4ca" stroke="#0b2c66" stroke-width="2"/>
+  </g>
+  <g>
+    <rect class="node" x="614" y="292" width="104" height="83"/>
+    <circle cx="666" cy="333" r="9" fill="none" stroke="#0b2c66" stroke-width="2"/>
+    <ellipse cx="666" cy="333" rx="27" ry="11" fill="none" stroke="#0b2c66" stroke-width="2" transform="rotate(30 666 333)"/>
+    <ellipse cx="666" cy="333" rx="27" ry="11" fill="none" stroke="#0b2c66" stroke-width="2" transform="rotate(-30 666 333)"/>
+    <ellipse cx="666" cy="333" rx="27" ry="11" fill="none" stroke="#0b2c66" stroke-width="2" transform="rotate(90 666 333)"/>
+  </g>
+  <g>
+    <rect class="node" x="876" y="292" width="104" height="83"/>
+    <path class="icon-navy" d="M928 310 C910 310 906 332 917 343 C921 347 922 351 922 354 H934 C934 351 935 347 939 343 C950 332 946 310 928 310 Z M921 354 H935 M923 360 H933 M920 333 L927 341 V350 M936 333 L929 341 V350"/>
+  </g>
+  <g>
+    <rect class="node" x="568" y="464" width="104" height="83"/>
+    <path class="icon-navy" d="M584 487 C598 481 607 483 620 490 V530 C607 523 598 522 584 527 Z M656 487 C642 481 633 483 620 490 V530 C633 523 642 522 656 527 Z M620 490 V530"/>
+    <path d="M590 495 H607 M590 503 H607 M590 511 H604 M633 495 H650 M633 503 H650 M636 511 H650" stroke="#0b2c66" stroke-width="1.7" stroke-linecap="round"/>
+  </g>
+  <g>
+    <rect class="node" x="740" y="464" width="109" height="83"/>
+    <path d="M766 523 V507 H777 V523 Z M783 523 V496 H794 V523 Z M800 523 V485 H811 V523 Z M762 523 H818" fill="#9eb4d1" stroke="#0b2c66" stroke-width="2"/>
+  </g>
+  <g>
+    <rect class="node" x="920" y="464" width="104" height="83"/>
+    <path d="M972 482 A25 25 0 1 0 995 508 H972 Z" fill="#9eb4d1" stroke="#0b2c66" stroke-width="2"/>
+    <path d="M978 482 V502 H998 A25 25 0 0 0 978 482 Z" fill="#fff" stroke="#0b2c66" stroke-width="2"/>
+  </g>
+  <g filter="url(#shadow)">
+    <rect x="670" y="611" width="245" height="77" rx="13" fill="url(#activeBg)" stroke="#e58a00" stroke-width="2"/>
+    <path d="M711 625 L718 642 L737 644 L722 656 L727 675 L711 665 L695 675 L700 656 L685 644 L704 642 Z" fill="#ffc24d" stroke="#915100" stroke-width="2.4" stroke-linejoin="round"/>
+    <text x="751" y="661" font-family="Arial, Helvetica, sans-serif" font-size="25" font-weight="700" fill="#07194b">Active Atom</text>
+  </g>
+
+  <path class="flow" d="M1054 393 H1095"/>
+
+  <!-- Adaptive learning loop -->
+  <rect class="panel" x="1101" y="114" width="300" height="555" fill="url(#loopBg)" stroke="#285d2c"/>
+  <text class="panel-title loop-title" x="1251" y="165">Adaptive Learning Loop</text>
+
+  <!-- Circular flow behind cards -->
+  <path class="loop-flow" d="M1294 247 C1332 261 1347 292 1347 327"/>
+  <path class="loop-flow" d="M1347 423 C1349 456 1332 483 1300 501"/>
+  <path class="loop-flow" d="M1206 501 C1174 486 1155 459 1155 428"/>
+  <path class="loop-flow" d="M1155 332 C1154 294 1174 262 1201 250"/>
+
+  <g>
+    <rect x="1206" y="205" width="88" height="91" rx="13" fill="#fff" stroke="#6d956a" stroke-width="1.5" filter="url(#shadow)"/>
+    <path class="icon-green" d="M1229 224 C1241 220 1249 222 1250 229 V252 C1243 247 1236 247 1229 251 Z M1271 224 C1259 220 1251 222 1250 229 V252 C1257 247 1264 247 1271 251 Z M1250 229 V252"/>
+    <text class="card-label" x="1250" y="283" text-anchor="middle">Teach</text>
+  </g>
+  <g>
+    <rect x="1303" y="332" width="85" height="91" rx="13" fill="#fff" stroke="#6d956a" stroke-width="1.5" filter="url(#shadow)"/>
+    <path class="icon-green" d="M1328 374 L1355 347 L1364 356 L1337 383 L1325 386 Z M1350 352 L1359 361 M1328 374 L1337 383 M1332 378 L1359 351 M1324 390 H1355"/>
+    <text class="card-label" x="1345" y="409" text-anchor="middle">Practice</text>
+  </g>
+  <g>
+    <rect x="1206" y="464" width="88" height="91" rx="13" fill="#fff" stroke="#6d956a" stroke-width="1.5" filter="url(#shadow)"/>
+    <path class="icon-green" d="M1250 486 C1256 491 1262 493 1266 494 V505 C1266 517 1258 524 1250 529 C1242 524 1234 517 1234 505 V494 C1238 493 1244 491 1250 486 Z M1243 505 L1248 510 L1258 499"/>
+    <text class="card-label" x="1250" y="542" text-anchor="middle">Evidence</text>
+  </g>
+  <g>
+    <rect x="1112" y="332" width="86" height="91" rx="13" fill="#fff" stroke="#6d956a" stroke-width="1.5" filter="url(#shadow)"/>
+    <path class="icon-green" d="M1138 363 C1140 352 1149 347 1160 349 C1165 350 1169 352 1172 356 M1161 356 H1172 V345 M1172 373 C1170 384 1161 389 1150 387 C1145 386 1141 384 1138 380 M1149 380 H1138 V391"/>
+    <text class="card-label" x="1155" y="409" text-anchor="middle">Review</text>
+  </g>
+
+  <g>
+    <rect x="1110" y="588" width="88" height="50" rx="10" fill="#fff" stroke="#6d956a" stroke-width="1.5"/>
+    <path class="icon-green" d="M1132 608 H1123 V624 H1139 V616 M1136 601 H1145 V610 M1145 601 L1130 616"/>
+    <text x="1150" y="619" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600" fill="#24562a">Expand</text>
+  </g>
+  <g>
+    <rect x="1207" y="588" width="86" height="50" rx="10" fill="#fff" stroke="#6d956a" stroke-width="1.5"/>
+    <path d="M1223 604 L1235 613 L1223 622 Z M1237 604 L1249 613 L1237 622 Z" fill="none" stroke="#23652d" stroke-width="2" stroke-linejoin="round"/>
+    <text x="1253" y="619" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600" fill="#24562a">Skip</text>
+  </g>
+  <g>
+    <rect x="1302" y="588" width="87" height="50" rx="10" fill="#fff" stroke="#6d956a" stroke-width="1.5"/>
+    <circle cx="1324" cy="613" r="11" fill="none" stroke="#23652d" stroke-width="2"/>
+    <path d="M1324 606 V614 L1330 617" fill="none" stroke="#23652d" stroke-width="2" stroke-linecap="round"/>
+    <text x="1341" y="619" font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="600" fill="#24562a">Defer</text>
+  </g>
+
+  <path class="flow" d="M1401 393 H1444"/>
+
+  <!-- Learning outcomes -->
+  <rect class="panel" x="1450" y="115" width="181" height="555" fill="#fbfaff" stroke="#5438a7"/>
+  <text class="panel-title" x="1540.5" y="161">Learning</text>
+  <text class="panel-title" x="1540.5" y="190">Outcomes</text>
+
+  <g>
+    <rect class="card" x="1469" y="213" width="143" height="132" stroke="#b9a7ed"/>
+    <path d="M1524 241 H1557 V255 C1557 269 1550 276 1540.5 280 C1531 276 1524 269 1524 255 Z" fill="#8a70dd" fill-opacity="0.78" stroke="#5839b3" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M1524 248 H1515 V255 C1515 266 1521 272 1530 274 M1557 248 H1566 V255 C1566 266 1560 272 1551 274" fill="none" stroke="#5839b3" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M1538 279 H1543 V292 H1549 V298 H1554 V302 H1527 V298 H1532 V292 H1538 Z" fill="#8a70dd" stroke="#5839b3" stroke-width="2" stroke-linejoin="round"/>
+    <text class="card-label" x="1540.5" y="323" text-anchor="middle">Mastery</text>
+  </g>
+  <g>
+    <rect class="card" x="1469" y="365" width="143" height="132" stroke="#b9a7ed"/>
+    <rect x="1520" y="391" width="41" height="55" rx="3" fill="none" stroke="#5839b3" stroke-width="2.2"/>
+    <rect x="1531" y="385" width="19" height="10" rx="3" fill="#8a70dd" stroke="#5839b3" stroke-width="2"/>
+    <path d="M1529 408 L1533 412 L1539 404 M1543 409 H1554 M1529 422 L1533 426 L1539 418 M1543 423 H1554 M1529 436 L1533 440 L1539 432 M1543 437 H1554" fill="none" stroke="#5839b3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <text class="card-label" x="1540.5" y="477" text-anchor="middle">Exam Plan</text>
+  </g>
+  <g>
+    <rect class="card" x="1469" y="517" width="143" height="132" stroke="#b9a7ed"/>
+    <path d="M1515 553 L1532 543 L1549 553 L1566 543 V585 L1549 595 L1532 585 L1515 595 Z M1532 543 V585 M1549 553 V595" fill="none" stroke="#5839b3" stroke-width="2.2" stroke-linejoin="round"/>
+    <path d="M1521 582 C1528 568 1539 578 1547 568 C1551 563 1555 560 1560 558" fill="none" stroke="#5839b3" stroke-width="2" stroke-linecap="round" stroke-dasharray="3 4"/>
+    <circle cx="1521" cy="582" r="2.5" fill="#8a70dd"/>
+    <path d="M1565 539 C1556 539 1553 549 1558 555 L1565 565 L1572 555 C1577 549 1574 539 1565 539 Z" fill="#8a70dd" stroke="#5839b3" stroke-width="2"/>
+    <circle cx="1565" cy="549" r="3" fill="#fff"/>
+    <text class="card-label" x="1540.5" y="629" text-anchor="middle">Research Map</text>
+  </g>
+
+  <!-- Light session/evolution feedback path -->
+  <path class="feedback" d="M394 665 V776 Q394 802 420 802 H579"/>
+  <g>
+    <rect x="586" y="772" width="204" height="61" rx="10" fill="#fbfdff" stroke="#9bb9dc" stroke-width="1.4"/>
+    <path d="M610 816 V803 H618 V816 Z M623 816 V793 H631 V816 Z M636 816 V783 H644 V816 Z" fill="#8db2e3"/>
+    <text x="656" y="811" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600" fill="#6a8db8">Session Signals</text>
+  </g>
+  <path class="feedback" d="M790 802 H843"/>
+  <g>
+    <rect x="850" y="772" width="214" height="61" rx="10" fill="#fbfefe" stroke="#9cc4c9" stroke-width="1.4"/>
+    <path d="M881 783 C887 788 893 790 898 791 V804 C898 816 891 823 881 828 C871 823 864 816 864 804 V791 C869 790 875 788 881 783 Z" fill="#79aeb4" stroke="#79aeb4" stroke-width="1.8"/>
+    <path d="M881 790 C885 793 889 795 892 795 V804 C892 812 887 817 881 820 C875 817 870 812 870 804 V795 C873 795 877 793 881 790 Z M876 804 L880 808 L887 799" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="911" y="811" font-family="Arial, Helvetica, sans-serif" font-size="15" font-weight="600" fill="#6e9fa6">Bounded Evolution</text>
+  </g>
+  <path class="feedback" d="M1064 802 H1224 Q1249 802 1249 777 V675"/>
+</svg>
