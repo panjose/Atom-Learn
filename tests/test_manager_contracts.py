@@ -681,7 +681,8 @@ def test_tag_release_workflow_is_signed_gated_and_immutable() -> None:
     assert "--channel stable" in workflow
     assert "--manager-artifact" in workflow
     assert "atomlearn-runtime-bundle" in workflow
-    assert "actions/download-artifact@v4" in workflow
+    assert "actions/upload-artifact@v7" in workflow
+    assert "actions/download-artifact@v8" in workflow
     assert "--runtime-bundle" in workflow
     assert "--trust-bundle release/atomlearn-trust-bundle.json" in workflow
     assert "atomlearn-trust-bundle.json" in workflow
@@ -694,3 +695,16 @@ def test_tag_release_workflow_is_signed_gated_and_immutable() -> None:
     assert "find runtime-dist -type f -name '*.zip' -print0" in workflow
     assert "Expected exactly eight runtime bundles" in workflow
     assert "find runtime-dist -maxdepth 1" not in workflow
+
+
+def test_validation_exercises_release_artifact_roundtrip_without_duplicate_branch_pushes() -> None:
+    validation = (ROOT / ".github" / "workflows" / "validate.yml").read_text(encoding="utf-8")
+    readiness = (ROOT / ".github" / "workflows" / "oss-readiness.yml").read_text(encoding="utf-8")
+    assert "branches: [main]" in validation
+    assert "branches: [main]" in readiness
+    assert "actions/upload-artifact@v7" in validation
+    assert "actions/download-artifact@v8" in validation
+    assert "pattern: runtime-contract-*" in validation
+    assert "merge-multiple: true" in validation
+    assert "release/artifact_contract.py create" in validation
+    assert "release/artifact_contract.py verify" in validation
